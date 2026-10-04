@@ -107,7 +107,12 @@ export class FlightScene {
     this.targets = null;
     this.targetLine.visible = false;
     this.position = new THREE.Vector3(0, 1500, 0);
-    this.aircraft.matrix.identity().setPosition(this.position);
+    this.heading = 0;
+    // Until the first frame: wings level, nose north. (The model is built in body axes,
+    // so an identity matrix would show it rolled 90 degrees in this y-up world.)
+    this.aircraft.matrix
+      .makeBasis(nedToWorld(1, 0, 0), nedToWorld(0, 1, 0), nedToWorld(0, 0, 1))
+      .setPosition(this.position);
   }
 
   setTargets(targets) {
