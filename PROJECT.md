@@ -159,10 +159,14 @@ owner before work can start.
 
 ### Data and logging
 
-- [ ] **Needs decision:** batch ids and logs record configs, aircraft and JSBSim versions
-  but not the flightsim code version. A code change with unchanged configs reuses the
-  same batch id (seen 2026-10-04). Option: record the git commit (and a dirty flag) in
-  manifests and log metadata.
+- [x] **Code provenance** (decided and done 2026-10-04): logs (`flightsim.code_version`
+  metadata) and batch manifests record the flightsim source hash plus git commit, dirty
+  flag and diff hash. Batch ids now change with any code change (source hash) but not
+  with git state alone. The LQR gain cache is also keyed on the source hash.
+- [ ] Docker runs record the source hash but no git commit (`.git` is not in the image).
+  If needed: pass the commit in at build time, or mount `.git` read-only and install git.
+- [ ] Batches and logs made before this change (e.g. `data/batch/*` from 2026-10-04) have
+  no code version; batch summaries are format 4 from now on.
 
 - [ ] Logs are 10.5 MB per 5 minutes (float64, zstd). For large batches, try Parquet
   `BYTE_STREAM_SPLIT` encoding on float columns (no schema change).

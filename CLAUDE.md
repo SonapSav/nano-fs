@@ -69,8 +69,8 @@ Work through these in order. Finish and validate each step before starting the n
 - **Logging schema:** defined once in `flightsim/datalog/schema.py` and versioned (`SCHEMA_VERSION`, currently 1). Do not change column names or units without bumping the version; `read_log` refuses other versions. Schema v1 decisions:
   - One row per timestep, float64 throughout (precision for fitting dynamic modes). Row i = state i + the command produced from it; the last row's commands are null.
   - `run_id`, `seed`, `config_hash` repeated on every row so runs concatenate trivially.
-  - File metadata: schema version, run id, aircraft, aircraft hash, JSBSim version, canonical config JSON (what the hash covers), trim result.
-  - No wall-clock timestamps and a deterministic `run_id` (`<config_hash[:12]>-s<seed>`), so the same seed and config give byte-identical files (verified locally vs Docker).
+  - File metadata: schema version, run id, aircraft, aircraft hash, JSBSim version, canonical config JSON (what the hash covers), trim result, code version (`flightsim.code_version`: source hash of the flightsim package plus git commit / dirty flag / diff hash when a repository is available; see `flightsim/provenance.py`).
+  - No wall-clock timestamps and a deterministic `run_id` (`<config_hash[:12]>-s<seed>`), so the same seed, config and code give byte-identical files. Local and Docker runs give identical data and the same source hash; only the git fields differ (Docker has no `.git`, so they are null there).
 - **Units:** use SI internally (meters, m/s, radians, kg). JSBSim works in imperial units (ft, slug, lbf), so all conversion happens inside the JSBSim wrapper in `core/`; everything outside `core/` is SI. The logging schema is strictly SI so swapping the physics core never changes the logs. Name variables with units where ambiguous (e.g. `alt_m`, `tas_mps`; imperial names like `alt_ft` only inside `core/`).
 - **Time:** fixed timestep only. No variable dt anywhere in the physics path.
 - **Config over code:** aircraft, initial conditions, wind, and task parameters live in config files (YAML or JSON), not hard-coded. Variants extend a base file (`base: other.yaml`); changes go through `overrides` (dotted keys allowed) so they are part of the config hash. Never `dataclasses.replace()` a loaded config to change behaviour.
@@ -140,7 +140,8 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - Controller comparison: `uv run python scripts/compare_controllers.py --episodes 100 [--log-dir data/episodes]`
 - Batch: `uv run python scripts/batch_run.py --seeds 0:1000 [--policy pid|lqr|trim_hold] [--set wind.steady_speed_mps=[5,15]] [--policy-set weights.states.phi_rad=0.1] [--logs]`
 - Controller comparison and RL use `configs/envs/altitude_heading_hold_comfort.yaml` (comfort penalties, structural limits, terminations charged for the remaining steps): `uv run python scripts/batch_run.py --env-config configs/envs/altitude_heading_hold_comfort.yaml --seeds 0:1000 --policy lqr`
-- Controller tuning: tune on seeds 1000+ and report on seeds 0-999 (held out). LQR gain schedules are cached in `data/cache/lqr/` (keyed by aircraft, JSBSim version, loading, LQR config and rate).
+- Controller tuning: tune on seeds 1000+ and report on seeds 0-999 (held out). LQR gain schedules are cached in `data/cache/lqr/` (keyed by aircraft, JSBSim version, loading, LQR config, rate and flightsim source hash).
+- Batch ids hash everything that determines results, including the flightsim source hash, but not the git fields (the same code committed or not is the same batch). Manifests record the full code version.
 - Logs go to `data/` (gitignored; `data/.gitkeep` is committed so Docker never creates it as root).
 - Viewer: `uv run python -m flightsim.stream` then open http://localhost:8686/ ; in Docker `docker compose up -d viewer` (published on all host interfaces)
 - Docker: `docker compose build`, `docker compose run --rm sim pytest`, `docker compose run --rm sim python scripts/<script>.py`

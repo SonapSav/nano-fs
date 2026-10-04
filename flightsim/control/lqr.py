@@ -37,6 +37,7 @@ from flightsim.config import canonical_json, load_raw
 from flightsim.control.autopilot import Targets
 from flightsim.control.heading_hold import wrap_angle_rad
 from flightsim.core import Controls, InitialConditions, JSBSimCore, Loading, State, aircraft_hash
+from flightsim.provenance import source_sha256
 
 # Engine RPM is deliberately not a controller state: JSBSim's linearization gives its row
 # almost no self-damping (time constant ~11 min), while the nonlinear model settles in a few
@@ -144,12 +145,13 @@ class GainSchedule:
 
     @classmethod
     def cached(cls, aircraft: str, loading: Loading, raw: dict, dt_s: float, cache_dir: Path = CACHE_DIR) -> "GainSchedule":
-        """Design once per (aircraft files, JSBSim version, loading, LQR config, dt) and reuse.
+        """Design once per (aircraft files, JSBSim version, loading, LQR config, dt, flightsim
+        source) and reuse.
         Designing trims and linearizes every grid point (~0.8 s each)."""
         key = hashlib.sha256(
             canonical_json({
                 "aircraft_hash": aircraft_hash(aircraft), "jsbsim": jsbsim.__version__, "loading": asdict(loading),
-                "lqr": raw, "dt_s": dt_s, "states": STATES, "format": 1,
+                "lqr": raw, "dt_s": dt_s, "code": source_sha256(),
             }).encode()
         ).hexdigest()[:16]  # fmt: skip
         cfg = lqr_config_from_raw(raw)

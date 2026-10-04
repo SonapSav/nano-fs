@@ -10,6 +10,7 @@ import pyarrow.parquet as pq
 from flightsim.config import Provenance
 from flightsim.core import aircraft_hash
 from flightsim.datalog import schema as S
+from flightsim.provenance import code_version
 from flightsim.runner import RunResult
 
 
@@ -35,6 +36,7 @@ def to_table(result: RunResult, cfg: Provenance) -> pa.Table:
         S.META_JSBSIM_VERSION: result.jsbsim_version,
         S.META_CONFIG_JSON: cfg.config_json,
         S.META_TRIM_JSON: json.dumps(asdict(result.trim), sort_keys=True),
+        S.META_CODE_VERSION: json.dumps(code_version(), sort_keys=True),
     }
     if cfg.pilot:
         metadata[S.META_PILOT] = cfg.pilot

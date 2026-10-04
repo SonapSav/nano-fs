@@ -27,6 +27,7 @@ from flightsim.config import canonical_json, config_hash
 from flightsim.control.autopilot import autopilot_gains_from_raw
 from flightsim.core import aircraft_hash
 from flightsim.datalog import SCHEMA_VERSION, make_run_id, write_log
+from flightsim.provenance import code_version
 from flightsim.envs import AltitudeHeadingHoldEnv
 from flightsim.envs.config import env_config_from_raw
 from flightsim.envs.evaluate import run_episode
@@ -34,7 +35,7 @@ from flightsim.control.lqr import GainSchedule
 from flightsim.envs.policies import LQRPolicy, PIDPolicy, TrimHoldPolicy
 
 POLICIES = ("pid", "lqr", "trim_hold")
-BATCH_FORMAT = 3  # 2: lqr policy, envelope metrics columns; 3: comfort_cost column
+BATCH_FORMAT = 4  # 2: lqr policy, envelope metrics; 3: comfort_cost; 4: code_version in manifest
 
 
 def make_manifest(env_raw: dict, policy: str, policy_raw: dict | None, seeds: list[int], logs: bool) -> dict:
@@ -56,8 +57,12 @@ def make_manifest(env_raw: dict, policy: str, policy_raw: dict | None, seeds: li
         "policy_config": policy_raw,
         "seeds": seeds,
         "episode_logs": logs,
+        "code_version": code_version(),
     }
-    manifest["batch_id"] = hashlib.sha256(canonical_json(manifest).encode()).hexdigest()[:12]
+    # The id covers everything that determines the results, including the exact source
+    # (source_sha256), but not the git fields: the same code committed or not is the same batch.
+    identity = {**manifest, "code_version": {"source_sha256": manifest["code_version"]["source_sha256"]}}
+    manifest["batch_id"] = hashlib.sha256(canonical_json(identity).encode()).hexdigest()[:12]
     return manifest
 
 
