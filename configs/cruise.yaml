@@ -1,0 +1,22 @@
+# Step 1: straight-and-level cruise, heading hold only.
+aircraft: c172p
+sim_rate_hz: 120          # JSBSim's default rate
+duration_s: 300
+seed: 0                   # no randomness used yet; recorded for provenance
+
+initial_conditions:
+  alt_msl_m: 1524         # 5000 ft
+  tas_mps: 51.44          # 100 kt true airspeed (about 93 kt calibrated at this altitude)
+  heading_deg: 90
+
+loading:
+  pointmasses_kg: [81.65, 0, 0, 0, 0]   # pilot, co-pilot, L/R passenger, baggage (model default: 180 lb pilot)
+  fuel_tanks_kg: [45.36, 45.36]         # 100 lb per tank (model default)
+
+target_heading_deg: 90
+
+heading_hold:
+  k_heading: 1.0          # rad bank per rad heading error
+  max_bank_deg: 20
+  k_bank: 1.0             # aileron per rad bank error
+  k_roll_rate: 0.2        # aileron per rad/s roll rate (tuned: 30 deg change settles <1 deg in ~16 s, no overshoot)

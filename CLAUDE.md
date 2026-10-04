@@ -46,6 +46,7 @@ Rules:
 - **ML interface:** Gymnasium environment wrapping the core.
 - **Logging:** Parquet, one row per timestep.
 - **Viewer:** Three.js in the browser, fed over WebSocket. Chase camera plus a basic instrument panel.
+- **Ports:** expose services on host port **8686** (not 8000, 3000 or other common defaults). If more ports are needed later, ask.
 - **Testing:** pytest.
 
 ## Build order
@@ -63,28 +64,40 @@ Work through these in order. Finish and validate each step before starting the n
   - All randomness (wind, gusts, initial-state perturbations) is generated in Python from a seeded `numpy.random.Generator` and fed into JSBSim as inputs. Do not rely on JSBSim's internal turbulence RNG unless we verify it can be seeded.
   - Every log records the JSBSim version and a hash of the aircraft definition files, alongside seed and config hash.
   - Identical logs are expected on the same machine with pinned versions; bit-identical results across platforms are not guaranteed.
-- **Logging schema:** define it once, early, in a single module, and version it. Do not change column names or units casually. Record time, full state, control inputs, seed, and config hash.
+- **Logging schema:** defined once in `flightsim/datalog/schema.py` and versioned (`SCHEMA_VERSION`, currently 1). Do not change column names or units without bumping the version; `read_log` refuses other versions. Schema v1 decisions:
+  - One row per timestep, float64 throughout (precision for fitting dynamic modes). Row i = state i + the command produced from it; the last row's commands are null.
+  - `run_id`, `seed`, `config_hash` repeated on every row so runs concatenate trivially.
+  - File metadata: schema version, run id, aircraft, aircraft hash, JSBSim version, canonical config JSON (what the hash covers), trim result.
+  - No wall-clock timestamps and a deterministic `run_id` (`<config_hash[:12]>-s<seed>`), so the same seed and config give byte-identical files (verified locally vs Docker).
 - **Units:** use SI internally (meters, m/s, radians, kg). JSBSim works in imperial units (ft, slug, lbf), so all conversion happens inside the JSBSim wrapper in `core/`; everything outside `core/` is SI. The logging schema is strictly SI so swapping the physics core never changes the logs. Name variables with units where ambiguous (e.g. `alt_m`, `tas_mps`; imperial names like `alt_ft` only inside `core/`).
 - **Time:** fixed timestep only. No variable dt anywhere in the physics path.
 - **Config over code:** aircraft, initial conditions, wind, and task parameters live in config files (YAML or JSON), not hard-coded.
 - **Tests:** physics validation checks (trim, stall speed, oscillation periods) are automated tests with stated tolerances, not one-off notebooks.
+  - Published reference values live in `docs/REFERENCES.md` with their source; tests cite it. Primary source: 1985 Model 172P POH. Its fuel flows assume leaned mixture, so lean before comparing fuel burn.
   - Reference values must name one specific aircraft variant and source (e.g. a specific 172 model-year POH). The JSBSim model will not match published data exactly, so tolerances should reflect that.
   - Phugoid and short-period are measured by perturbing from trim and fitting the decaying response. JSBSim's linearization may be an alternative; check whether the Python bindings expose it.
 - **Git:** this repo commits as Panos Vasilopoulos <sonap.sav@gmail.com> (GitHub: SonapSav), set in the repo-local git config. The global git identity on this machine is a different (work) account, so don't rely on it.
 
-## Suggested layout
+## Layout
 ```
-flightsim/
-  core/        # JSBSim wrapper, state/control definitions
-  logging/     # schema + Parquet writer
-  envs/        # Gymnasium environments
-  control/     # PID baseline, manual input
-  stream/      # WebSocket server
-  viewer/      # Three.js app
-  configs/
-  tests/
-  scripts/     # run_headless.py, replay.py, batch_run.py
+flightsim/          # installable package (uv_build backend)
+  core/             # JSBSim wrapper, State/Controls types (only place JSBSim is imported)
+  datalog/          # schema + Parquet writer ("logging" would shadow the stdlib module)
+  envs/             # Gymnasium environments
+  control/          # heading hold (step 1), PID baseline, manual input
+  stream/           # WebSocket server
+  viewer/           # Three.js app
+  config.py         # YAML loading + config hash
+  runner.py         # headless run loop
+configs/            # YAML run configs
+tests/
+scripts/            # run_headless.py, replay.py, batch_run.py
 ```
+
+## Sign conventions (verified against JSBSim c172p)
+- Elevator command +: nose down. Aileron +: roll right. Rudder +: trailing edge left, nose LEFT (opposite of pedal intuition).
+- JSBSim trim adjusts throttle, `pitch_trim`, aileron and rudder; `elevator` stays 0. Controllers must output total commands (trim value + correction).
+- Body-axis accelerations in `State` are specific force (what an accelerometer reads): about -1 g on z in level flight.
 
 ## How to work with me (Claude Code)
 - Start with step 1 only: scaffold the project, get a headless run working, log it, and confirm the log looks physically sensible before building further.
@@ -97,6 +110,9 @@ flightsim/
 - **Aircraft:** JSBSim `c172p`. Validation reference values in step 2 must come from a source matching this model.
 - **Research priority:** autopilot / control design first. The log schema should favor what control work needs: full state, control surface commands and positions, trim condition, and enough precision to fit dynamic modes. RL and pilot training come later.
 
+## Progress
+- Step 1 (headless run + log): done 2026-10-04. `scripts/run_headless.py` trims at 5000 ft / 100 KTAS, holds heading for 300 s, writes `data/<run_id>.parquet`.
+
 ## Open questions
 - Which starting scenarios matter beyond cruise (takeoff, approach and landing)? Step 1 uses straight-and-level cruise.
 
@@ -108,4 +124,5 @@ flightsim/
 
 ## Common commands
 - Local: `uv sync`, `uv run pytest`, `uv run python scripts/<script>.py`
+- Logs go to `data/` (gitignored; `data/.gitkeep` is committed so Docker never creates it as root).
 - Docker: `docker compose build`, `docker compose run --rm sim pytest`, `docker compose run --rm sim python scripts/<script>.py`
