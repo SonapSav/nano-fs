@@ -151,6 +151,16 @@ export class FlightScene {
     }
   }
 
+  // Horizontal screen position (0..1 across the view) of the aircraft's straight-ahead
+  // direction from the pilot's eye, or null when not in the cockpit view or out of sight.
+  boresightX() {
+    if (this.view !== "cockpit") return null;
+    const fwd = new THREE.Vector3(1000, 0, 0).add(EYE_BODY).applyMatrix4(this.aircraft.matrix);
+    const ndc = fwd.project(this.camera);
+    if (ndc.z > 1 || Math.abs(ndc.x) > 0.97) return null;
+    return (ndc.x + 1) / 2;
+  }
+
   setView(view) {
     this.view = view;
     const inside = view === "cockpit";

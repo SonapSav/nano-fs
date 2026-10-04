@@ -253,7 +253,9 @@ owner before work can start.
   and pilot position (0.10 m forward, 0.36 m left, 0.29 m above the CG), rotating with
   the aircraft; drag to turn the head, double-click to look ahead. Plain view, no
   cockpit parts drawn (a cowling/glare-shield/frame version was tried and removed at
-  the owner's request, 2026-10-04).
+  the owner's request, 2026-10-04). A white triangle at the bottom edge of the view points
+  up at the aircraft's straight-ahead direction; it follows the nose when the head is
+  turned and hides when the nose direction is out of view.
 - [ ] Scenery follow-ups: roads and rivers; forest edges are still per-vertex (jagged
   up close); trees and houses only in the nearest 3 x 3 tiles; clouds; time of day;
   a quality setting for weaker GPUs. Terrain height in the physics (needed for

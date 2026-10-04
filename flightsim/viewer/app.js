@@ -261,6 +261,10 @@ function frame() {
     dirty = false;
   }
   scene.render();
+  const bx = scene.boresightX();
+  const marker = $("boresight");
+  marker.style.display = bx === null ? "none" : "block";
+  if (bx !== null) marker.style.left = `${(bx * 100).toFixed(2)}%`;
   requestAnimationFrame(frame);
 }
 

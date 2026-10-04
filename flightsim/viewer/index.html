@@ -88,6 +88,10 @@
   #readout .warn { color: #e2b93b; font-weight: 600; }
   #run { color: var(--dim); font-size: 14px; word-break: break-all; }
 
+  /* Cockpit view: points up at the aircraft's straight-ahead direction, from the bottom edge. */
+  #boresight { position: absolute; bottom: 0; width: 0; height: 0; transform: translateX(-50%); display: none;
+    border-left: 11px solid transparent; border-right: 11px solid transparent; border-bottom: 18px solid var(--marking);
+    filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, .9)); pointer-events: none; }
   #pad-status { position: absolute; left: 16px; top: 12px; padding: 4px 10px; border-radius: 4px;
     background: rgba(44, 48, 52, .86); font-size: 14px; }
   #pad-status:empty { display: none; }
@@ -142,6 +146,7 @@
   <main id="view">
     <div id="message" role="status" aria-live="polite"></div>
     <div id="pad-status" role="status" aria-live="polite"></div>
+    <div id="boresight" aria-hidden="true"></div>
     <div id="hint">Drag to look around, scroll to zoom, space to pause</div>
   </main>
 
