@@ -61,13 +61,39 @@ owner before work can start.
   Episode metrics now include peak bank, load factor range, climb rate and airspeed
   deviation (batch summary format 2).
 
+- [x] **RL setup and first PPO run** (2026-10-04, authorized: torch CPU-only + stable-baselines3;
+  `803061f`, `406dbe9`). `scripts/train_rl.py` + `configs/rl/ppo_comfort.yaml`: PPO on
+  the comfort task, 6 envs (~2,500 decisions/s), obs/reward normalization, evaluation
+  every 1 M steps on seeds 1000-1019, best/checkpoint models, wall-clock limit; trained
+  agents evaluate through the batch runner (`--policy rl --rl-model <dir>`).
+  Run `04fa52c65e4a` was **interrupted at ~11 M steps (71 of 90 min) by a terminal
+  shutdown**; best model (3 M steps) and 5 M / 10 M checkpoints survive
+  (see `data/rl/04fa52c65e4a/INTERRUPTED.md`). Seeds 3000-3999, comfort task:
+
+  | Policy | Return | Comfort | Never settled | Ended early | TAS RMS | Hdg RMS | Activity |
+  |---|---|---|---|---|---|---|---|
+  | PID `f9f9a8fd6be1` | -1468 | -26.6 | 140 | 0 | 1.56 | 14.4 | 0.29 |
+  | LQR `9368815af54f` | -1479 | -18.5 | 16 | 0 | 1.24 | 14.9 | 0.78 |
+  | PPO best, 3 M `5c0d51f44e24` | -2576 | -149 | 784 | 11 (alpha) | 6.32 | 12.3 | 2.19 |
+  | PPO 10 M `29605f0cdd63` | -3071 | -208 | 982 | 28 (alpha, bank) | 5.56 | 16.2 | 2.71 |
+
+  PPO learned the task far beyond holding trim (~-12970) and has the best heading
+  tracking, but stalls, holds airspeed poorly and works the controls 7.5x the PID.
+  Evaluation return peaked at 3 M steps and then degraded with more terminations.
+  Likely cause: rewards are normalized and clipped to +/-10, which shrinks the
+  termination charge (up to 53,760) to about one bad step, so terminations are not
+  feared.
+
 ## Pending
 
 ### Next directions (pick one)
 
-- [ ] **RL training against the PID baseline.** **Needs decision:** requires PyTorch and
-  Stable-Baselines3 (large dependencies). The environments are ready; compare with
-  `scripts/compare_controllers.py` / `scripts/batch_run.py`.
+- [ ] **Second PPO run with the reward fix** (**needs decision:** more compute).
+  `normalize.clip_rewards` very large (no clipping) or a fixed reward scale instead of
+  normalization, so the termination charge keeps its size. Then evaluate on seeds
+  3000-3999 as above.
+- [ ] Residual RL: the agent learns corrections on top of the LQR (faster learning,
+  starts from a safe controller). Decide after the second run.
 - [ ] **Tuned aircraft model** to close the step 2 deviations, as a separate copy of
   `c172p` (see "Aircraft model fidelity"). Decided 2026-10-04: deviations accepted for
   now, tuning is a possible later step.
@@ -174,6 +200,17 @@ owner before work can start.
   any changes the environment's action space. Pitch trim would make long manual flights
   easier; flaps and brakes matter for takeoff and landing.
 
+### Manual flight hardware
+
+- [x] Xbox controller works for manual flights (standard gamepad mapping, step 5).
+- [ ] **Joystick support for the Thrustmaster T.Flight HOTAS X** (owner plans to buy it,
+  2026-10-04). Browsers report it without the standard layout, so it is ignored today.
+  Plan: per-device axis mapping (pitch, roll, rudder = twist grip, throttle = lever;
+  invert, dead zone) keyed by device name, set through a calibration screen in the
+  viewer (move each control when prompted). Do not hard-code axis indices: they vary by
+  browser and OS and cannot be verified without the device. The same mechanism covers a
+  yoke and rudder pedals later. Test with the device once it arrives.
+
 ### Viewer
 
 - [ ] Seeking in replays (only play, pause, stop and speed today).
@@ -200,6 +237,11 @@ owner before work can start.
   `BYTE_STREAM_SPLIT` encoding on float columns (no schema change).
 
 ### Infrastructure
+
+- [ ] Docker image is 1.99 GB since torch was added (CPU-only build). A separate
+  slim image without torch for sim/viewer-only use is possible if size matters.
+- [ ] The viewer container still runs the image from step 6; restart it
+  (`docker compose up -d viewer`) to pick up later changes (none affect the viewer).
 
 - [ ] Move to the GPU PC (NVIDIA GTX 1660 6 GB) when GPU training is needed. Needs the
   NVIDIA Container Toolkit and a separate GPU image. Check its core layout first: here,
