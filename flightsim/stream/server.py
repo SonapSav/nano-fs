@@ -1,0 +1,168 @@
+"""HTTP + WebSocket server on one port: serves the viewer and streams frames at /ws.
+
+Each WebSocket connection is an independent playback session. Clients can only pick a
+source and control playback (pause, speed); nothing they send reaches the physics.
+Pacing to wall-clock time happens here, never in the core.
+"""
+
+import asyncio
+import json
+import mimetypes
+import time
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+
+from websockets.asyncio.server import ServerConnection, serve
+from websockets.datastructures import Headers
+from websockets.exceptions import ConnectionClosed
+from websockets.http11 import Request, Response
+
+from flightsim.control.autopilot import AutopilotGains
+from flightsim.envs import EnvConfig
+from flightsim.stream.protocol import PROTOCOL_VERSION, encode
+from flightsim.stream.sources import LiveSource, ReplaySource, Source, list_logs
+
+VIEWER_DIR = Path(__file__).resolve().parent.parent / "viewer"
+MAX_SPEED = 64.0
+
+
+@dataclass
+class ServerConfig:
+    data_dir: Path
+    env_cfg: EnvConfig
+    gains: AutopilotGains
+    frame_rate_hz: float = 30.0
+
+
+def _static_response(path: str) -> Response:
+    rel = path.split("?", 1)[0].lstrip("/") or "index.html"
+    file = (VIEWER_DIR / rel).resolve()
+    if not file.is_relative_to(VIEWER_DIR) or not file.is_file():
+        return Response(404, "Not Found", Headers([("Content-Type", "text/plain")]), b"not found\n")
+    ctype = mimetypes.guess_type(file.name)[0] or "application/octet-stream"
+    if file.suffix == ".js":
+        ctype = "text/javascript"
+    body = file.read_bytes()
+    headers = Headers([("Content-Type", ctype), ("Content-Length", str(len(body))), ("Cache-Control", "no-cache")])
+    return Response(200, "OK", headers, body)
+
+
+class Session:
+    def __init__(self, ws: ServerConnection, cfg: ServerConfig):
+        self.ws, self.cfg = ws, cfg
+        self.task: asyncio.Task | None = None
+        self.speed = 1.0
+        self.paused = asyncio.Event()  # set = paused
+        self._rebase = True
+
+    def _open(self, msg: dict) -> Source:
+        if msg.get("source") == "replay":
+            path = (self.cfg.data_dir / str(msg["path"])).resolve()
+            if not path.is_relative_to(self.cfg.data_dir.resolve()) or path.suffix != ".parquet" or not path.is_file():
+                raise ValueError(f"no such log: {msg['path']}")
+            return ReplaySource(path)
+        if msg.get("source") == "live":
+            return LiveSource(self.cfg.env_cfg, self.cfg.gains, int(msg.get("seed", 0)))
+        raise ValueError(f"unknown source {msg.get('source')!r}")
+
+    async def handle(self, msg: dict) -> None:
+        kind = msg.get("type")
+        if kind == "list":
+            await self.ws.send(encode({"type": "logs", "logs": list_logs(self.cfg.data_dir)}))
+        elif kind == "play":
+            await self.stop()
+            source = await asyncio.to_thread(self._open, msg)
+            self.speed = self._clamp(msg.get("speed", 1.0))
+            self.paused.clear()
+            self.task = asyncio.create_task(self._stream(source))
+        elif kind == "pause":
+            self.paused.set()
+        elif kind == "resume":
+            self.paused.clear()
+            self._rebase = True
+        elif kind == "speed":
+            self.speed = self._clamp(msg.get("value", 1.0))
+            self._rebase = True
+        elif kind == "stop":
+            await self.stop()
+        else:
+            raise ValueError(f"unknown message type {kind!r}")
+
+    @staticmethod
+    def _clamp(speed) -> float:
+        return min(MAX_SPEED, max(0.05, float(speed)))
+
+    async def stop(self) -> None:
+        if self.task and not self.task.done():
+            self.task.cancel()
+            try:
+                await self.task
+            except asyncio.CancelledError:
+                pass
+            await self.ws.send(encode({"type": "end", "reason": "stopped"}))
+        self.task = None
+
+    async def _stream(self, source: Source) -> None:
+        await self.ws.send(encode({
+            "type": "hello", "protocol": PROTOCOL_VERSION, "source": source.source, "run_id": source.run_id,
+            "aircraft": source.aircraft, "sim_rate_hz": source.sim_rate_hz, "frame_rate_hz": self.cfg.frame_rate_hz,
+            "duration_s": source.duration_s, "targets": source.targets, "meta": source.meta,
+        }))  # fmt: skip
+        frame_dt = 1.0 / self.cfg.frame_rate_hz
+        next_t = None
+        wall0 = sim0 = 0.0
+        last_row = None
+        for t, row in source.frames():
+            last_row = row
+            if next_t is not None and t < next_t - 1e-9:
+                continue
+            next_t = t + frame_dt
+            if self.paused.is_set():
+                while self.paused.is_set():
+                    await asyncio.sleep(0.05)
+                self._rebase = True
+            if self._rebase:
+                wall0, sim0, self._rebase = time.monotonic(), t, False
+            delay = wall0 + (t - sim0) / self.speed - time.monotonic()
+            if delay > 0:
+                await asyncio.sleep(delay)
+            await self.ws.send(encode({"type": "frame", "row": row}))
+            last_row = None
+        if last_row is not None:  # always deliver the final state
+            await self.ws.send(encode({"type": "frame", "row": last_row}))
+        await self.ws.send(encode({"type": "end", "reason": source.end_reason}))
+
+
+def make_handler(cfg: ServerConfig):
+    async def handler(ws: ServerConnection) -> None:
+        session = Session(ws, cfg)
+        try:
+            async for text in ws:
+                try:
+                    await session.handle(json.loads(text))
+                except (ValueError, KeyError, TypeError, json.JSONDecodeError) as e:
+                    await ws.send(encode({"type": "error", "message": str(e)}))
+        except ConnectionClosed:
+            pass
+        finally:
+            if session.task:
+                session.task.cancel()
+
+    return handler
+
+
+def process_request(connection: ServerConnection, request: Request) -> Response | None:
+    if request.path.split("?", 1)[0] == "/ws":
+        return None  # continue with the WebSocket handshake
+    return _static_response(request.path)
+
+
+async def run_server(
+    cfg: ServerConfig, host: str, port: int, on_ready: Callable[[int], None] | None = None
+) -> None:
+    """Serve until cancelled. `on_ready` receives the bound port (useful with port=0)."""
+    async with serve(make_handler(cfg), host, port, process_request=process_request) as server:
+        if on_ready is not None:
+            on_ready(server.sockets[0].getsockname()[1])
+        await server.serve_forever()

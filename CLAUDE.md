@@ -45,7 +45,7 @@ Rules:
 - **Docker from day 1:** `Dockerfile` (`python:3.14.3-slim` + uv 0.11.2) installs from `uv.lock` with `--locked`, so local and container environments are identical. `compose.yaml` mounts `./data` for logs and runs as the host user. CPU-only image for now; a separate GPU image only if ML training needs it.
 - **ML interface:** Gymnasium environment wrapping the core.
 - **Logging:** Parquet, one row per timestep.
-- **Viewer:** Three.js in the browser, fed over WebSocket. Chase camera plus a basic instrument panel.
+- **Viewer:** Three.js in the browser, fed over WebSocket. Chase camera plus a basic instrument panel. Served by `websockets` (HTTP + WebSocket on one port, no other deps). three.js is vendored, not loaded from a CDN, so it works offline; update it deliberately. The viewer may only send playback requests; it must never send anything that reaches the physics.
 - **Ports:** expose services on host port **8686** (not 8000, 3000 or other common defaults). If more ports are needed later, ask.
 - **Testing:** pytest.
 
@@ -86,8 +86,8 @@ flightsim/          # installable package (uv_build backend)
   datalog/          # schema + Parquet writer ("logging" would shadow the stdlib module)
   envs/             # Gymnasium env, its config, policy adapters (PID, trim hold), episode metrics
   control/          # heading hold (step 1), PID autopilot (step 3), manual input
-  stream/           # WebSocket server
-  viewer/           # Three.js app
+  stream/           # protocol, frame sources (replay, live PID), HTTP + WebSocket server
+  viewer/           # static Three.js app (no build step); three.js 0.186.1 vendored in viewer/vendor
   analysis/         # mode identification, validation maneuvers, validation checks
   config.py         # YAML loading + config hash
   runner.py         # headless run loop
@@ -122,6 +122,7 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - **Research priority:** autopilot / control design first. The log schema should favor what control work needs: full state, control surface commands and positions, trim condition, and enough precision to fit dynamic modes. RL and pilot training come later.
 
 ## Progress
+- Step 4 (stream + viewer): done 2026-10-04. `python -m flightsim.stream` (or `docker compose up viewer`) serves the viewer and the `/ws` stream on port 8686. Sources: replay of any log under `data/`, or a live PID episode of the step 3 task. Protocol in `flightsim/stream/protocol.py`: a frame is exactly a log schema v1 row (tested: live frames == logged rows). Viewer: Three.js chase view plus a C172 six-pack with POH airspeed/tach markings and magenta target bugs; URL params `?source=live|<log path>&seed=&speed=&autoplay=1`.
 - Step 3 (Gymnasium + PID baseline): done 2026-10-04. `flightsim/AltitudeHeadingHold-v0` (`configs/envs/altitude_heading_hold.yaml`): randomized cruise start, random altitude (±150 m) and heading (±120°) targets, 120 s episodes, 20 Hz decisions, absolute commands as actions. Baseline PID autopilot (`configs/autopilot.yaml`) over 100 seeds: all episodes settle (alt within 10 m by ≤52 s, heading within 3° by ≤31 s), mean return -1317 vs -10857 for holding trim. Run `scripts/compare_controllers.py`.
 - Step 2 (validation): done 2026-10-04. `scripts/validate.py` runs the checks in `configs/validation/c172p.yaml` and writes `docs/VALIDATION.md` (20 pass, 4 known deviations). Known deviations: stall speeds 3.4-4.7 kt fast in 3 of 6 cases; phugoid period 27.8 s vs ~35 s flight test (damping matches). Also qualitative: model spiral mode is stable at mid CG, the real aircraft's diverges. No independent C172 short-period measurement exists in open sources; only MIL-F-8785C limits are checked.
 - Step 1 (headless run + log): done 2026-10-04. `scripts/run_headless.py` trims at 5000 ft / 100 KTAS, holds heading for 300 s, writes `data/<run_id>.parquet`.
@@ -140,4 +141,5 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - Validation report: `uv run python scripts/validate.py` (regenerates `docs/VALIDATION.md`)
 - Controller comparison: `uv run python scripts/compare_controllers.py --episodes 100 [--log-dir data/episodes]`
 - Logs go to `data/` (gitignored; `data/.gitkeep` is committed so Docker never creates it as root).
+- Viewer: `uv run python -m flightsim.stream` then open http://localhost:8686/ ; in Docker `docker compose up -d viewer` (published on all host interfaces)
 - Docker: `docker compose build`, `docker compose run --rm sim pytest`, `docker compose run --rm sim python scripts/<script>.py`

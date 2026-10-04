@@ -178,6 +178,14 @@ class AltitudeHeadingHoldEnv(gym.Env):
             raise RuntimeError("reset(seed=...) with an explicit seed to log a reproducible episode")
         return Provenance(self.cfg.aircraft, self.episode_seed, self.cfg.config_hash, self.cfg.config_json)
 
+    @property
+    def recorded(self) -> tuple[list[State], list[Controls]]:
+        """States (at the simulation rate, first is the trim state) and the controls applied
+        between them, so far this episode. Requires record=True. Do not modify."""
+        if not self.record:
+            raise RuntimeError("create the environment with record=True")
+        return self._states, self._controls
+
     def episode_result(self) -> RunResult:
         """The episode so far at the simulation rate, for `flightsim.datalog.write_log`.
         Requires record=True."""

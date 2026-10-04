@@ -1,8 +1,17 @@
+x-flightsim: &flightsim
+  build: .
+  image: flightsim:dev
+  # Run as the host user so logs written to ./data are not root-owned.
+  user: "${UID:-1000}:${GID:-1000}"
+  volumes:
+    - ./data:/app/data
+
 services:
   sim:
-    build: .
-    image: flightsim:dev
-    # Run as the host user so logs written to ./data are not root-owned.
-    user: "${UID:-1000}:${GID:-1000}"
-    volumes:
-      - ./data:/app/data
+    <<: *flightsim
+
+  viewer:
+    <<: *flightsim
+    command: ["python", "-m", "flightsim.stream", "--host", "0.0.0.0", "--port", "8686", "--data-dir", "data"]
+    ports:
+      - "8686:8686"
