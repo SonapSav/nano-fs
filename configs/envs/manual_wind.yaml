@@ -1,0 +1,7 @@
+# Manual flight with wind and turbulence (same distributions as the windy task).
+base: manual.yaml
+
+wind:
+  steady_speed_mps: [0, 10]
+  turbulence:
+    probability: {none: 0.25, light: 0.45, moderate: 0.30}

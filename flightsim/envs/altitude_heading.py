@@ -1,10 +1,14 @@
 """Gymnasium environment: capture and hold a target altitude and heading.
 
-Action (Box[-1, 1]^4): elevator, aileron, rudder, throttle, as absolute commands.
-Throttle maps [-1, 1] -> [0, 1]. Pitch trim, mixture and flaps are held at the
-episode's trim values, so an action near the trim point flies straight and level.
+Action (Box[-1, 1]^n): absolute commands for the task's controls (`actions` in the env
+config): elevator, aileron, rudder, throttle, optionally flaps and pitch trim.
+Throttle and flaps map [-1, 1] -> [0, 1]. Controls not in the action set (pitch trim,
+mixture, flaps by default) are held at the episode's trim values, so an action near the
+trim point flies straight and level.
 
-Observation: OBS_NAMES, each divided by its scale in OBS_SCALES (float32).
+Observation: the base quantities of OBS_SCALES plus the previous action of each control
+(`env.obs_names`), each divided by its scale (float32). With the default controls this
+is exactly OBS_NAMES.
 
 All randomness comes from the generator seeded by reset(seed=...): same seed and
 same config give an identical episode.
@@ -21,11 +25,12 @@ from flightsim.config import Provenance
 from flightsim.control.autopilot import Targets
 from flightsim.control.heading_hold import wrap_angle_rad
 from flightsim.core import Controls, InitialConditions, JSBSimCore, State
-from flightsim.envs.config import EnvConfig
+from flightsim.envs.config import BASE_ACTIONS, EnvConfig
 from flightsim.runner import RunResult
 
-ACTION_NAMES = ("elevator", "aileron", "rudder", "throttle")
+ACTION_NAMES = BASE_ACTIONS  # default controls
 G0 = 9.80665
+_UNIT_RANGE = ("throttle", "flaps")  # commands in [0, 1], actions in [-1, 1]
 
 # Observation name -> scale it is divided by (keeps typical values within about +/-1).
 OBS_SCALES = {
@@ -41,12 +46,8 @@ OBS_SCALES = {
     "p_radps": 1.0,
     "q_radps": 1.0,
     "r_radps": 1.0,
-    "prev_elevator": 1.0,
-    "prev_aileron": 1.0,
-    "prev_rudder": 1.0,
-    "prev_throttle": 1.0,
 }
-OBS_NAMES = tuple(OBS_SCALES)
+OBS_NAMES = (*OBS_SCALES, *(f"prev_{a}" for a in ACTION_NAMES))
 
 
 def load_factor(s: State) -> float:
@@ -54,8 +55,22 @@ def load_factor(s: State) -> float:
     return -s.az_mps2 / G0
 
 
-def controls_to_action(u: Controls) -> np.ndarray:
-    return np.array([u.elevator, u.aileron, u.rudder, 2.0 * u.throttle - 1.0], dtype=np.float32)
+def controls_to_action(u: Controls, names: tuple[str, ...] = ACTION_NAMES) -> np.ndarray:
+    return np.array(
+        [2.0 * getattr(u, n) - 1.0 if n in _UNIT_RANGE else getattr(u, n) for n in names], dtype=np.float32
+    )
+
+
+def action_to_controls(action: np.ndarray, names: tuple[str, ...], base: Controls) -> Controls:
+    """Controls with the named fields taken from the action, the rest from `base`."""
+    return replace(base, **{n: (float(a) + 1.0) / 2.0 if n in _UNIT_RANGE else float(a) for n, a in zip(names, action)})
+
+
+def flap_limit_mps(flap_deg: float, vfe_10_mps: float, vfe_full_mps: float) -> float:
+    """Maximum flap-extended airspeed for a flap position (inf when retracted)."""
+    if flap_deg <= 0.5:
+        return math.inf
+    return vfe_10_mps if flap_deg <= 10.5 else vfe_full_mps
 
 
 class AltitudeHeadingHoldEnv(gym.Env):
@@ -64,9 +79,11 @@ class AltitudeHeadingHoldEnv(gym.Env):
     def __init__(self, cfg: EnvConfig, record: bool = False):
         self.cfg = cfg
         self.record = record
-        self.action_space = gym.spaces.Box(-1.0, 1.0, shape=(len(ACTION_NAMES),), dtype=np.float32)
-        self.observation_space = gym.spaces.Box(-np.inf, np.inf, shape=(len(OBS_NAMES),), dtype=np.float32)
-        self._scales = np.array([OBS_SCALES[n] for n in OBS_NAMES])
+        self.action_names = cfg.actions
+        self.obs_names = (*OBS_SCALES, *(f"prev_{a}" for a in self.action_names))
+        self.action_space = gym.spaces.Box(-1.0, 1.0, shape=(len(self.action_names),), dtype=np.float32)
+        self.observation_space = gym.spaces.Box(-np.inf, np.inf, shape=(len(self.obs_names),), dtype=np.float32)
+        self._scales = np.array([OBS_SCALES.get(n, 1.0) for n in self.obs_names])
 
     # --- Gymnasium API ---------------------------------------------------------
 
@@ -106,7 +123,7 @@ class AltitudeHeadingHoldEnv(gym.Env):
             )  # fmt: skip
         self.initial_conditions = ic
         self._state = self.trim_state
-        self._prev_action = controls_to_action(self.trim)
+        self._prev_action = controls_to_action(self.trim, self.action_names)
         self.last_comfort_cost = 0.0
         self.last_comfort_terms = {}
         self._decisions = 0
@@ -115,13 +132,7 @@ class AltitudeHeadingHoldEnv(gym.Env):
 
     def step(self, action):
         action = np.clip(np.asarray(action, dtype=np.float32), -1.0, 1.0)
-        u = replace(
-            self.trim,
-            elevator=float(action[0]),
-            aileron=float(action[1]),
-            rudder=float(action[2]),
-            throttle=float(action[3] + 1.0) / 2.0,
-        )
+        u = action_to_controls(action, self.action_names, self.trim)
         for _ in range(self.cfg.sim_steps_per_action):
             self._state = self._sim_step(u)
             if self.record:
@@ -224,9 +235,10 @@ class AltitudeHeadingHoldEnv(gym.Env):
         """Upper bound of the per-decision cost: every clipped term at its clip, and the
         action-rate term at its largest possible value (each action moves across [-1, 1])."""
         r = self.cfg.reward
-        bound = (r.w_alt + r.w_heading + r.w_tas) * r.clip + r.w_action_rate * 4.0 * len(ACTION_NAMES)
+        bound = (r.w_alt + r.w_heading + r.w_tas) * r.clip + r.w_action_rate * 4.0 * len(self.action_names)
         if r.comfort is not None:
-            bound += (r.comfort.w_bank + r.comfort.w_load_factor + r.comfort.w_climb) * r.clip
+            c = r.comfort
+            bound += (c.w_bank + c.w_load_factor + c.w_climb + c.w_flap_overspeed) * r.clip
         return bound
 
     def _comfort_cost(self, term) -> float:
@@ -243,6 +255,11 @@ class AltitudeHeadingHoldEnv(gym.Env):
             * term(excess(load_factor(s) - 1.0, c.load_factor_dev_threshold), c.load_factor_dev_scale),
             "climb": c.w_climb * term(excess(s.v_down_mps, c.climb_threshold_mps), c.climb_scale_mps),
         }
+        if c.flap_vfe_10_mps is not None and c.w_flap_overspeed:
+            over = s.cas_mps - self._flap_limit(s)
+            self.last_comfort_terms["flap_overspeed"] = (
+                c.w_flap_overspeed * term(over, c.flap_overspeed_scale_mps) if over > 0 else 0.0
+            )
         return sum(self.last_comfort_terms.values())
 
     def _termination_reason(self) -> str | None:
@@ -259,10 +276,21 @@ class AltitudeHeadingHoldEnv(gym.Env):
             return "load_factor"
         if t.min_load_factor is not None and load_factor(s) < t.min_load_factor:
             return "load_factor"
+        if t.flap_overspeed_margin_mps is not None and s.cas_mps > self._flap_limit(s) + t.flap_overspeed_margin_mps:
+            return "flap_overspeed"
         return None
 
+    def _flap_limit(self, s: State) -> float:
+        c = self.cfg.reward.comfort
+        if c is None or c.flap_vfe_10_mps is None:
+            return math.inf
+        return flap_limit_mps(math.degrees(s.flap_pos_rad), c.flap_vfe_10_mps, c.flap_vfe_full_mps)
+
     def _info(self) -> dict:
-        return {"state": self._state, "targets": self.targets, "trim": self.trim, "trim_state": self.trim_state}
+        return {
+            "state": self._state, "targets": self.targets, "trim": self.trim, "trim_state": self.trim_state,
+            "action_names": self.action_names,
+        }  # fmt: skip
 
     # --- Re-flying recorded commands ---------------------------------------------
 

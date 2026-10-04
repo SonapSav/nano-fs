@@ -16,6 +16,8 @@ def main() -> None:
     parser.add_argument("--data-dir", default="data", help="logs available for replay")
     parser.add_argument("--env-config", default="configs/envs/altitude_heading_hold.yaml")
     parser.add_argument("--autopilot", default="configs/autopilot.yaml")
+    parser.add_argument("--manual-config", default="configs/envs/manual.yaml", help="manual flight, calm air")
+    parser.add_argument("--manual-wind-config", default="configs/envs/manual_wind.yaml", help="manual flight, wind and turbulence")
     parser.add_argument("--frame-rate", type=float, default=30.0)
     args = parser.parse_args()
 
@@ -24,6 +26,7 @@ def main() -> None:
         env_cfg=load_env_config(args.env_config),
         gains=load_autopilot_gains(args.autopilot),
         frame_rate_hz=args.frame_rate,
+        manual_env_cfgs={"calm": load_env_config(args.manual_config), "windy": load_env_config(args.manual_wind_config)},
     )
     print(f"viewer: http://{'localhost' if args.host in ('0.0.0.0', '127.0.0.1') else args.host}:{args.port}/")
     try:

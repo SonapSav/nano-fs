@@ -1,0 +1,24 @@
+# Manual flight (calm air): the comfort task with flaps and pitch trim added to the
+# pilot's controls, and the flap speed limits enforced. Used by the viewer's "Fly it
+# yourself" mode; autopilot and RL tasks keep their four controls.
+base: altitude_heading_hold_comfort.yaml
+
+actions: [elevator, aileron, rudder, throttle, flaps, pitch_trim]
+
+wind:
+  steady_speed_mps: [0, 0]
+  turbulence:
+    probability: {none: 1.0, light: 0.0, moderate: 0.0}
+
+reward:
+  comfort:
+    # Maximum flap extended speed, C172P POH (1981) Section 2, Figure 2-1 (KIAS; the model
+    # has no position error, so CAS is used): 10 deg flaps 110 KIAS; 10-30 deg 85 KIAS.
+    flap_vfe_10_mps: 56.59        # 110 kt
+    flap_vfe_full_mps: 43.73      # 85 kt
+    flap_overspeed_scale_mps: 2.572   # 5 kt
+    w_flap_overspeed: 1.0
+
+termination:
+  # End the flight 10 kt beyond the flap limit. The margin is a project choice, not a POH value.
+  flap_overspeed_margin_mps: 5.144

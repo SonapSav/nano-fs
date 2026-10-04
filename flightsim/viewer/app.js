@@ -14,13 +14,15 @@ const els = {
   message: $("message"), run: $("run"), hint: $("hint"),
 };
 const gauges = { asi: $("asi"), ai: $("ai"), alt: $("alt"), tc: $("tc"), hi: $("hi"), vsi: $("vsi"), tach: $("tach"), controls: $("controls") };
-const readout = { alt: $("r-alt"), talt: $("r-talt"), hdg: $("r-hdg"), thdg: $("r-thdg"), kias: $("r-kias"), aoa: $("r-aoa"), g: $("r-g") };
+const readout = { alt: $("r-alt"), talt: $("r-talt"), hdg: $("r-hdg"), thdg: $("r-thdg"), kias: $("r-kias"), aoa: $("r-aoa"), g: $("r-g"), flaps: $("r-flaps"), trim: $("r-trim") };
 
 const LIVE = "live";
-const MANUAL = "manual";
+const MANUAL = "manual"; // calm air
+const MANUAL_WIND = "manual_wind";
+const isManual = (v) => v === MANUAL || v === MANUAL_WIND;
 const INPUT_SEND_HZ = 30;
 const VIEW_HINT = "Drag to look around, scroll to zoom, space to pause";
-const FLY_HINT = "Arrows pitch and roll; Z and X rudder; W and S throttle; hold Shift for full deflection; or use a gamepad";
+const FLY_HINT = "Arrows pitch and roll; Z/X rudder; W/S throttle; F/V flaps; T/G trim; Shift full deflection. Gamepad: LB/RB flaps, D-pad trim";
 
 const scene = new FlightScene($("view"));
 const pilot = new PilotInput();
@@ -38,7 +40,7 @@ if (params.has("seed")) els.seed.value = params.get("seed");
 if (params.has("speed")) els.speed.value = params.get("speed");
 const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const deg360 = (rad) => ((rad * units.DEG) % 360 + 360) % 360;
-const flying = () => session?.source === MANUAL && !els.stop.disabled;
+const flying = () => session?.source === "manual" && !els.stop.disabled;
 
 function say(text) {
   els.message.textContent = text;
@@ -59,7 +61,8 @@ function send(msg) {
 function populateSources(logs) {
   const current = els.source.value;
   els.source.replaceChildren();
-  els.source.add(new Option("Fly it yourself", MANUAL));
+  els.source.add(new Option("Fly it yourself (calm air)", MANUAL));
+  els.source.add(new Option("Fly it yourself (wind and turbulence)", MANUAL_WIND));
   els.source.add(new Option("Watch the PID autopilot", LIVE));
   for (const [label, filter] of [["Your demonstrations", (l) => l.path.startsWith("demos/")], ["Recorded flights", (l) => !l.path.startsWith("demos/")]]) {
     const items = logs.filter(filter);
@@ -75,9 +78,9 @@ function populateSources(logs) {
 
 function updateSourceOptions() {
   const v = els.source.value;
-  els.seed.hidden = els.seedLabel.hidden = v !== LIVE && v !== MANUAL;
-  els.record.hidden = els.recordLabel.hidden = v !== MANUAL;
-  els.speed.disabled = v === MANUAL; // manual flights run in real time
+  els.seed.hidden = els.seedLabel.hidden = v !== LIVE && !isManual(v);
+  els.record.hidden = els.recordLabel.hidden = !isManual(v);
+  els.speed.disabled = isManual(v); // manual flights run in real time
 }
 
 function connect() {
@@ -135,15 +138,15 @@ function handle(msg) {
       scene.reset();
       scene.setTargets(msg.targets);
       els.run.textContent = `${{ live: "Autopilot", manual: "You are flying", replay: "Replay" }[msg.source]} ${msg.run_id}`;
-      say(msg.source === MANUAL ? "Fly to the magenta altitude and heading bugs." : "");
+      say(msg.source === "manual" ? "Fly to the magenta altitude and heading bugs." : "");
       setPlaying(true);
       break;
     case "frame":
-      if (session?.source === MANUAL && latest === null) {
+      if (session?.source === "manual" && latest === null) {
         // Start from the trimmed throttle so the aircraft keeps flying level.
-        pilot.reset(msg.row.cmd_throttle_norm ?? 0.7);
+        pilot.reset(msg.row.cmd_throttle_norm ?? 0.7, msg.row.cmd_flaps_norm ?? 0, msg.row.cmd_pitch_trim_norm ?? 0);
+        startInput(); // resets the hint, so set the flying hint after it
         els.hint.textContent = FLY_HINT;
-        startInput();
       }
       latest = msg.row;
       scene.update(latest);
@@ -168,7 +171,7 @@ function play() {
   const speed = Number(els.speed.value);
   const seed = Number(els.seed.value) || 0;
   const v = els.source.value;
-  if (v === MANUAL) send({ type: "play", source: MANUAL, seed, record: els.record.checked });
+  if (isManual(v)) send({ type: "play", source: "manual", conditions: v === MANUAL ? "calm" : "windy", seed, record: els.record.checked });
   else if (v === LIVE) send({ type: "play", source: LIVE, seed, speed });
   else send({ type: "play", source: "replay", path: v, speed });
   document.activeElement?.blur(); // so the arrow keys fly instead of changing the menu
@@ -210,6 +213,18 @@ function updateReadout(row) {
   readout.kias.textContent = row ? `${(row.cas_mps * units.MPS_TO_KT).toFixed(0)} kt` : "–";
   readout.aoa.textContent = row ? `${(row.alpha_rad * units.DEG).toFixed(1)}°` : "–";
   readout.g.textContent = row ? `${(-row.az_mps2 / units.G).toFixed(2)} g` : "–";
+  if (row) {
+    const flapDeg = row.flap_pos_rad * units.DEG;
+    // POH 1981 C172P Figure 2-1: 110 KIAS with 10 deg flaps, 85 KIAS beyond.
+    const vfe = flapDeg <= 0.5 ? Infinity : flapDeg <= 10.5 ? 110 : 85;
+    const over = row.cas_mps * units.MPS_TO_KT > vfe;
+    readout.flaps.textContent = `${Math.round(flapDeg)}°${over ? ` over ${vfe} kt limit` : ""}`;
+    readout.flaps.classList.toggle("warn", over);
+    const trim = row.cmd_pitch_trim_norm;
+    readout.trim.textContent = trim == null ? "–" : `${Math.round(Math.abs(trim) * 100)}% ${trim >= 0 ? "nose down" : "nose up"}`;
+  } else {
+    readout.flaps.textContent = readout.trim.textContent = "–";
+  }
 }
 
 function frame() {

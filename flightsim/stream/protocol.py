@@ -18,12 +18,15 @@ Client -> server messages:
   {"type": "list"}
   {"type": "play", "source": "replay", "path": "<relative to the data dir>", "speed": 1.0}
   {"type": "play", "source": "live", "seed": 0, "speed": 1.0}
-  {"type": "play", "source": "manual", "seed": 0, "record": true}   (speed is capped at 1)
-  {"type": "input", "elevator", "aileron", "rudder", "throttle"}
+  {"type": "play", "source": "manual", "conditions": "calm" | "windy", "seed": 0, "record": true}
+      (speed is capped at 1)
+  {"type": "input", "elevator", "aileron", "rudder", "throttle", "flaps"?, "pitch_trim"?}
       Manual flights only. Stick and pedals in [-1, 1] relative to trim (elevator +
-      = push, nose down; rudder + = nose left, the JSBSim convention), throttle in
-      [0, 1]. Sampled and held at the environment's decision rate. This is the only
-      message that reaches the physics, and only as a policy action.
+      = push, nose down; rudder + = nose left, the JSBSim convention), throttle and
+      flaps in [0, 1], pitch trim in [-1, 1] (+ = nose down). Flaps and pitch trim
+      only act if the manual task's action set includes them. Sampled and held at the
+      environment's decision rate. This is the only message that reaches the physics,
+      and only as a policy action.
   {"type": "pause"} | {"type": "resume"} | {"type": "speed", "value": 2.0} | {"type": "stop"}
 """
 

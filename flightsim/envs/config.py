@@ -8,6 +8,12 @@ from flightsim.config import canonical_json, config_hash, load_raw, parse_loadin
 from flightsim.core import InitialConditions, Loading
 
 
+# Controls a task may give its pilot, in action-vector order. Every task has the first four;
+# flaps and pitch trim are optional (held at trim otherwise).
+BASE_ACTIONS = ("elevator", "aileron", "rudder", "throttle")
+OPTIONAL_ACTIONS = ("flaps", "pitch_trim")
+
+
 @dataclass(frozen=True)
 class ComfortConfig:
     """Soft envelope: only the excess beyond each threshold is penalized,
@@ -22,6 +28,12 @@ class ComfortConfig:
     w_bank: float
     w_load_factor: float
     w_climb: float
+    # Flap overspeed: airspeed (CAS) above the flap-extended limit for the current flap
+    # position. None = not scored.
+    flap_vfe_10_mps: float | None = None  # limit with flaps extended up to 10 deg
+    flap_vfe_full_mps: float | None = None  # limit with flaps beyond 10 deg
+    flap_overspeed_scale_mps: float = 1.0
+    w_flap_overspeed: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -49,6 +61,7 @@ class TerminationConfig:
     min_alt_agl_m: float
     min_load_factor: float | None = None  # g; structural limits, None = not checked
     max_load_factor: float | None = None
+    flap_overspeed_margin_mps: float | None = None  # end the flight this far above the flap limit
 
 
 @dataclass(frozen=True)
@@ -78,6 +91,7 @@ class EnvConfig:
     reward: RewardConfig
     termination: TerminationConfig
     wind: WindConfig | None
+    actions: tuple[str, ...]
     config_hash: str
     config_json: str
 
@@ -133,8 +147,12 @@ def env_config_from_raw(raw: dict) -> EnvConfig:
             min_alt_agl_m=float(term["min_alt_agl_m"]),
             min_load_factor=float(term["min_load_factor"]) if "min_load_factor" in term else None,
             max_load_factor=float(term["max_load_factor"]) if "max_load_factor" in term else None,
+            flap_overspeed_margin_mps=(
+                float(term["flap_overspeed_margin_mps"]) if "flap_overspeed_margin_mps" in term else None
+            ),
         ),
         wind=_parse_wind(raw.get("wind")),
+        actions=_parse_actions(raw.get("actions")),
         config_hash=config_hash(raw),
         config_json=canonical_json(raw),
     )
@@ -153,7 +171,20 @@ def _parse_comfort(c: dict | None) -> ComfortConfig | None:
         w_bank=float(c["w_bank"]),
         w_load_factor=float(c["w_load_factor"]),
         w_climb=float(c["w_climb"]),
+        flap_vfe_10_mps=float(c["flap_vfe_10_mps"]) if "flap_vfe_10_mps" in c else None,
+        flap_vfe_full_mps=float(c["flap_vfe_full_mps"]) if "flap_vfe_full_mps" in c else None,
+        flap_overspeed_scale_mps=float(c.get("flap_overspeed_scale_mps", 1.0)),
+        w_flap_overspeed=float(c.get("w_flap_overspeed", 0.0)),
     )
+
+
+def _parse_actions(actions: list | None) -> tuple[str, ...]:
+    if actions is None:
+        return BASE_ACTIONS
+    actions = tuple(actions)
+    if actions[:4] != BASE_ACTIONS or any(a not in OPTIONAL_ACTIONS for a in actions[4:]) or len(set(actions)) != len(actions):
+        raise ValueError(f"actions must be {list(BASE_ACTIONS)} followed by any of {list(OPTIONAL_ACTIONS)}, got {list(actions)}")
+    return actions
 
 
 def _parse_wind(w: dict | None) -> WindConfig | None:

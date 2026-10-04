@@ -24,7 +24,7 @@ class TrimHoldPolicy:
     name = "trim_hold"
 
     def reset(self, info: dict) -> None:
-        self._action = controls_to_action(info["trim"])
+        self._action = controls_to_action(info["trim"], info["action_names"])
 
     def __call__(self, obs: np.ndarray, info: dict) -> np.ndarray:
         return self._action
@@ -41,9 +41,10 @@ class PIDPolicy:
 
     def reset(self, info: dict) -> None:
         self._autopilot = Autopilot(self.gains, info["trim"], info["trim_state"].theta_rad, info["targets"], self.dt_s)
+        self._names = info["action_names"]
 
     def __call__(self, obs: np.ndarray, info: dict) -> np.ndarray:
-        return controls_to_action(self._autopilot(info["state"]))
+        return controls_to_action(self._autopilot(info["state"]), self._names)
 
 
 class LQRPolicy:
@@ -58,6 +59,7 @@ class LQRPolicy:
 
     def reset(self, info: dict) -> None:
         self._autopilot = LQRAutopilot(self.schedule, info["trim"], info["trim_state"], info["targets"], self.dt_s)
+        self._names = info["action_names"]
 
     def __call__(self, obs: np.ndarray, info: dict) -> np.ndarray:
-        return controls_to_action(self._autopilot(info["state"]))
+        return controls_to_action(self._autopilot(info["state"]), self._names)

@@ -207,6 +207,16 @@ owner before work can start.
   (`flightsim/viewer/stick.js`), set in a "Stick settings" dialog and remembered per
   browser; defaults soften pitch (0.5 / 0.5). A status line shows whether a gamepad is
   detected. Requested after pitch felt too sensitive on the Xbox controller.
+- [x] Flaps and pitch trim for manual flight (2026-10-04). New task configs
+  `configs/envs/manual.yaml` (calm) and `manual_wind.yaml` add `flaps` and `pitch_trim`
+  to the action set (`actions:` in env configs; autopilot/RL tasks keep four controls and
+  are unchanged). Flaps step through 0/10/20/30 deg (F/V keys, Xbox LB/RB); trim moves
+  while held (T/G, D-pad), +0.15 per second. Flap speed limits from the C172P POH
+  (Figure 2-1): 110 KIAS with 10 deg, 85 KIAS beyond; overspeed costs comfort points and
+  ends the flight 10 kt beyond the limit (the margin is a project choice, not a POH
+  value). The viewer offers calm or wind-and-turbulence manual flights and shows flaps
+  (with an overspeed warning) and trim. Also fixed: the flying-controls hint never
+  showed during manual flights.
 - [ ] **Joystick support for the Thrustmaster T.Flight HOTAS X** (owner plans to buy it,
   2026-10-04). Browsers report it without the standard layout, so it is ignored today.
   Plan: per-device axis mapping (pitch, roll, rudder = twist grip, throttle = lever;

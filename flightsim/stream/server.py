@@ -33,6 +33,8 @@ class ServerConfig:
     env_cfg: EnvConfig
     gains: AutopilotGains
     frame_rate_hz: float = 30.0
+    # Manual-flight tasks by conditions name ("calm", "windy"); default: the autopilot task.
+    manual_env_cfgs: dict[str, EnvConfig] | None = None
 
 
 def _static_response(path: str) -> Response:
@@ -67,7 +69,11 @@ class Session:
         if msg.get("source") == "live":
             return LiveSource(self.cfg.env_cfg, self.cfg.gains, int(msg.get("seed", 0)))
         if msg.get("source") == "manual":
-            return ManualSource(self.cfg.env_cfg, int(msg.get("seed", 0)))
+            tasks = self.cfg.manual_env_cfgs or {"calm": self.cfg.env_cfg}
+            conditions = str(msg.get("conditions", next(iter(tasks))))
+            if conditions not in tasks:
+                raise ValueError(f"unknown conditions {conditions!r}; choose from {list(tasks)}")
+            return ManualSource(tasks[conditions], int(msg.get("seed", 0)))
         raise ValueError(f"unknown source {msg.get('source')!r}")
 
     async def handle(self, msg: dict) -> None:
@@ -86,7 +92,10 @@ class Session:
             # Pilot input: only meaningful during a manual flight, where it becomes the
             # policy's action at the next decision step.
             if isinstance(self.source, ManualSource) and self.task and not self.task.done():
-                self.source.pilot.set_input(msg["elevator"], msg["aileron"], msg["rudder"], msg["throttle"])
+                self.source.pilot.set_input(
+                    msg["elevator"], msg["aileron"], msg["rudder"], msg["throttle"],
+                    msg.get("flaps"), msg.get("pitch_trim"),
+                )  # fmt: skip
         elif kind == "pause":
             self.paused.set()
         elif kind == "resume":
