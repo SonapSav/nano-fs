@@ -33,6 +33,7 @@ class EpisodeMetrics:
     max_load_factor: float
     max_abs_climb_mps: float
     max_tas_dev_mps: float  # largest |airspeed - target|
+    comfort_cost: float  # summed comfort penalty (0 for tasks without a comfort envelope)
 
 
 def _settle_time(t: np.ndarray, err: np.ndarray, tol: float) -> float:
@@ -50,6 +51,7 @@ def run_episode(env: AltitudeHeadingHoldEnv, policy: Policy, seed: int) -> Episo
     dt = 1.0 / env.cfg.control_rate_hz
     t, e_alt, e_hdg, e_tas, actions = [], [], [], [], []
     bank, nz, climb = [], [], []
+    comfort = 0.0
     total, reason = 0.0, None
     while True:
         action = np.asarray(policy(obs, info), dtype=np.float32)
@@ -65,6 +67,7 @@ def run_episode(env: AltitudeHeadingHoldEnv, policy: Policy, seed: int) -> Episo
         bank.append(abs(s.phi_rad))
         nz.append(-s.az_mps2 / 9.80665)
         climb.append(abs(s.v_down_mps))
+        comfort += info["comfort_cost"]
         if terminated or truncated:
             reason = info["termination_reason"]
             break
@@ -90,4 +93,5 @@ def run_episode(env: AltitudeHeadingHoldEnv, policy: Policy, seed: int) -> Episo
         max_load_factor=max(nz),
         max_abs_climb_mps=max(climb),
         max_tas_dev_mps=float(np.abs(tas).max()),
+        comfort_cost=comfort,
     )

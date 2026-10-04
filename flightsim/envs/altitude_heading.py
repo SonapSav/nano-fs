@@ -25,6 +25,7 @@ from flightsim.envs.config import EnvConfig
 from flightsim.runner import RunResult
 
 ACTION_NAMES = ("elevator", "aileron", "rudder", "throttle")
+G0 = 9.80665
 
 # Observation name -> scale it is divided by (keeps typical values within about +/-1).
 OBS_SCALES = {
@@ -46,6 +47,11 @@ OBS_SCALES = {
     "prev_throttle": 1.0,
 }
 OBS_NAMES = tuple(OBS_SCALES)
+
+
+def load_factor(s: State) -> float:
+    """Normal load factor in g (1 in level flight), from the body z specific force."""
+    return -s.az_mps2 / G0
 
 
 def controls_to_action(u: Controls) -> np.ndarray:
@@ -101,6 +107,7 @@ class AltitudeHeadingHoldEnv(gym.Env):
         self.initial_conditions = ic
         self._state = self.trim_state
         self._prev_action = controls_to_action(self.trim)
+        self.last_comfort_cost = 0.0
         self._decisions = 0
         self._states, self._controls = [self._state], []
         return self._observation(), self._info()
@@ -125,10 +132,13 @@ class AltitudeHeadingHoldEnv(gym.Env):
         reward = self._reward(action)
         if reason:
             reward -= self.cfg.reward.termination_penalty
+            if self.cfg.reward.charge_remaining_steps:
+                reward -= (self.cfg.max_decisions - self._decisions) * self.max_step_cost()
         self._prev_action = action
         truncated = not reason and self._decisions >= self.cfg.max_decisions
         info = self._info()
         info["termination_reason"] = reason
+        info["comfort_cost"] = self.last_comfort_cost
         return self._observation(), reward, bool(reason), truncated, info
 
     def _sim_step(self, u: Controls) -> State:
@@ -205,7 +215,30 @@ class AltitudeHeadingHoldEnv(gym.Env):
             + r.w_tas * term(e_tas, r.tas_scale_mps)
             + r.w_action_rate * float(np.sum((action - self._prev_action) ** 2))
         )
-        return -cost
+        self.last_comfort_cost = self._comfort_cost(term)
+        return -(cost + self.last_comfort_cost)
+
+    def max_step_cost(self) -> float:
+        """Upper bound of the per-decision cost: every clipped term at its clip, and the
+        action-rate term at its largest possible value (each action moves across [-1, 1])."""
+        r = self.cfg.reward
+        bound = (r.w_alt + r.w_heading + r.w_tas) * r.clip + r.w_action_rate * 4.0 * len(ACTION_NAMES)
+        if r.comfort is not None:
+            bound += (r.comfort.w_bank + r.comfort.w_load_factor + r.comfort.w_climb) * r.clip
+        return bound
+
+    def _comfort_cost(self, term) -> float:
+        """Penalty for flying outside the comfort envelope (0 if the task has none)."""
+        c = self.cfg.reward.comfort
+        if c is None:
+            return 0.0
+        s = self._state
+        excess = lambda value, threshold: max(0.0, abs(value) - threshold)  # noqa: E731
+        return (
+            c.w_bank * term(excess(s.phi_rad, c.bank_threshold_rad), c.bank_scale_rad)
+            + c.w_load_factor * term(excess(load_factor(s) - 1.0, c.load_factor_dev_threshold), c.load_factor_dev_scale)
+            + c.w_climb * term(excess(s.v_down_mps, c.climb_threshold_mps), c.climb_scale_mps)
+        )
 
     def _termination_reason(self) -> str | None:
         s, t = self._state, self.cfg.termination
@@ -217,6 +250,10 @@ class AltitudeHeadingHoldEnv(gym.Env):
             return "alpha"
         if s.alt_agl_m < t.min_alt_agl_m:
             return "ground"
+        if t.max_load_factor is not None and load_factor(s) > t.max_load_factor:
+            return "load_factor"
+        if t.min_load_factor is not None and load_factor(s) < t.min_load_factor:
+            return "load_factor"
         return None
 
     def _info(self) -> dict:

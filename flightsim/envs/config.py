@@ -9,6 +9,22 @@ from flightsim.core import InitialConditions, Loading
 
 
 @dataclass(frozen=True)
+class ComfortConfig:
+    """Soft envelope: only the excess beyond each threshold is penalized,
+    as weight * min((excess / scale)^2, clip)."""
+
+    bank_threshold_rad: float
+    bank_scale_rad: float
+    load_factor_dev_threshold: float  # |n - 1| in g
+    load_factor_dev_scale: float
+    climb_threshold_mps: float  # |vertical speed|
+    climb_scale_mps: float
+    w_bank: float
+    w_load_factor: float
+    w_climb: float
+
+
+@dataclass(frozen=True)
 class RewardConfig:
     alt_scale_m: float
     heading_scale_rad: float
@@ -19,6 +35,10 @@ class RewardConfig:
     w_action_rate: float
     clip: float
     termination_penalty: float
+    comfort: ComfortConfig | None = None
+    # Charge each decision step left after a termination at the largest possible per-step
+    # cost, so ending an episode early never scores better than flying on badly.
+    charge_remaining_steps: bool = False
 
 
 @dataclass(frozen=True)
@@ -27,6 +47,8 @@ class TerminationConfig:
     max_bank_rad: float
     max_alpha_rad: float
     min_alt_agl_m: float
+    min_load_factor: float | None = None  # g; structural limits, None = not checked
+    max_load_factor: float | None = None
 
 
 @dataclass(frozen=True)
@@ -101,16 +123,36 @@ def env_config_from_raw(raw: dict) -> EnvConfig:
             w_action_rate=float(rw["w_action_rate"]),
             clip=float(rw["clip"]),
             termination_penalty=float(rw["termination_penalty"]),
+            comfort=_parse_comfort(rw.get("comfort")),
+            charge_remaining_steps=bool(rw.get("charge_remaining_steps", False)),
         ),
         termination=TerminationConfig(
             max_alt_error_m=float(term["max_alt_error_m"]),
             max_bank_rad=math.radians(term["max_bank_deg"]),
             max_alpha_rad=math.radians(term["max_alpha_deg"]),
             min_alt_agl_m=float(term["min_alt_agl_m"]),
+            min_load_factor=float(term["min_load_factor"]) if "min_load_factor" in term else None,
+            max_load_factor=float(term["max_load_factor"]) if "max_load_factor" in term else None,
         ),
         wind=_parse_wind(raw.get("wind")),
         config_hash=config_hash(raw),
         config_json=canonical_json(raw),
+    )
+
+
+def _parse_comfort(c: dict | None) -> ComfortConfig | None:
+    if not c:
+        return None
+    return ComfortConfig(
+        bank_threshold_rad=math.radians(c["bank_threshold_deg"]),
+        bank_scale_rad=math.radians(c["bank_scale_deg"]),
+        load_factor_dev_threshold=float(c["load_factor_dev_threshold"]),
+        load_factor_dev_scale=float(c["load_factor_dev_scale"]),
+        climb_threshold_mps=float(c["climb_threshold_mps"]),
+        climb_scale_mps=float(c["climb_scale_mps"]),
+        w_bank=float(c["w_bank"]),
+        w_load_factor=float(c["w_load_factor"]),
+        w_climb=float(c["w_climb"]),
     )
 
 

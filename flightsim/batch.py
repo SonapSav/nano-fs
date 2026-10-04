@@ -34,7 +34,7 @@ from flightsim.control.lqr import GainSchedule
 from flightsim.envs.policies import LQRPolicy, PIDPolicy, TrimHoldPolicy
 
 POLICIES = ("pid", "lqr", "trim_hold")
-BATCH_FORMAT = 2  # 2: lqr policy, envelope metrics columns
+BATCH_FORMAT = 3  # 2: lqr policy, envelope metrics columns; 3: comfort_cost column
 
 
 def make_manifest(env_raw: dict, policy: str, policy_raw: dict | None, seeds: list[int], logs: bool) -> dict:
@@ -109,7 +109,7 @@ SUMMARY_SCHEMA = pa.schema(
         ("alt_final_abs_m", pa.float64()), ("heading_final_abs_deg", pa.float64()),
         ("alt_settle_s", pa.float64()), ("heading_settle_s", pa.float64()), ("action_rate", pa.float64()),
         ("max_bank_deg", pa.float64()), ("min_load_factor", pa.float64()), ("max_load_factor", pa.float64()),
-        ("max_abs_climb_mps", pa.float64()), ("max_tas_dev_mps", pa.float64()),
+        ("max_abs_climb_mps", pa.float64()), ("max_tas_dev_mps", pa.float64()), ("comfort_cost", pa.float64()),
     ]
 )  # fmt: skip
 

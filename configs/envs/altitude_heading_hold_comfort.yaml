@@ -1,0 +1,29 @@
+# The windy altitude/heading-hold task, scored on how it is flown as well as where it ends up.
+# Penalizes discomfort and ends the episode beyond the aircraft's structural limits, so a
+# controller (or RL agent) cannot score well by flying aggressively.
+base: altitude_heading_hold_wind.yaml
+
+reward:
+  comfort:
+    # Soft envelope: penalty = w * min((excess / scale)^2, clip) on the excess beyond each
+    # threshold. Thresholds match the envelope both autopilots are designed to fly
+    # (25 deg bank, 3 m/s climb or descent); load factor within 1 +/- 0.3 g.
+    bank_threshold_deg: 25
+    bank_scale_deg: 10
+    load_factor_dev_threshold: 0.3
+    load_factor_dev_scale: 0.3
+    climb_threshold_mps: 3.0
+    climb_scale_mps: 2.0
+    w_bank: 1.0
+    w_load_factor: 1.0
+    w_climb: 1.0
+  # Without this, terminating early is rewarded: the episode stops accumulating cost, which
+  # outweighs the fixed termination penalty (an aggressive controller scored best that way).
+  charge_remaining_steps: true
+
+termination:
+  # Structural limits, C172P POH (1981) Section 2, normal category: bank at most 60 deg
+  # (Maneuver Limits); flight load factor +3.8 / -1.52 g flaps up (Flight Load Factor Limits).
+  max_bank_deg: 60
+  max_load_factor: 3.8
+  min_load_factor: -1.52

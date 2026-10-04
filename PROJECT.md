@@ -108,17 +108,37 @@ owner before work can start.
 - [ ] LQR overshoots its reference bank by a few degrees, so its governor bank limit is
   22 deg to stay at the PID's ~25 deg envelope. A bank-angle protection or a
   constrained design (MPC) would enforce it directly.
-- [ ] LQR climb-rate peaks in turbulence are higher than the PID's (p95 7.0 vs 5.4 m/s).
+- [ ] LQR climb-rate peaks in turbulence are higher than the PID's (p95 7.0 vs 5.4 m/s),
+  which with its bank excursions makes it lose to the PID on the comfort task. Retune the
+  LQR on the comfort task (e.g. softer altitude/vertical-speed weights in turbulence).
 - [ ] LQR episodes run at ~680x real time vs ~900x for the PID (per-step gain
   interpolation in numpy); optimize only if batches get too slow.
 - [ ] Watch the LQR autopilot in the viewer (the live source flies the PID only).
 
 ### Task and reward
 
-- [ ] **Needs decision:** the reward does not penalize aggressive manoeuvring (bank,
-  load factor, climb rate). An unconstrained LQR scored best by banking 50 deg and
-  pulling -0.4 to 2.9 g; an RL agent would exploit this too. Options: add penalties or
-  envelope terminations to the task (a new task config, so old results stay comparable).
+- [x] **Comfort task** (decided and done 2026-10-04, option C):
+  `configs/envs/altitude_heading_hold_comfort.yaml` extends the windy task. Soft comfort
+  penalties beyond 25 deg bank, |n - 1| > 0.3 g and 3 m/s climb/descent; episodes end at
+  the C172P POH structural limits (60 deg bank, +3.8 / -1.52 g) plus the existing ones.
+  Terminations charge every remaining step at the maximum per-step cost (22.4), because
+  otherwise ending early was rewarded. Use this task for controller comparisons and RL.
+  Held-out seeds 0-999:
+
+  | Policy | Return | Comfort cost | Ended early |
+  |---|---|---|---|
+  | PID (`1089513fd4cc`) | -1439 | -22.7 | 0 |
+  | LQR (`70c41f3b036f`) | -1495 | -82.9 | 0 |
+  | Trim hold (`55a8e2845d79`) | -12970 | -1215 | 0 |
+  | Aggressive LQR, governor removed (`2c92a2c96eea`) | -41953 | -195 | 777 |
+
+  On this task the PID beats the LQR: the LQR settles more reliably but its stiffer gust
+  response costs about 4x the comfort penalty.
+- [ ] The calm and windy tasks still reward early termination (fixed charge of 100 vs
+  ~1400 per full episode). Harmless for the autopilots (they never terminate) but do not
+  train RL on them; use the comfort task.
+- [ ] Termination and comfort are checked on the state at each decision step (20 Hz);
+  peaks between decisions (6 simulation steps) are not seen.
 
 ### Manual control and environment actions
 
