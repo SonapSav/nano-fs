@@ -93,9 +93,12 @@ flightsim/
 - Prefer small, runnable increments. After each step, run the tests and show me the output.
 - If JSBSim's behavior or API differs from what's assumed here, say so and update this file.
 
-## Open questions to settle early
-- What kind of research comes first: autopilot / control design, RL experiments, or pilot training? This sets whether to prioritize speed, visuals, or logging detail.
-- Which starting scenarios matter (cruise, takeoff, approach and landing)?
+## Decisions
+- **Aircraft:** JSBSim `c172p`. Validation reference values in step 2 must come from a source matching this model.
+- **Research priority:** autopilot / control design first. The log schema should favor what control work needs: full state, control surface commands and positions, trim condition, and enough precision to fit dynamic modes. RL and pilot training come later.
+
+## Open questions
+- Which starting scenarios matter beyond cruise (takeoff, approach and landing)? Step 1 uses straight-and-level cruise.
 
 ## Environment (checked 2026-10-04)
 - Debian 13, Python 3.13.5, `uv` available; Node 20 available for the viewer.
