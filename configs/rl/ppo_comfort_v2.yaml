@@ -1,0 +1,11 @@
+# Second PPO run (2026-10-04): identical to ppo_comfort.yaml except the reward handling.
+# Run 1 normalized rewards and clipped them to +/-10, which shrank the termination charge
+# (up to 53,760) to about one bad step, so the agent did not learn to avoid terminations.
+# Here rewards are not normalized; they are multiplied by a fixed 0.1, which keeps the
+# task's ratio between step costs and the termination charge. Observations are still
+# normalized. Evaluation always uses the true (unscaled) task return.
+base: ppo_comfort.yaml
+
+normalize:
+  rewards: false
+  reward_scale: 0.1

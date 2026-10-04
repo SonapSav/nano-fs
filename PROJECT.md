@@ -101,6 +101,20 @@ owner before work can start.
   matter beyond cruise (open since setup). Depends on the low-altitude wind items below,
   and probably on flaps and brakes in the action space.
 
+### Second aircraft
+
+- [ ] **Add a second aircraft** (requested 2026-10-04; **needs decision:** which aircraft
+  and why). Bundled JSBSim candidates that suit the project: `pa28` (Piper Cherokee),
+  `c182`, `J3Cub`, `c310` (twin), `DHC6`, `pc7`, `t6texan2`. Bundled models vary in
+  quality, so the work is mostly: validation against that aircraft's POH (repeat step
+  2), loading (seat/tank point-mass indices), PID retune, LQR redesign (automatic from
+  linearization, then check), task configs (speeds, comfort/structural limits from its
+  POH), viewer (airspeed/tach markings, flap detents and limits, eye point, 3D model);
+  twins/turboprops need extra controls. Estimate for a single-engine piston with a POH:
+  one to two days. Not in JSBSim: build a model (geometry, mass and inertia, aero
+  tables, engine/prop, gear, FCS) from POH, type data, NASA/NACA reports, Roskam,
+  Aeromatic, DATCOM/OpenVSP; weeks of work, approximate without flight-test data.
+
 ### Aircraft model fidelity (from step 2)
 
 - [ ] Stall speeds 3.4-4.7 kt fast in 3 of 6 POH cases (aft CG flaps up 54.4 vs 51 KCAS;

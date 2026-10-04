@@ -43,11 +43,14 @@ def load_training_config(path: str | Path, overrides: dict | None = None) -> dic
     return raw
 
 
-def _make_env(env_raw: dict):
+def _make_env(env_raw: dict, reward_scale: float):
     def factory():
+        from gymnasium.wrappers import TransformReward
         from stable_baselines3.common.monitor import Monitor
 
-        return Monitor(AltitudeHeadingHoldEnv(env_config_from_raw(env_raw)))
+        # Monitor first, so logged episode returns are the task's true (unscaled) returns.
+        env = Monitor(AltitudeHeadingHoldEnv(env_config_from_raw(env_raw)))
+        return TransformReward(env, lambda r: r * reward_scale) if reward_scale != 1.0 else env
 
     return factory
 
@@ -95,7 +98,10 @@ def train(config_path: str | Path, out_dir: str | Path = "data/rl", overrides: d
 
     torch.set_num_threads(1)  # environments run in their own processes; keep the learner off their cores
     ppo, norm, ev = cfg["ppo"], cfg["normalize"], cfg["evaluation"]
-    venv = SubprocVecEnv([_make_env(cfg["env"]) for _ in range(cfg["n_envs"])], start_method="forkserver")
+    # Fixed reward scaling (instead of, or as well as, normalization) keeps the ratio between
+    # step costs and the termination charge exactly as the task defines it.
+    reward_scale = float(norm.get("reward_scale", 1.0))
+    venv = SubprocVecEnv([_make_env(cfg["env"], reward_scale) for _ in range(cfg["n_envs"])], start_method="forkserver")
     venv = VecNormalize(
         venv, norm_obs=norm["observations"], norm_reward=norm["rewards"],
         clip_obs=norm["clip_observations"], clip_reward=norm["clip_rewards"], gamma=ppo["gamma"],

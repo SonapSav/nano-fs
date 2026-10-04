@@ -85,3 +85,30 @@ def test_batch_runner_evaluates_the_agent_and_identifies_the_model(tiny_run, tmp
     _, manifest, table = run_batch(load_raw(COMFORT, {"episode_s": 5.0}), "rl", ident, [0, 1], tmp_path, workers=1)
     assert manifest["policy"] == "rl" and manifest["policy_config"]["model_sha256"] == ident["model_sha256"]
     assert table.num_rows == 2
+
+
+def test_reward_scale_scales_training_rewards_but_not_logged_returns():
+    from flightsim.rl.train import _make_env
+
+    raw = load_raw(COMFORT, {"episode_s": 2.0})
+    scaled, plain = _make_env(raw, 0.1)(), _make_env(raw, 1.0)()
+    scaled.reset(seed=5)
+    plain.reset(seed=5)
+    action = np.zeros(4, dtype=np.float32)
+    total_scaled = total_plain = 0.0
+    while True:
+        _, rs, term, trunc, info = scaled.step(action)
+        _, rp, *_ = plain.step(action)
+        total_scaled += rs
+        total_plain += rp
+        if term or trunc:
+            break
+    assert total_scaled == pytest.approx(0.1 * total_plain)
+    assert info["episode"]["r"] == pytest.approx(total_plain)  # Monitor logs the true return
+
+
+def test_v2_config_differs_from_v1_only_in_reward_handling():
+    v1 = load_training_config(RL_CONFIG)
+    v2 = load_training_config(RL_CONFIG.parent / "ppo_comfort_v2.yaml")
+    assert v2["normalize"]["rewards"] is False and v2["normalize"]["reward_scale"] == 0.1
+    assert {k: v for k, v in v1.items() if k != "normalize"} == {k: v for k, v in v2.items() if k != "normalize"}
