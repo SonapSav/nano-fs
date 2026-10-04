@@ -1,7 +1,12 @@
 # Gain-scheduled LQR autopilot (flightsim/control/lqr.py).
 # Weights follow Bryson's rule: the largest acceptable deviation of each quantity.
-# Tuned 2026-10-04 on windy seeds 1000-1199 for bank parity with the PID autopilot
-# (compare on seeds 0-999, which tuning did not use).
+# Tuned 2026-10-04 on seeds 1000-1199 (compare on seeds 0-999, which tuning did not use):
+# first on the windy task for bank parity with the PID, then on the comfort task
+# (inertial alpha/beta, stiffer altitude hold).
+alpha_beta_source: inertial     # gust-insensitive feedback; "aero" chased every gust (comfort cost 4x)
+protection:                     # underspeed / stall protection: stop demanding climb until recovered
+  speed_margin_mps: 5.0         # below target airspeed - 5 m/s
+  alpha_deg: 10.0               # measured angle of attack (model CLmax at 16 deg, termination at 14)
 schedule:                       # design grid; covers the task envelope (alt 1074-1974 m +/- 150 m targets, TAS 46-56 m/s)
   alt_msl_m: [800, 1300, 1800, 2300]
   tas_mps: [44, 50, 56, 62]
@@ -24,9 +29,9 @@ weights:
     p_radps: 0.2
     psi_rad: 0.1
     r_radps: 0.3
-    alt_msl_m: 10
+    alt_msl_m: 3                # stiff: resists vertical gusts (softer let the aircraft ride them)
   integrals:                    # of altitude (m s), airspeed (m), heading (rad s) errors
-    alt_msl_m: 100
+    alt_msl_m: 30
     tas_mps: 20
     psi_rad: 1.0
   inputs:

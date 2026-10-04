@@ -140,7 +140,7 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - Controller comparison: `uv run python scripts/compare_controllers.py --episodes 100 [--log-dir data/episodes]`
 - Batch: `uv run python scripts/batch_run.py --seeds 0:1000 [--policy pid|lqr|trim_hold] [--set wind.steady_speed_mps=[5,15]] [--policy-set weights.states.phi_rad=0.1] [--logs]`
 - Controller comparison and RL use `configs/envs/altitude_heading_hold_comfort.yaml` (comfort penalties, structural limits, terminations charged for the remaining steps): `uv run python scripts/batch_run.py --env-config configs/envs/altitude_heading_hold_comfort.yaml --seeds 0:1000 --policy lqr`
-- Controller tuning: tune on seeds 1000+ and report on seeds 0-999 (held out). LQR gain schedules are cached in `data/cache/lqr/` (keyed by aircraft, JSBSim version, loading, LQR config, rate and flightsim source hash).
+- Seeds: tune controllers on 1000-1999. Report on 0-999 and 2000-2999 (both were used while debugging the LQR retune, 2026-10-04) and on 3000-3999 (untouched; use only for final numbers). RL training draws its episodes from its own seeded streams, never these ranges. LQR gain schedules are cached in `data/cache/lqr/` (keyed by aircraft, JSBSim version, loading, LQR config, rate and flightsim source hash).
 - Batch ids hash everything that determines results, including the flightsim source hash, but not the git fields (the same code committed or not is the same batch). Manifests record the full code version.
 - Logs go to `data/` (gitignored; `data/.gitkeep` is committed so Docker never creates it as root).
 - Viewer: `uv run python -m flightsim.stream` then open http://localhost:8686/ ; in Docker `docker compose up -d viewer` (published on all host interfaces)

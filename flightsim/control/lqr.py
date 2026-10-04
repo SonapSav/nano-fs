@@ -21,6 +21,11 @@ integrators only run while errors are unclipped and controls unsaturated (anti-w
 Inputs are the effective commands seen by the flight control system: the elevator
 channel is elevator command + pitch trim (the FCS sums them), so the elevator command
 sent is the total minus the episode's held pitch trim.
+
+Angle of attack and sideslip can be fed back as measured against the air ("aero") or as
+computed from the ground velocity ("inertial"). In turbulence the aero values jump with
+every gust and the controller chases them with elevator and rudder; the inertial values
+only change once the aircraft responds (as the PID's pitch / climb-rate loops do).
 """
 
 import hashlib
@@ -66,6 +71,16 @@ class LQRConfig:
     max_bank_rad: float  # reference governor: also limit turn rate to g tan(max_bank) / V
     max_climb_accel_mps2: float  # reference governor: how fast the climb rate may change
     max_turn_accel_radps2: float  # reference governor: how fast the turn rate may change
+    # "aero": alpha and beta as measured relative to the air (gusts enter the feedback
+    # directly); "inertial": computed from the ground velocity in body axes, which gusts
+    # only change once the aircraft responds.
+    alpha_beta_source: str = "aero"
+    # Underspeed / stall protection: below target airspeed - margin, or above this measured
+    # (aerodynamic) angle of attack, stop demanding climb so speed recovers first. It has
+    # hysteresis (released at half the speed margin and 2 deg below the alpha limit) and
+    # bumpless transfer (the altitude reference follows the aircraft down while active).
+    protection_speed_margin_mps: float | None = None
+    protection_alpha_rad: float | None = None
 
 
 def load_lqr_config(path: str | Path, overrides: dict | None = None) -> LQRConfig:
@@ -80,6 +95,9 @@ def lqr_config_from_raw(raw: dict) -> LQRConfig:
         max_state_dev={k: float(w["states"][k]) for k in STATES},
         max_integral_dev={k: float(w["integrals"][k]) for k in INTEGRATORS},
         max_input_dev={k: float(w["inputs"][k]) for k in INPUTS},
+        alpha_beta_source=str(raw.get("alpha_beta_source", "aero")),
+        protection_speed_margin_mps=float(raw["protection"]["speed_margin_mps"]) if "protection" in raw else None,
+        protection_alpha_rad=math.radians(raw["protection"]["alpha_deg"]) if "protection" in raw else None,
         alt_error_clip_m=float(raw["alt_error_clip_m"]),
         heading_error_clip_rad=math.radians(raw["heading_error_clip_deg"]),
         max_climb_mps=float(raw["reference"]["max_climb_mps"]),
@@ -185,6 +203,17 @@ class GainSchedule:
         return tuple(sum(w * getattr(p, f) for p, w in corners) for f in ("k", "x_trim", "u_trim"))
 
 
+def inertial_alpha_beta(s: State) -> tuple[float, float]:
+    """Angle of attack and sideslip of the ground velocity in body axes (no wind, no gusts)."""
+    cf, sf, ct, st, cp, sp = (f(a) for a in (s.phi_rad, s.theta_rad, s.psi_rad) for f in (math.cos, math.sin))
+    n, e, d = s.v_north_mps, s.v_east_mps, s.v_down_mps
+    # Body = DCM(NED -> body) * NED, ZYX Euler angles.
+    u = ct * cp * n + ct * sp * e - st * d
+    v = (sf * st * cp - cf * sp) * n + (sf * st * sp + cf * cp) * e + sf * ct * d
+    w = (cf * st * cp + sf * sp) * n + (cf * st * sp - sf * cp) * e + cf * ct * d
+    return math.atan2(w, u), math.asin(max(-1.0, min(1.0, v / math.sqrt(u * u + v * v + w * w))))
+
+
 class LQRAutopilot:
     def __init__(self, schedule: GainSchedule, trim: Controls, initial: State, targets: Targets, dt_s: float):
         self.schedule = schedule
@@ -196,6 +225,7 @@ class LQRAutopilot:
         self.ref_heading_rad = initial.psi_rad
         self.ref_climb_mps = 0.0
         self.ref_turn_rate_radps = 0.0
+        self.protection_active = False
 
     def _profile(self, error: float, rate: float, max_rate: float, max_accel: float) -> tuple[float, float]:
         """One step of a rate- and acceleration-limited approach to a target `error` away.
@@ -213,13 +243,32 @@ class LQRAutopilot:
             return error, 0.0  # arrive exactly, without overshoot
         return step, rate
 
-    def _advance_references(self, tas_mps: float) -> None:
+    def _update_protection(self, s: State) -> bool:
+        """Underspeed or high angle of attack (measured against the air), with hysteresis."""
+        cfg = self.schedule.cfg
+        if cfg.protection_speed_margin_mps is None:
+            return False
+        margin, alpha_limit = cfg.protection_speed_margin_mps, cfg.protection_alpha_rad
+        speed_low = self.targets.tas_mps - s.tas_mps
+        if self.protection_active:
+            self.protection_active = speed_low > margin / 2 or s.alpha_rad > alpha_limit - math.radians(2.0)
+        else:
+            self.protection_active = speed_low > margin or s.alpha_rad > alpha_limit
+        return self.protection_active
+
+    def _advance_references(self, s: State, protect: bool) -> None:
         cfg, t = self.schedule.cfg, self.targets
+        if protect:
+            # Never demand climb: the reference follows the aircraft down, and the climb-rate
+            # reference cannot be positive. On release the governor climbs on from here.
+            self.ref_alt_m = min(self.ref_alt_m, s.alt_msl_m)
+            self.ref_climb_mps = min(self.ref_climb_mps, 0.0)
+        alt_target = min(t.alt_msl_m, self.ref_alt_m) if protect else t.alt_msl_m
         d_alt, self.ref_climb_mps = self._profile(
-            t.alt_msl_m - self.ref_alt_m, self.ref_climb_mps, cfg.max_climb_mps, cfg.max_climb_accel_mps2
+            alt_target - self.ref_alt_m, self.ref_climb_mps, cfg.max_climb_mps, cfg.max_climb_accel_mps2
         )
         self.ref_alt_m += d_alt
-        max_rate = min(cfg.max_turn_rate_radps, G * math.tan(cfg.max_bank_rad) / tas_mps)
+        max_rate = min(cfg.max_turn_rate_radps, G * math.tan(cfg.max_bank_rad) / s.tas_mps)
         d_hdg, self.ref_turn_rate_radps = self._profile(
             wrap_angle_rad(t.heading_rad - self.ref_heading_rad), self.ref_turn_rate_radps, max_rate, cfg.max_turn_accel_radps2
         )
@@ -227,7 +276,8 @@ class LQRAutopilot:
 
     def __call__(self, s: State) -> Controls:
         cfg, t = self.schedule.cfg, self.targets
-        self._advance_references(s.tas_mps)
+        protect = self._update_protection(s)
+        self._advance_references(s, protect)
         k, x_trim, u_trim = self.schedule.lookup(s.alt_msl_m, s.tas_mps)
         # Feedforward reference states for the commanded steady turn and climb.
         x_ref = x_trim.copy()
@@ -245,7 +295,12 @@ class LQRAutopilot:
         clipped_alt = max(-cfg.alt_error_clip_m, min(cfg.alt_error_clip_m, alt_err))
         clipped_hdg = max(-cfg.heading_error_clip_rad, min(cfg.heading_error_clip_rad, hdg_err))
 
-        x = np.array([getattr(s, name) for name in STATES]) - x_ref
+        measured = np.array([getattr(s, name) for name in STATES])
+        if cfg.alpha_beta_source == "inertial":
+            alpha_i, beta_i = inertial_alpha_beta(s)
+            measured[STATES.index("alpha_rad")] = alpha_i
+            measured[STATES.index("beta_rad")] = beta_i
+        x = measured - x_ref
         x[STATES.index("tas_mps")] = tas_err
         x[STATES.index("psi_rad")] = clipped_hdg
         x[STATES.index("alt_msl_m")] = clipped_alt
@@ -257,7 +312,7 @@ class LQRAutopilot:
         # Anti-windup: integrate only when nothing is clipped or saturated, and hold the
         # altitude / heading integrators while their reference is still moving (transient
         # tracking lag is not a steady-state bias and would otherwise cause overshoot).
-        if clipped_alt == alt_err and clipped_hdg == hdg_err and np.array_equal(u, u_sat):
+        if not protect and clipped_alt == alt_err and clipped_hdg == hdg_err and np.array_equal(u, u_sat):
             moving = (self.ref_climb_mps != 0.0, False, self.ref_turn_rate_radps != 0.0)
             errors = (alt_err, tas_err, hdg_err)
             self._integral += self.dt_s * np.array([0.0 if m else e for m, e in zip(moving, errors)])

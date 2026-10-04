@@ -98,3 +98,51 @@ def test_config_rejects_missing_weights():
     del raw["weights"]["states"]["phi_rad"]
     with pytest.raises(KeyError):
         lqr_config_from_raw(raw)
+
+
+def test_inertial_alpha_beta_equal_aero_values_without_wind():
+    from dataclasses import replace as dc_replace
+
+    from flightsim.control.lqr import inertial_alpha_beta
+    from flightsim.core import InitialConditions, JSBSimCore
+
+    core = JSBSimCore("c172p", 1 / 120)
+    core.reset(InitialConditions(1500.0, 52.0, 1.2))
+    trim = core.trim()
+    for _ in range(600):  # rolling, yawing, slipping
+        s = core.step(dc_replace(trim, aileron=trim.aileron + 0.05, rudder=0.05))
+    alpha, beta = inertial_alpha_beta(s)
+    assert alpha == pytest.approx(s.alpha_rad, abs=1e-9) and beta == pytest.approx(s.beta_rad, abs=1e-9)
+
+
+def _autopilot(schedule, env_cfg, seed=0):
+    env = AltitudeHeadingHoldEnv(env_cfg)
+    _, info = env.reset(seed=seed)
+    return LQRAutopilot(schedule, info["trim"], info["trim_state"], info["targets"], 0.05), info
+
+
+def test_protection_has_hysteresis(env_cfg, schedule):
+    from dataclasses import replace as dc_replace
+
+    ap, info = _autopilot(schedule, env_cfg)
+    s, target = info["trim_state"], info["targets"].tas_mps
+    margin = schedule.cfg.protection_speed_margin_mps
+    states = [dc_replace(s, tas_mps=target - d) for d in (margin + 0.5, margin * 0.75, margin * 0.4)]
+    # engage below target - margin; stay engaged at 0.75 margin; release only above target - margin/2
+    assert [ap._update_protection(x) for x in states] == [True, True, False]
+    assert ap._update_protection(states[1]) is False  # not re-engaged inside the hysteresis band
+
+
+def test_protection_never_demands_climb_and_releases_bumplessly(env_cfg, schedule):
+    from dataclasses import replace as dc_replace
+
+    ap, info = _autopilot(schedule, env_cfg)
+    s = info["trim_state"]
+    ap.targets = dc_replace(ap.targets, alt_msl_m=s.alt_msl_m + 100.0)  # target far above
+    slow = dc_replace(s, tas_mps=ap.targets.tas_mps - 10.0, alt_msl_m=s.alt_msl_m - 20.0)
+    for _ in range(20):
+        ap(slow)
+    assert ap.ref_alt_m <= slow.alt_msl_m and ap.ref_climb_mps <= 0.0  # follows the aircraft down
+    recovered = dc_replace(slow, tas_mps=ap.targets.tas_mps)
+    ap(recovered)
+    assert ap.ref_alt_m - slow.alt_msl_m <= schedule.cfg.max_climb_mps * 0.05 + 1e-9  # climbs on from here

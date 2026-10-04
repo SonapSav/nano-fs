@@ -108,6 +108,7 @@ class AltitudeHeadingHoldEnv(gym.Env):
         self._state = self.trim_state
         self._prev_action = controls_to_action(self.trim)
         self.last_comfort_cost = 0.0
+        self.last_comfort_terms = {}
         self._decisions = 0
         self._states, self._controls = [self._state], []
         return self._observation(), self._info()
@@ -139,6 +140,7 @@ class AltitudeHeadingHoldEnv(gym.Env):
         info = self._info()
         info["termination_reason"] = reason
         info["comfort_cost"] = self.last_comfort_cost
+        info["comfort_terms"] = dict(self.last_comfort_terms)
         return self._observation(), reward, bool(reason), truncated, info
 
     def _sim_step(self, u: Controls) -> State:
@@ -231,14 +233,17 @@ class AltitudeHeadingHoldEnv(gym.Env):
         """Penalty for flying outside the comfort envelope (0 if the task has none)."""
         c = self.cfg.reward.comfort
         if c is None:
+            self.last_comfort_terms = {}
             return 0.0
         s = self._state
         excess = lambda value, threshold: max(0.0, abs(value) - threshold)  # noqa: E731
-        return (
-            c.w_bank * term(excess(s.phi_rad, c.bank_threshold_rad), c.bank_scale_rad)
-            + c.w_load_factor * term(excess(load_factor(s) - 1.0, c.load_factor_dev_threshold), c.load_factor_dev_scale)
-            + c.w_climb * term(excess(s.v_down_mps, c.climb_threshold_mps), c.climb_scale_mps)
-        )
+        self.last_comfort_terms = {
+            "bank": c.w_bank * term(excess(s.phi_rad, c.bank_threshold_rad), c.bank_scale_rad),
+            "load_factor": c.w_load_factor
+            * term(excess(load_factor(s) - 1.0, c.load_factor_dev_threshold), c.load_factor_dev_scale),
+            "climb": c.w_climb * term(excess(s.v_down_mps, c.climb_threshold_mps), c.climb_scale_mps),
+        }
+        return sum(self.last_comfort_terms.values())
 
     def _termination_reason(self) -> str | None:
         s, t = self._state, self.cfg.termination

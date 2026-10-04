@@ -102,15 +102,15 @@ owner before work can start.
 
 - [x] PID heading settling in turbulence (was 130 of 285 moderate-turbulence episodes
   unsettled): the LQR halves it (60) and settles every light-turbulence episode.
-- [ ] LQR works the controls about 3x harder than the PID in turbulence (action rate
-  0.85 vs 0.28; 1.5 in moderate turbulence). Consider an input-rate penalty (augment
-  the design with input states) if actuator activity matters.
+- [ ] LQR works the controls about 2.7x harder than the PID in turbulence (action rate
+  0.77 vs 0.28). Softer airspeed or input weights halve it at a small score cost
+  (tuning seeds: tas 4 m/s -> activity 0.55, return -11). Consider an input-rate penalty
+  (augment the design with input states) if actuator activity matters.
 - [ ] LQR overshoots its reference bank by a few degrees, so its governor bank limit is
   22 deg to stay at the PID's ~25 deg envelope. A bank-angle protection or a
   constrained design (MPC) would enforce it directly.
-- [ ] LQR climb-rate peaks in turbulence are higher than the PID's (p95 7.0 vs 5.4 m/s),
-  which with its bank excursions makes it lose to the PID on the comfort task. Retune the
-  LQR on the comfort task (e.g. softer altitude/vertical-speed weights in turbulence).
+- [x] LQR climb-rate peaks in turbulence were higher than the PID's (p95 7.0 vs 5.4 m/s);
+  after the retune 4.8 vs 5.5.
 - [ ] LQR episodes run at ~680x real time vs ~900x for the PID (per-step gain
   interpolation in numpy); optimize only if batches get too slow.
 - [ ] Watch the LQR autopilot in the viewer (the live source flies the PID only).
@@ -132,8 +132,36 @@ owner before work can start.
   | Trim hold (`55a8e2845d79`) | -12970 | -1215 | 0 |
   | Aggressive LQR, governor removed (`2c92a2c96eea`) | -41953 | -195 | 777 |
 
-  On this task the PID beats the LQR: the LQR settles more reliably but its stiffer gust
-  response costs about 4x the comfort penalty.
+  On this task the PID beat the first LQR: it settled more reliably but its stiffer gust
+  response cost about 4x the comfort penalty. See the LQR retune below.
+- [x] **LQR retuned on the comfort task** (2026-10-04). Findings, in order:
+  - The comfort cost was climb rate in turbulence. Softer altitude hold made it worse,
+    and a climb-rate output weight made it worse too.
+  - Cause: the LQR fed back air-relative alpha and beta, which jump with every gust, and
+    chased them with elevator and rudder. Feeding alpha/beta computed from the ground
+    velocity (`alpha_beta_source: inertial`; identical to aero values without wind) cut
+    the comfort cost below the PID's. Altitude hold stiffened to 3 m / 30 m s.
+  - Held-out seeds then exposed stalls: a slow aircraft climbing into long downdrafts
+    pitched up to 24 deg. Added underspeed / stall protection (no climb demand below
+    target airspeed - 5 m/s or above 10 deg measured alpha). Its first version chattered
+    on and off at the threshold and slammed the elevator; fixed with hysteresis and
+    bumpless transfer.
+  - Final, comfort task (debugging touched seeds 0-999 and 2000-2999; 3000-3999 untouched):
+
+  | Seeds | Policy | Return | Comfort | Never settled | Climb p95 | Max bank | Activity |
+  |---|---|---|---|---|---|---|---|
+  | 0-999 | PID `231199a36475` | -1439 | -22.7 | 150 | 5.4 | 29.8 | 0.28 |
+  | 0-999 | LQR `c1f32e52cdd7` | -1449 | -17.7 | 26 | 4.8 | 29.6 | 0.77 |
+  | 2000-2999 | PID `e04ff9d1179f` | -1514 | -26.5 | 153 | 5.5 | 31.3 | 0.28 |
+  | 2000-2999 | LQR `0a2fd8bb5f74` | -1514 | -18.0 | 31 | 4.8 | 29.6 | 0.77 |
+  | 3000-3999 | PID `f9f9a8fd6be1` | -1468 | -26.6 | 140 | 5.5 | 31.6 | 0.29 |
+  | 3000-3999 | LQR `9368815af54f` | -1479 | -18.5 | 16 | 4.8 | 29.4 | 0.78 |
+
+  Overall score tied (within 1%); LQR ~30% lower comfort cost, ~85% fewer unsettled
+  episodes, lower climb and bank peaks, better airspeed; PID slightly better heading and
+  a third of the control activity. No terminations for either.
+- [ ] LQR heading tracking is slower than the PID's (its governor allows 22 deg bank vs
+  the PID's 25); the obvious next LQR lever.
 - [ ] The calm and windy tasks still reward early termination (fixed charge of 100 vs
   ~1400 per full episode). Harmless for the autopilots (they never terminate) but do not
   train RL on them; use the comfort task.
