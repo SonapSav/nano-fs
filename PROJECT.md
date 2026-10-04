@@ -223,6 +223,12 @@ owner before work can start.
   is high for the speed (full throttle from trim: 12 deg left bank in 20 s; slight
   climb: 15 deg), the C172's real left-turning tendency (torque, P-factor, slipstream);
   hands off at trim it holds within 0.04 deg for 60 s. Correct with right rudder.
+- [x] Centre calibration (2026-10-04): "Calibrate centre (hands off)" in Stick settings
+  averages each stick's rest position for 1 s and subtracts it (each side rescaled, so
+  full travel is kept); the dead zone then works around the true centre. Prompted by the
+  owner's recorded flight `f8f0461a3c20-s0-m5b803fa0`: the aileron was never centred
+  (median -0.048 left) and rudder constantly -0.056, matching Xbox stick rest positions
+  of about -0.17 (left stick X) and +0.19 (right stick X), beyond the 0.08 dead zone.
 - [ ] **Joystick support for the Thrustmaster T.Flight HOTAS X** (owner plans to buy it,
   2026-10-04). Browsers report it without the standard layout, so it is ignored today.
   Plan: per-device axis mapping (pitch, roll, rudder = twist grip, throttle = lever;

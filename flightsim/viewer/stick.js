@@ -9,6 +9,7 @@ export const DEFAULTS = {
   roll: { sensitivity: 0.7, expo: 0.3 },
   rudder: { sensitivity: 0.7, expo: 0.3 },
   deadzone: 0.08, // stick movement around centre that is ignored (covers stick drift)
+  centre: [0, 0, 0], // measured rest position of axes 0-2 (left X, left Y, right X), see calibration
 };
 const STORAGE_KEY = "flightsim.stick.v2";
 
@@ -19,8 +20,16 @@ export function shape(x, { sensitivity, expo }) {
 function valid(s) {
   return (
     AXES.every((a) => s?.[a] && [s[a].sensitivity, s[a].expo].every((v) => Number.isFinite(v) && v >= 0 && v <= 1)) &&
-    Number.isFinite(s.deadzone) && s.deadzone >= 0 && s.deadzone < 0.5
+    Number.isFinite(s.deadzone) && s.deadzone >= 0 && s.deadzone < 0.5 &&
+    Array.isArray(s.centre) && s.centre.length === 3 && s.centre.every((c) => Number.isFinite(c) && Math.abs(c) < 0.5)
   );
+}
+
+// Remove a stick's measured rest offset. Each side is rescaled separately, so the
+// physical end stops still give exactly -1 and +1.
+export function centred(v, c) {
+  const d = v - c;
+  return Math.max(-1, Math.min(1, d >= 0 ? d / (1 - c) : d / (1 + c)));
 }
 
 // Dead zone with rescaling, so the response starts smoothly at the edge of the zone.
@@ -31,6 +40,7 @@ export function deadzone(v, dz) {
 export function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (s && !("centre" in s)) s.centre = [...DEFAULTS.centre]; // saved before calibration existed
     if (valid(s)) return s;
   } catch {
     // storage unavailable or corrupt: fall back to defaults

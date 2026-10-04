@@ -103,6 +103,8 @@
   .stick-row input[type="range"] { width: 100%; accent-color: var(--marking); min-height: 0; padding: 0; border: 0; }
   #stick-live { font-variant-numeric: tabular-nums; color: var(--marking); margin: 4px 0 0; }
   #stick-live .drift { color: #e2b93b; }
+  .calibrate { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 10px; }
+  #stick-calibrate-status { color: var(--dim); }
   .dialog-buttons { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; }
 
   @media (max-width: 760px) {
@@ -178,6 +180,11 @@
         <output for="stick-deadzone" id="stick-deadzone-out"></output>
       </div>
       <p id="stick-live" aria-live="off">Move the sticks to see their raw position here.</p>
+      <div class="calibrate">
+        <button type="button" id="stick-calibrate">Calibrate centre (hands off)</button>
+        <button type="button" id="stick-calibrate-clear">Clear calibration</button>
+        <span id="stick-calibrate-status" role="status"></span>
+      </div>
       <div class="dialog-buttons">
         <button type="button" id="stick-reset">Reset to defaults</button>
         <button value="done">Done</button>

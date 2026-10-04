@@ -27,7 +27,7 @@ export const HANDLED_KEYS = new Set([
   ...Object.keys(THROTTLE_KEYS), ...Object.keys(FLAP_KEYS), ...Object.keys(TRIM_KEYS),
 ]);
 
-import { deadzone, loadSettings, shape } from "./stick.js";
+import { centred, deadzone, loadSettings, shape } from "./stick.js";
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -86,8 +86,9 @@ export class PilotInput {
     if (pad) {
       // Standard mapping: left stick = yoke (forward is -1 on axis 1), right stick x = rudder,
       // triggers = throttle up (RT) and down (LT). A deflected stick overrides the keys.
-      const dz = (v) => deadzone(v ?? 0, this.stick.deadzone);
-      const [ax, ay, rx] = [dz(pad.axes[0]), dz(pad.axes[1]), dz(pad.axes[2])];
+      // Calibrated centre first, then the dead zone around it.
+      const axis = (i) => deadzone(centred(pad.axes[i] ?? 0, this.stick.centre[i]), this.stick.deadzone);
+      const [ax, ay, rx] = [axis(0), axis(1), axis(2)];
       if (ax) this.value.aileron = shape(ax, this.stick.roll);
       if (ay) this.value.elevator = shape(-ay, this.stick.pitch);
       if (rx) this.value.rudder = shape(-rx, this.stick.rudder);

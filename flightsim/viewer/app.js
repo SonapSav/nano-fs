@@ -5,7 +5,7 @@
 import { FlightScene } from "./scene.js";
 import { drawAll, units } from "./gauges.js";
 import { HANDLED_KEYS, PilotInput } from "./input.js";
-import { AXES, DEFAULTS, saveSettings } from "./stick.js";
+import { AXES, DEFAULTS, centred, saveSettings } from "./stick.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -297,24 +297,72 @@ function updateLive() {
   const names = [["Left stick X (roll)", 0], ["Left stick Y (pitch)", 1], ["Right stick X (rudder)", 2]];
   el.innerHTML = names
     .map(([n, i]) => {
-      const v = axes[i] ?? 0;
-      const drift = Math.abs(v) >= pilot.stick.deadzone ? ' class="drift"' : "";
-      return `<span${drift}>${n}: ${fmt(v)}</span>`;
+      const raw = axes[i] ?? 0;
+      const corrected = centred(raw, pilot.stick.centre[i]);
+      const drift = Math.abs(corrected) >= pilot.stick.deadzone ? ' class="drift"' : "";
+      return `<span${drift}>${n}: raw ${fmt(raw)}, after calibration ${fmt(corrected)}</span>`;
     })
-    .join("<br>") + "<br>Hands off, any value shown in yellow is outside the dead zone: raise it until none are.";
+    .join("<br>") + "<br>Hands off, a value in yellow is drift that reaches the controls: calibrate the centre, or raise the dead zone.";
 }
 $("stick-dialog").addEventListener("close", () => clearInterval(liveTimer));
+
+function showCalibration() {
+  const c = pilot.stick.centre;
+  const any = c.some((v) => v !== 0);
+  $("stick-calibrate-status").textContent = any
+    ? `Centre: ${c.map((v) => (v >= 0 ? "+" : "") + v.toFixed(3)).join(", ")}`
+    : "Not calibrated";
+}
+
+// Average each stick's rest position over one second, hands off.
+$("stick-calibrate").addEventListener("click", () => {
+  const button = $("stick-calibrate");
+  if (!pilot.rawAxes) {
+    $("stick-calibrate-status").textContent = "No gamepad detected: press a button on it first.";
+    return;
+  }
+  button.disabled = true;
+  const sums = [0, 0, 0];
+  let n = 0;
+  $("stick-calibrate-status").textContent = "Measuring, keep your hands off the sticks…";
+  const timer = setInterval(() => {
+    pilot.update(0);
+    if (pilot.rawAxes) {
+      for (let i = 0; i < 3; i++) sums[i] += pilot.rawAxes[i] ?? 0;
+      n++;
+    }
+    if (n >= 20) {
+      clearInterval(timer);
+      const centre = sums.map((s) => s / n);
+      if (centre.some((c) => Math.abs(c) >= 0.5)) {
+        $("stick-calibrate-status").textContent = "A stick was held far from centre; let go and try again.";
+      } else {
+        pilot.stick.centre = centre;
+        saveSettings(pilot.stick);
+        showCalibration();
+      }
+      button.disabled = false;
+    }
+  }, 50);
+});
+$("stick-calibrate-clear").addEventListener("click", () => {
+  pilot.stick.centre = [0, 0, 0];
+  saveSettings(pilot.stick);
+  showCalibration();
+});
 
 $("stick-open").addEventListener("click", () => {
   renderStickRows();
   renderDeadzone();
+  showCalibration();
   updateLive();
   clearInterval(liveTimer);
   liveTimer = setInterval(updateLive, 100);
   $("stick-dialog").showModal();
 });
 $("stick-reset").addEventListener("click", () => {
-  pilot.stick = structuredClone(DEFAULTS);
+  const centre = pilot.stick.centre; // reset the feel, keep the controller's calibration
+  pilot.stick = { ...structuredClone(DEFAULTS), centre };
   saveSettings(pilot.stick);
   renderStickRows();
   renderDeadzone();
