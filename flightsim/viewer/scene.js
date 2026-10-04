@@ -24,34 +24,6 @@ const BODY_FROM_CAMERA = new THREE.Matrix4().makeBasis(
   new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), new THREE.Vector3(-1, 0, 0),
 );
 
-// What a pilot sees of the aircraft from the left seat: the glare shield and the cowling
-// sloping down ahead (the sight picture for pitch), and the high wing's roots overhead.
-function buildCockpit() {
-  // Body axes: x forward, y right, z down; the eye is at EYE_BODY (z = -0.29).
-  const g = new THREE.Group();
-  const panel = new THREE.MeshBasicMaterial({ color: 0x24272b, side: THREE.DoubleSide });
-  const cowl = new THREE.MeshLambertMaterial({ color: 0xe9e9e4, side: THREE.DoubleSide });
-  const frame = new THREE.MeshBasicMaterial({ color: 0x2b2f33 });
-  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(x, y, z);
-    m.rotation.set(rx, ry, rz);
-    g.add(m);
-  };
-  // Cowling: a horizontal surface ahead (PlaneGeometry lies in body x-y), its far end
-  // sloping down; its top edge sits ~14 deg below the eye line in level flight.
-  add(new THREE.PlaneGeometry(1.7, 1.0), cowl, 1.75, 0, 0.12, 0, -0.12, 0);
-  // Instrument panel face below the glare shield (the 2D panel continues below the view).
-  add(new THREE.PlaneGeometry(1.0, 1.3), panel, 0.72, 0, 0.42, 0, Math.PI / 2, 0);
-  add(new THREE.BoxGeometry(0.3, 1.3, 0.03), panel, 0.66, 0, -0.08); // glare shield top
-  // Windscreen posts at the sides, leaning back towards the roof.
-  for (const y of [-0.66, 0.66]) add(new THREE.BoxGeometry(0.05, 0.05, 0.85), frame, 0.62, y, -0.48, 0, 0.45, 0);
-  add(new THREE.BoxGeometry(1.2, 1.4, 0.04), frame, 0.15, 0, -0.9); // cabin roof under the wing
-  // Door panels below the side windows (the window line is about level with the glare shield).
-  for (const y of [-0.62, 0.62]) add(new THREE.PlaneGeometry(1.5, 0.8), panel, 0.1, y, 0.32, Math.PI / 2, 0, 0);
-  return g;
-}
-
 function buildAircraft() {
   // Built in body axes (x forward, y right, z down), metres, C172-like proportions.
   const g = new THREE.Group();
@@ -101,10 +73,6 @@ export class FlightScene {
     this.aircraft = buildAircraft();
     this.aircraft.matrixAutoUpdate = false;
     this.scene.add(this.aircraft);
-    this.cockpit = buildCockpit();
-    this.cockpit.matrixAutoUpdate = false;
-    this.cockpit.visible = false;
-    this.scene.add(this.cockpit);
     this.view = "chase";
     this.head = { yaw: 0, pitch: 0 }; // cockpit head turn, radians
 
@@ -181,8 +149,7 @@ export class FlightScene {
   setView(view) {
     this.view = view;
     const inside = view === "cockpit";
-    this.aircraft.visible = !inside; // seen from inside, the exterior model would block the view
-    this.cockpit.visible = inside;
+    this.aircraft.visible = !inside; // plain view from the pilot's eye: no aircraft parts drawn
     this.camera.near = inside ? 0.05 : 0.5;
     this.camera.fov = inside ? 70 : 60;
     this.camera.updateProjectionMatrix();
@@ -192,7 +159,6 @@ export class FlightScene {
   render() {
     if (this.view === "cockpit") {
       // Eye fixed in the aircraft; the camera rotates with it, plus the pilot's head turn.
-      this.cockpit.matrix.copy(this.aircraft.matrix);
       this.camera.position.copy(EYE_BODY).applyMatrix4(this.aircraft.matrix);
       const rot = new THREE.Matrix4().extractRotation(this.aircraft.matrix).multiply(BODY_FROM_CAMERA);
       const head = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(this.head.pitch, this.head.yaw, 0, "YXZ"));
