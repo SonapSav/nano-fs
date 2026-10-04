@@ -57,6 +57,8 @@ class Provenance:
     seed: int
     config_hash: str
     config_json: str
+    run_id: str | None = None  # default: derived from config hash and seed
+    pilot: str | None = None  # who flew it, e.g. "human" or "pid"
 
 
 def canonical_json(raw: dict) -> str:

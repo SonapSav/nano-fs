@@ -171,12 +171,25 @@ class AltitudeHeadingHoldEnv(gym.Env):
     def _info(self) -> dict:
         return {"state": self._state, "targets": self.targets, "trim": self.trim, "trim_state": self.trim_state}
 
+    # --- Re-flying recorded commands ---------------------------------------------
+
+    def refly(self, seed: int, controls: list[Controls]) -> list[State]:
+        """Reset with `seed` and apply recorded commands open loop, one per simulation step.
+        For a log of this task, the returned states equal the logged ones exactly."""
+        self.reset(seed=seed)
+        states = [self._state]
+        for u in controls:
+            states.append(self._core.step(u))
+        return states
+
     # --- Logging ---------------------------------------------------------------
 
-    def provenance(self) -> Provenance:
+    def provenance(self, run_id: str | None = None, pilot: str | None = None) -> Provenance:
         if self.episode_seed is None:
             raise RuntimeError("reset(seed=...) with an explicit seed to log a reproducible episode")
-        return Provenance(self.cfg.aircraft, self.episode_seed, self.cfg.config_hash, self.cfg.config_json)
+        return Provenance(
+            self.cfg.aircraft, self.episode_seed, self.cfg.config_hash, self.cfg.config_json, run_id=run_id, pilot=pilot
+        )
 
     @property
     def recorded(self) -> tuple[list[State], list[Controls]]:

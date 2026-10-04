@@ -15,7 +15,7 @@ from flightsim.runner import RunResult
 
 def to_table(result: RunResult, cfg: Provenance) -> pa.Table:
     n = len(result.states)
-    run_id = S.make_run_id(cfg.config_hash, cfg.seed)
+    run_id = cfg.run_id or S.make_run_id(cfg.config_hash, cfg.seed)
     columns = {
         "step": list(range(n)),
         "run_id": [run_id] * n,
@@ -36,6 +36,8 @@ def to_table(result: RunResult, cfg: Provenance) -> pa.Table:
         S.META_CONFIG_JSON: cfg.config_json,
         S.META_TRIM_JSON: json.dumps(asdict(result.trim), sort_keys=True),
     }
+    if cfg.pilot:
+        metadata[S.META_PILOT] = cfg.pilot
     return pa.Table.from_pydict(columns, schema=S.SCHEMA.with_metadata(metadata))
 
 

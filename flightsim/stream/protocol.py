@@ -5,18 +5,25 @@ units), so a replayed log and a live run are indistinguishable to consumers.
 Commands are null when no command follows the state (end of a log).
 
 Server -> client messages (JSON):
-  {"type": "hello", "protocol": 1, "source": "live" | "replay", "run_id", "aircraft",
+  {"type": "hello", "protocol": 1, "source": "live" | "manual" | "replay", "run_id", "aircraft",
    "sim_rate_hz", "frame_rate_hz", "duration_s" (null if unknown), "targets" (or null),
    "meta" (log metadata, replay only)}
   {"type": "frame", "row": {<log column>: value, ...}}
   {"type": "end", "reason": "finished" | "stopped" | "terminated:<why>"}
   {"type": "logs", "logs": [{"path", "run_id", "aircraft", "rows"}, ...]}
   {"type": "error", "message"}
+  {"type": "saved", "path"}   (a manual flight was written as a demonstration log)
 
 Client -> server messages:
   {"type": "list"}
   {"type": "play", "source": "replay", "path": "<relative to the data dir>", "speed": 1.0}
   {"type": "play", "source": "live", "seed": 0, "speed": 1.0}
+  {"type": "play", "source": "manual", "seed": 0, "record": true}   (speed is capped at 1)
+  {"type": "input", "elevator", "aileron", "rudder", "throttle"}
+      Manual flights only. Stick and pedals in [-1, 1] relative to trim (elevator +
+      = push, nose down; rudder + = nose left, the JSBSim convention), throttle in
+      [0, 1]. Sampled and held at the environment's decision rate. This is the only
+      message that reaches the physics, and only as a policy action.
   {"type": "pause"} | {"type": "resume"} | {"type": "speed", "value": 2.0} | {"type": "stop"}
 """
 

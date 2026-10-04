@@ -33,7 +33,7 @@ Physics core -+- Logger (Parquet, fixed schema) -> analysis, training data
 ```
 
 Rules:
-- The viewer only consumes state. It must never influence physics.
+- The viewer only consumes state; rendering must never influence physics. The one exception is deliberate: during a manual flight, pilot input (stick, pedals, throttle) enters the physics only as policy actions through the env's action interface, sampled and held at the fixed decision rate. No other client message may reach the physics.
 - The same state stream format is used for live flight and for replaying logged flights.
 - Keep the physics core replaceable: a custom 6-DOF model could later replace JSBSim without touching the viewer or ML layers.
 - The core exposes its own state and control definitions (SI units, our names). JSBSim property names (e.g. `velocities/u-fps`) must never appear outside `core/`.
@@ -85,7 +85,7 @@ flightsim/          # installable package (uv_build backend)
   core/             # JSBSim wrapper, State/Controls types (only place JSBSim is imported)
   datalog/          # schema + Parquet writer ("logging" would shadow the stdlib module)
   envs/             # Gymnasium env, its config, policy adapters (PID, trim hold), episode metrics
-  control/          # heading hold (step 1), PID autopilot (step 3), manual input
+  control/          # heading hold (step 1), PID autopilot (step 3), human pilot policy (step 5)
   stream/           # protocol, frame sources (replay, live PID), HTTP + WebSocket server
   viewer/           # static Three.js app (no build step); three.js 0.186.1 vendored in viewer/vendor
   analysis/         # mode identification, validation maneuvers, validation checks
@@ -122,6 +122,7 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - **Research priority:** autopilot / control design first. The log schema should favor what control work needs: full state, control surface commands and positions, trim condition, and enough precision to fit dynamic modes. RL and pilot training come later.
 
 ## Progress
+- Step 5 (manual control): done 2026-10-04. "Fly it yourself" in the viewer flies the step 3 task episode in real time (speed capped at 1x) with keyboard (arrows, Z/X, W/S, Shift = full deflection) or a standard-mapping gamepad. Input is relative to trim; stale input (>0.5 s) centres the stick and holds throttle. Flights >= 5 s are saved to `data/demos/<config>-s<seed>-m<input hash>.parquet` with `flightsim.pilot = human` metadata (schema unchanged). `AltitudeHeadingHoldEnv.refly(seed, controls)` reproduces a demonstration's logged states exactly (tested).
 - Step 4 (stream + viewer): done 2026-10-04. `python -m flightsim.stream` (or `docker compose up viewer`) serves the viewer and the `/ws` stream on port 8686. Sources: replay of any log under `data/`, or a live PID episode of the step 3 task. Protocol in `flightsim/stream/protocol.py`: a frame is exactly a log schema v1 row (tested: live frames == logged rows). Viewer: Three.js chase view plus a C172 six-pack with POH airspeed/tach markings and magenta target bugs; URL params `?source=live|<log path>&seed=&speed=&autoplay=1`.
 - Step 3 (Gymnasium + PID baseline): done 2026-10-04. `flightsim/AltitudeHeadingHold-v0` (`configs/envs/altitude_heading_hold.yaml`): randomized cruise start, random altitude (±150 m) and heading (±120°) targets, 120 s episodes, 20 Hz decisions, absolute commands as actions. Baseline PID autopilot (`configs/autopilot.yaml`) over 100 seeds: all episodes settle (alt within 10 m by ≤52 s, heading within 3° by ≤31 s), mean return -1317 vs -10857 for holding trim. Run `scripts/compare_controllers.py`.
 - Step 2 (validation): done 2026-10-04. `scripts/validate.py` runs the checks in `configs/validation/c172p.yaml` and writes `docs/VALIDATION.md` (20 pass, 4 known deviations). Known deviations: stall speeds 3.4-4.7 kt fast in 3 of 6 cases; phugoid period 27.8 s vs ~35 s flight test (damping matches). Also qualitative: model spiral mode is stable at mid CG, the real aircraft's diverges. No independent C172 short-period measurement exists in open sources; only MIL-F-8785C limits are checked.

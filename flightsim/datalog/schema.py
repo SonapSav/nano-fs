@@ -61,6 +61,7 @@ META_AIRCRAFT_HASH = "flightsim.aircraft_hash"
 META_JSBSIM_VERSION = "flightsim.jsbsim_version"
 META_CONFIG_JSON = "flightsim.config_json"
 META_TRIM_JSON = "flightsim.trim_json"
+META_PILOT = "flightsim.pilot"  # optional: "human" for demonstrations
 
 
 def make_run_id(config_hash: str, seed: int) -> str:

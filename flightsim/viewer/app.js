@@ -1,33 +1,43 @@
-// Viewer: consumes the state stream (protocol 1) and draws it. It only ever sends
-// playback requests; nothing here can influence the physics.
+// Viewer: consumes the state stream (protocol 1) and draws it. Rendering never affects
+// the physics. The only message that does is pilot input during a manual flight, sent
+// as stick/pedal/throttle values that the server applies as policy actions.
 
 import { FlightScene } from "./scene.js";
 import { drawAll, units } from "./gauges.js";
+import { HANDLED_KEYS, PilotInput } from "./input.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
-  source: $("source"), seed: $("seed"), seedLabel: $("seed-label"), play: $("play"), pause: $("pause"),
-  stop: $("stop"), speed: $("speed"), fill: $("progress-fill"), clock: $("clock"), message: $("message"),
-  run: $("run"),
+  source: $("source"), seed: $("seed"), seedLabel: $("seed-label"), record: $("record"), recordLabel: $("record-label"),
+  play: $("play"), pause: $("pause"), stop: $("stop"), speed: $("speed"), fill: $("progress-fill"), clock: $("clock"),
+  message: $("message"), run: $("run"), hint: $("hint"),
 };
 const gauges = { asi: $("asi"), ai: $("ai"), alt: $("alt"), tc: $("tc"), hi: $("hi"), vsi: $("vsi"), tach: $("tach"), controls: $("controls") };
 const readout = { alt: $("r-alt"), talt: $("r-talt"), hdg: $("r-hdg"), thdg: $("r-thdg"), kias: $("r-kias"), aoa: $("r-aoa"), g: $("r-g") };
 
+const LIVE = "live";
+const MANUAL = "manual";
+const INPUT_SEND_HZ = 30;
+const VIEW_HINT = "Drag to look around, scroll to zoom, space to pause";
+const FLY_HINT = "Arrows pitch and roll; Z and X rudder; W and S throttle; hold Shift for full deflection; or use a gamepad";
+
 const scene = new FlightScene($("view"));
+const pilot = new PilotInput();
 let ws = null;
 let session = null; // hello message of the current playback
 let latest = null; // latest frame row
 let paused = false;
 let dirty = true;
+let inputTimer = null;
 
-const LIVE = "live";
-// Optional URL parameters: ?source=live|<log path>&seed=3&speed=5&autoplay=1
+// Optional URL parameters: ?source=live|manual|<log path>&seed=3&speed=5&autoplay=1
 const params = new URLSearchParams(location.search);
 let autoplay = params.get("autoplay") === "1";
 if (params.has("seed")) els.seed.value = params.get("seed");
 if (params.has("speed")) els.speed.value = params.get("speed");
 const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const deg360 = (rad) => ((rad * units.DEG) % 360 + 360) % 360;
+const flying = () => session?.source === MANUAL && !els.stop.disabled;
 
 function say(text) {
   els.message.textContent = text;
@@ -38,6 +48,7 @@ function setPlaying(playing) {
   els.stop.disabled = !playing;
   els.pause.textContent = "Pause";
   paused = false;
+  if (!playing) stopInput();
 }
 
 function send(msg) {
@@ -47,27 +58,31 @@ function send(msg) {
 function populateSources(logs) {
   const current = els.source.value;
   els.source.replaceChildren();
-  const live = new Option("Live: PID autopilot flight", LIVE);
-  els.source.add(live);
-  if (logs.length) {
+  els.source.add(new Option("Fly it yourself", MANUAL));
+  els.source.add(new Option("Watch the PID autopilot", LIVE));
+  for (const [label, filter] of [["Your demonstrations", (l) => l.path.startsWith("demos/")], ["Recorded flights", (l) => !l.path.startsWith("demos/")]]) {
+    const items = logs.filter(filter);
+    if (!items.length) continue;
     const group = document.createElement("optgroup");
-    group.label = "Recorded flights";
-    for (const log of logs) group.append(new Option(`${log.path} (${(log.rows / 120 / 60).toFixed(1)} min)`, log.path));
+    group.label = label;
+    for (const log of items) group.append(new Option(`${log.path} (${(log.rows / 120 / 60).toFixed(1)} min)`, log.path));
     els.source.add(group);
   }
   if ([...els.source.options].some((o) => o.value === current)) els.source.value = current;
-  updateSeedVisibility();
+  updateSourceOptions();
 }
 
-function updateSeedVisibility() {
-  const live = els.source.value === LIVE;
-  els.seed.hidden = els.seedLabel.hidden = !live;
+function updateSourceOptions() {
+  const v = els.source.value;
+  els.seed.hidden = els.seedLabel.hidden = v !== LIVE && v !== MANUAL;
+  els.record.hidden = els.recordLabel.hidden = v !== MANUAL;
+  els.speed.disabled = v === MANUAL; // manual flights run in real time
 }
 
 function connect() {
   ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
   ws.addEventListener("open", () => {
-    say("Pick a recorded flight, or fly a live autopilot episode, then press Play.");
+    say("Fly the task yourself, watch the autopilot fly it, or replay a recorded flight. Then press Play.");
     send({ type: "list" });
   });
   ws.addEventListener("close", () => {
@@ -78,12 +93,32 @@ function connect() {
   ws.addEventListener("message", (ev) => handle(JSON.parse(ev.data)));
 }
 
+function startInput() {
+  stopInput();
+  let last = performance.now();
+  inputTimer = setInterval(() => {
+    const now = performance.now();
+    const v = pilot.update((now - last) / 1000);
+    last = now;
+    if (!paused) send({ type: "input", ...v });
+  }, 1000 / INPUT_SEND_HZ);
+}
+
+function stopInput() {
+  clearInterval(inputTimer);
+  inputTimer = null;
+  els.hint.textContent = VIEW_HINT;
+}
+
 function handle(msg) {
   switch (msg.type) {
     case "logs":
       populateSources(msg.logs);
-      if (params.has("source")) els.source.value = params.get("source");
-      updateSeedVisibility();
+      if (params.has("source")) {
+        els.source.value = params.get("source");
+        params.delete("source");
+      }
+      updateSourceOptions();
       if (autoplay) {
         autoplay = false;
         play();
@@ -94,19 +129,29 @@ function handle(msg) {
       latest = null;
       scene.reset();
       scene.setTargets(msg.targets);
-      els.run.textContent = `${msg.source === "live" ? "Live" : "Replay"} ${msg.run_id}`;
-      say("");
+      els.run.textContent = `${{ live: "Autopilot", manual: "You are flying", replay: "Replay" }[msg.source]} ${msg.run_id}`;
+      say(msg.source === MANUAL ? "Fly to the magenta altitude and heading bugs." : "");
       setPlaying(true);
       break;
     case "frame":
+      if (session?.source === MANUAL && latest === null) {
+        // Start from the trimmed throttle so the aircraft keeps flying level.
+        pilot.reset(msg.row.cmd_throttle_norm ?? 0.7);
+        els.hint.textContent = FLY_HINT;
+        startInput();
+      }
       latest = msg.row;
       scene.update(latest);
       dirty = true;
       break;
     case "end":
       setPlaying(false);
-      if (msg.reason === "finished") say("Flight finished. Press Play to watch it again.");
-      else if (msg.reason.startsWith("terminated:")) say(`The episode ended early: ${msg.reason.slice(11).replace("_", " ")} limit exceeded.`);
+      if (msg.reason === "finished") say("Flight finished. Press Play to go again.");
+      else if (msg.reason.startsWith("terminated:")) say(`The flight ended early: ${msg.reason.slice(11).replace("_", " ")} limit exceeded.`);
+      break;
+    case "saved":
+      say(`Saved your flight as a demonstration: data/${msg.path}`);
+      send({ type: "list" });
       break;
     case "error":
       say(msg.message);
@@ -116,8 +161,12 @@ function handle(msg) {
 
 function play() {
   const speed = Number(els.speed.value);
-  if (els.source.value === LIVE) send({ type: "play", source: "live", seed: Number(els.seed.value) || 0, speed });
-  else send({ type: "play", source: "replay", path: els.source.value, speed });
+  const seed = Number(els.seed.value) || 0;
+  const v = els.source.value;
+  if (v === MANUAL) send({ type: "play", source: MANUAL, seed, record: els.record.checked });
+  else if (v === LIVE) send({ type: "play", source: LIVE, seed, speed });
+  else send({ type: "play", source: "replay", path: v, speed });
+  document.activeElement?.blur(); // so the arrow keys fly instead of changing the menu
 }
 
 function togglePause() {
@@ -131,14 +180,20 @@ els.play.addEventListener("click", play);
 els.pause.addEventListener("click", togglePause);
 els.stop.addEventListener("click", () => send({ type: "stop" }));
 els.speed.addEventListener("change", () => send({ type: "speed", value: Number(els.speed.value) }));
-els.source.addEventListener("change", updateSeedVisibility);
+els.source.addEventListener("change", updateSourceOptions);
 els.source.addEventListener("focus", () => send({ type: "list" }));
 document.addEventListener("keydown", (e) => {
-  if (e.code === "Space" && !["INPUT", "SELECT", "BUTTON"].includes(document.activeElement?.tagName)) {
+  const inForm = ["INPUT", "SELECT", "BUTTON"].includes(document.activeElement?.tagName);
+  if (e.code === "Space" && !inForm) {
     e.preventDefault();
     togglePause();
+  } else if (flying() && HANDLED_KEYS.has(e.code) && !(inForm && document.activeElement?.tagName !== "BUTTON")) {
+    e.preventDefault();
+    pilot.keydown(e);
   }
 });
+document.addEventListener("keyup", (e) => pilot.keyup(e));
+window.addEventListener("blur", () => pilot.releaseAll());
 window.addEventListener("resize", () => (dirty = true));
 
 function updateReadout(row) {

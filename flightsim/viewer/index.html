@@ -40,6 +40,9 @@
     border: 1px solid #5b6167; border-radius: 4px; padding: 4px 10px; min-height: 32px;
   }
   input[type="number"] { width: 5.5em; }
+  input[type="checkbox"] { min-height: 0; width: 18px; height: 18px; margin: 0 -6px 0 0; accent-color: var(--bug); }
+  #bar label[for="record"] { color: var(--marking); }
+  [hidden] { display: none !important; }
   button { cursor: pointer; }
   button:hover { background: #474d53; }
   button:disabled { opacity: .45; cursor: default; }
@@ -58,7 +61,7 @@
     padding: 8px 12px; border-radius: 4px; background: rgba(44, 48, 52, .86);
   }
   #message:empty { display: none; }
-  #hint { position: absolute; right: 16px; bottom: 12px; color: #2c3034; font-size: 14px; }
+  #hint { position: absolute; right: 16px; bottom: 12px; max-width: 46%; text-align: right; color: #2c3034; font-size: 14px; }
 
   /* Instrument panel */
   #panel {
@@ -99,6 +102,8 @@
     <select id="source"></select>
     <label for="seed" id="seed-label">Seed</label>
     <input id="seed" type="number" min="0" step="1" value="0">
+    <input id="record" type="checkbox" checked>
+    <label for="record" id="record-label">Save as demonstration</label>
     <button id="play">Play</button>
     <button id="pause" disabled>Pause</button>
     <button id="stop" disabled>Stop</button>

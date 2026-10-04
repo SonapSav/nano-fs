@@ -21,7 +21,7 @@ from websockets.http11 import Request, Response
 from flightsim.control.autopilot import AutopilotGains
 from flightsim.envs import EnvConfig
 from flightsim.stream.protocol import PROTOCOL_VERSION, encode
-from flightsim.stream.sources import LiveSource, ReplaySource, Source, list_logs
+from flightsim.stream.sources import LiveSource, ManualSource, ReplaySource, Source, list_logs
 
 VIEWER_DIR = Path(__file__).resolve().parent.parent / "viewer"
 MAX_SPEED = 64.0
@@ -52,6 +52,8 @@ class Session:
     def __init__(self, ws: ServerConnection, cfg: ServerConfig):
         self.ws, self.cfg = ws, cfg
         self.task: asyncio.Task | None = None
+        self.source: Source | None = None
+        self.record = True
         self.speed = 1.0
         self.paused = asyncio.Event()  # set = paused
         self._rebase = True
@@ -64,6 +66,8 @@ class Session:
             return ReplaySource(path)
         if msg.get("source") == "live":
             return LiveSource(self.cfg.env_cfg, self.cfg.gains, int(msg.get("seed", 0)))
+        if msg.get("source") == "manual":
+            return ManualSource(self.cfg.env_cfg, int(msg.get("seed", 0)))
         raise ValueError(f"unknown source {msg.get('source')!r}")
 
     async def handle(self, msg: dict) -> None:
@@ -73,9 +77,16 @@ class Session:
         elif kind == "play":
             await self.stop()
             source = await asyncio.to_thread(self._open, msg)
+            self.source = source
+            self.record = bool(msg.get("record", True))
             self.speed = self._clamp(msg.get("speed", 1.0))
             self.paused.clear()
             self.task = asyncio.create_task(self._stream(source))
+        elif kind == "input":
+            # Pilot input: only meaningful during a manual flight, where it becomes the
+            # policy's action at the next decision step.
+            if isinstance(self.source, ManualSource) and self.task and not self.task.done():
+                self.source.pilot.set_input(msg["elevator"], msg["aileron"], msg["rudder"], msg["throttle"])
         elif kind == "pause":
             self.paused.set()
         elif kind == "resume":
@@ -89,9 +100,9 @@ class Session:
         else:
             raise ValueError(f"unknown message type {kind!r}")
 
-    @staticmethod
-    def _clamp(speed) -> float:
-        return min(MAX_SPEED, max(0.05, float(speed)))
+    def _clamp(self, speed) -> float:
+        limit = min(MAX_SPEED, self.source.max_speed if isinstance(self.source, LiveSource) else MAX_SPEED)
+        return min(limit, max(0.05, float(speed)))
 
     async def stop(self) -> None:
         if self.task and not self.task.done():
@@ -104,6 +115,21 @@ class Session:
         self.task = None
 
     async def _stream(self, source: Source) -> None:
+        try:
+            await self._play(source)
+        finally:
+            if isinstance(source, ManualSource) and self.record:
+                await self._save(source)
+
+    async def _save(self, source: ManualSource) -> None:
+        path = await asyncio.to_thread(source.save, self.cfg.data_dir)
+        if path is not None:
+            try:
+                await self.ws.send(encode({"type": "saved", "path": path.relative_to(self.cfg.data_dir).as_posix()}))
+            except ConnectionClosed:
+                pass
+
+    async def _play(self, source: Source) -> None:
         await self.ws.send(encode({
             "type": "hello", "protocol": PROTOCOL_VERSION, "source": source.source, "run_id": source.run_id,
             "aircraft": source.aircraft, "sim_rate_hz": source.sim_rate_hz, "frame_rate_hz": self.cfg.frame_rate_hz,
