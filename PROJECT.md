@@ -217,6 +217,12 @@ owner before work can start.
   value). The viewer offers calm or wind-and-turbulence manual flights and shows flaps
   (with an overspeed warning) and trim. Also fixed: the flying-controls hint never
   showed during manual flights.
+- [x] Stick drift check (2026-10-04): Stick settings shows live raw stick positions
+  (yellow when outside the dead zone) and an adjustable dead zone (default 0.08).
+  Investigating a reported left roll found the aircraft itself rolls left when power
+  is high for the speed (full throttle from trim: 12 deg left bank in 20 s; slight
+  climb: 15 deg), the C172's real left-turning tendency (torque, P-factor, slipstream);
+  hands off at trim it holds within 0.04 deg for 60 s. Correct with right rudder.
 - [ ] **Joystick support for the Thrustmaster T.Flight HOTAS X** (owner plans to buy it,
   2026-10-04). Browsers report it without the standard layout, so it is ignored today.
   Plan: per-device axis mapping (pitch, roll, rudder = twist grip, throttle = lever;

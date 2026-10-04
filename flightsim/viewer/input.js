@@ -8,7 +8,6 @@
 const KEY_DEFLECTION = 0.2; // gentle; with Shift: full deflection
 const KEY_TIME_CONSTANT_S = 0.15; // keys ease in and out instead of jumping
 const THROTTLE_RATE_PER_S = 0.4;
-const DEADZONE = 0.08;
 
 const AXIS_KEYS = {
   elevator: { ArrowUp: 1, ArrowDown: -1 },
@@ -28,9 +27,8 @@ export const HANDLED_KEYS = new Set([
   ...Object.keys(THROTTLE_KEYS), ...Object.keys(FLAP_KEYS), ...Object.keys(TRIM_KEYS),
 ]);
 
-import { loadSettings, shape } from "./stick.js";
+import { deadzone, loadSettings, shape } from "./stick.js";
 
-const dz = (v) => (Math.abs(v) < DEADZONE ? 0 : (v - Math.sign(v) * DEADZONE) / (1 - DEADZONE));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 export class PilotInput {
@@ -73,6 +71,7 @@ export class PilotInput {
   update(dt) {
     const pad = [...(navigator.getGamepads?.() ?? [])].find((g) => g && g.connected && g.mapping === "standard");
     this.gamepadName = pad ? pad.id : null;
+    this.rawAxes = pad ? [...pad.axes] : null; // for the live readout in Stick settings
     const k = 1 - Math.exp(-dt / KEY_TIME_CONSTANT_S);
     const full = this.shift ? 1 : KEY_DEFLECTION;
     for (const [axis, keys] of Object.entries(AXIS_KEYS)) {
@@ -87,7 +86,8 @@ export class PilotInput {
     if (pad) {
       // Standard mapping: left stick = yoke (forward is -1 on axis 1), right stick x = rudder,
       // triggers = throttle up (RT) and down (LT). A deflected stick overrides the keys.
-      const [ax, ay, rx] = [dz(pad.axes[0] ?? 0), dz(pad.axes[1] ?? 0), dz(pad.axes[2] ?? 0)];
+      const dz = (v) => deadzone(v ?? 0, this.stick.deadzone);
+      const [ax, ay, rx] = [dz(pad.axes[0]), dz(pad.axes[1]), dz(pad.axes[2])];
       if (ax) this.value.aileron = shape(ax, this.stick.roll);
       if (ay) this.value.elevator = shape(-ay, this.stick.pitch);
       if (rx) this.value.rudder = shape(-rx, this.stick.rudder);

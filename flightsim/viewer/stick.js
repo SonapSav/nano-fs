@@ -8,15 +8,24 @@ export const DEFAULTS = {
   pitch: { sensitivity: 0.5, expo: 0.5 },
   roll: { sensitivity: 0.7, expo: 0.3 },
   rudder: { sensitivity: 0.7, expo: 0.3 },
+  deadzone: 0.08, // stick movement around centre that is ignored (covers stick drift)
 };
-const STORAGE_KEY = "flightsim.stick.v1";
+const STORAGE_KEY = "flightsim.stick.v2";
 
 export function shape(x, { sensitivity, expo }) {
   return sensitivity * ((1 - expo) * x + expo * x * x * x);
 }
 
 function valid(s) {
-  return AXES.every((a) => s?.[a] && [s[a].sensitivity, s[a].expo].every((v) => Number.isFinite(v) && v >= 0 && v <= 1));
+  return (
+    AXES.every((a) => s?.[a] && [s[a].sensitivity, s[a].expo].every((v) => Number.isFinite(v) && v >= 0 && v <= 1)) &&
+    Number.isFinite(s.deadzone) && s.deadzone >= 0 && s.deadzone < 0.5
+  );
+}
+
+// Dead zone with rescaling, so the response starts smoothly at the edge of the zone.
+export function deadzone(v, dz) {
+  return Math.abs(v) < dz ? 0 : (v - Math.sign(v) * dz) / (1 - dz);
 }
 
 export function loadSettings() {

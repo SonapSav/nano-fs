@@ -101,6 +101,8 @@
   .stick-row label { display: contents; }
   .stick-row output { text-align: right; font-variant-numeric: tabular-nums; }
   .stick-row input[type="range"] { width: 100%; accent-color: var(--marking); min-height: 0; padding: 0; border: 0; }
+  #stick-live { font-variant-numeric: tabular-nums; color: var(--marking); margin: 4px 0 0; }
+  #stick-live .drift { color: #e2b93b; }
   .dialog-buttons { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; }
 
   @media (max-width: 760px) {
@@ -169,6 +171,13 @@
       <h2 id="stick-title">Stick settings</h2>
       <p>For gamepads and joysticks. Sensitivity sets how far full stick moves the control; expo makes small movements around centre gentler.</p>
       <div id="stick-rows"></div>
+      <div class="stick-row" id="deadzone-row">
+        <span class="axis">Centre</span>
+        <label for="stick-deadzone" style="display: contents"><span class="what">Dead zone</span>
+          <input type="range" id="stick-deadzone" min="0" max="0.3" step="0.01"></label>
+        <output for="stick-deadzone" id="stick-deadzone-out"></output>
+      </div>
+      <p id="stick-live" aria-live="off">Move the sticks to see their raw position here.</p>
       <div class="dialog-buttons">
         <button type="button" id="stick-reset">Reset to defaults</button>
         <button value="done">Done</button>

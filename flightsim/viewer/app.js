@@ -272,14 +272,52 @@ function renderStickRows() {
     rows.append(row);
   }
 }
+function renderDeadzone() {
+  const input = $("stick-deadzone");
+  input.value = pilot.stick.deadzone;
+  $("stick-deadzone-out").textContent = Number(input.value).toFixed(2);
+}
+$("stick-deadzone").addEventListener("input", (e) => {
+  pilot.stick.deadzone = Number(e.target.value);
+  $("stick-deadzone-out").textContent = pilot.stick.deadzone.toFixed(2);
+  saveSettings(pilot.stick);
+});
+
+// Live raw stick positions while the dialog is open, so stick drift is visible.
+let liveTimer = null;
+function updateLive() {
+  pilot.update(0); // refresh rawAxes without advancing anything time-based
+  const axes = pilot.rawAxes;
+  const el = $("stick-live");
+  if (!axes) {
+    el.textContent = "No gamepad detected: press a button on it to connect.";
+    return;
+  }
+  const fmt = (v) => (v >= 0 ? "+" : "") + (v ?? 0).toFixed(3);
+  const names = [["Left stick X (roll)", 0], ["Left stick Y (pitch)", 1], ["Right stick X (rudder)", 2]];
+  el.innerHTML = names
+    .map(([n, i]) => {
+      const v = axes[i] ?? 0;
+      const drift = Math.abs(v) >= pilot.stick.deadzone ? ' class="drift"' : "";
+      return `<span${drift}>${n}: ${fmt(v)}</span>`;
+    })
+    .join("<br>") + "<br>Hands off, any value shown in yellow is outside the dead zone: raise it until none are.";
+}
+$("stick-dialog").addEventListener("close", () => clearInterval(liveTimer));
+
 $("stick-open").addEventListener("click", () => {
   renderStickRows();
+  renderDeadzone();
+  updateLive();
+  clearInterval(liveTimer);
+  liveTimer = setInterval(updateLive, 100);
   $("stick-dialog").showModal();
 });
 $("stick-reset").addEventListener("click", () => {
   pilot.stick = structuredClone(DEFAULTS);
   saveSettings(pilot.stick);
   renderStickRows();
+  renderDeadzone();
 });
 
 populateSources([]);
