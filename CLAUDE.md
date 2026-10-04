@@ -1,5 +1,7 @@
 # Flight Simulator Project
 
+Status and pending work: see `PROJECT.md` (read it first). This file holds goals, rules and conventions.
+
 ## Goal
 Build a physically accurate, simple fixed-wing flight simulator for training and research, with three uses of one physics core:
 1. **Headless fast simulation** (as fast as the CPU allows) for batch experiments and ML
@@ -114,7 +116,7 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - `atmosphere/gust-*-fps` survive `run_ic()`; `JSBSimCore.reset` zeroes them. Turbulence is ours (seeded, `flightsim/atmosphere/turbulence.py`), not JSBSim's `turb-type`.
 
 ## How to work with me (Claude Code)
-- Start with step 1 only: scaffold the project, get a headless run working, log it, and confirm the log looks physically sensible before building further.
+- **Read `PROJECT.md` at the start of every session.** It is the single list of what is done and what is pending. Keep it current: when work completes, tick the item with the date and commit; when a new pending item or decision comes up, add it there (not in this file).
 - Before adding a dependency, tell me what it is and why.
 - When a number comes from memory (aerodynamic data, published stall speed, etc.), flag it so I can verify it against a source.
 - Prefer small, runnable increments. After each step, run the tests and show me the output.
@@ -124,17 +126,6 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - **Aircraft:** JSBSim `c172p`. Validation reference values in step 2 must come from a source matching this model.
 - **Validation deviations accepted (2026-10-04):** the 4 known deviations from step 2 (stall speeds 3.4-4.7 kt fast in 3 cases, phugoid period ~21% short) are accepted for now. A tuned copy of the aircraft model is a possible later, separate step. Controllers tuned on this model should be expected to meet a slower phugoid on the real aircraft.
 - **Research priority:** autopilot / control design first. The log schema should favor what control work needs: full state, control surface commands and positions, trim condition, and enough precision to fit dynamic modes. RL and pilot training come later.
-
-## Progress
-- Step 6 (batch runner + wind): done 2026-10-04. `scripts/batch_run.py` runs seeded episodes in parallel and writes `data/batch/<batch_id>/` (manifest.json, episodes.parquet summary sorted by seed, optional logs/). Results are byte-identical for any worker count (tested). Wind task `configs/envs/altitude_heading_hold_wind.yaml` (extends the calm task): steady wind 0-10 m/s from a random direction, Dryden turbulence none/light/moderate (MIL-F-8785C 3.7.2, see `docs/REFERENCES.md`). 1000-episode PID batch: no early terminations, 150 never settled within 3 deg heading (130 of them in moderate turbulence). Default workers = physical cores: on this 6-core/12-thread CPU, 12 workers are no faster than 6.
-- Step 5 (manual control): done 2026-10-04. "Fly it yourself" in the viewer flies the step 3 task episode in real time (speed capped at 1x) with keyboard (arrows, Z/X, W/S, Shift = full deflection) or a standard-mapping gamepad. Input is relative to trim; stale input (>0.5 s) centres the stick and holds throttle. Flights >= 5 s are saved to `data/demos/<config>-s<seed>-m<input hash>.parquet` with `flightsim.pilot = human` metadata (schema unchanged). `AltitudeHeadingHoldEnv.refly(seed, controls)` reproduces a demonstration's logged states exactly (tested).
-- Step 4 (stream + viewer): done 2026-10-04. `python -m flightsim.stream` (or `docker compose up viewer`) serves the viewer and the `/ws` stream on port 8686. Sources: replay of any log under `data/`, or a live PID episode of the step 3 task. Protocol in `flightsim/stream/protocol.py`: a frame is exactly a log schema v1 row (tested: live frames == logged rows). Viewer: Three.js chase view plus a C172 six-pack with POH airspeed/tach markings and magenta target bugs; URL params `?source=live|<log path>&seed=&speed=&autoplay=1`.
-- Step 3 (Gymnasium + PID baseline): done 2026-10-04. `flightsim/AltitudeHeadingHold-v0` (`configs/envs/altitude_heading_hold.yaml`): randomized cruise start, random altitude (±150 m) and heading (±120°) targets, 120 s episodes, 20 Hz decisions, absolute commands as actions. Baseline PID autopilot (`configs/autopilot.yaml`) over 100 seeds: all episodes settle (alt within 10 m by ≤52 s, heading within 3° by ≤31 s), mean return -1317 vs -10857 for holding trim. Run `scripts/compare_controllers.py`.
-- Step 2 (validation): done 2026-10-04. `scripts/validate.py` runs the checks in `configs/validation/c172p.yaml` and writes `docs/VALIDATION.md` (20 pass, 4 known deviations). Known deviations: stall speeds 3.4-4.7 kt fast in 3 of 6 cases; phugoid period 27.8 s vs ~35 s flight test (damping matches). Also qualitative: model spiral mode is stable at mid CG, the real aircraft's diverges. No independent C172 short-period measurement exists in open sources; only MIL-F-8785C limits are checked.
-- Step 1 (headless run + log): done 2026-10-04. `scripts/run_headless.py` trims at 5000 ft / 100 KTAS, holds heading for 300 s, writes `data/<run_id>.parquet`.
-
-## Open questions
-- Which starting scenarios matter beyond cruise (takeoff, approach and landing)? Step 1 uses straight-and-level cruise.
 
 ## Environment (checked 2026-10-04)
 - Debian 13, Python 3.13.5, `uv` available; Node 20 available for the viewer.
