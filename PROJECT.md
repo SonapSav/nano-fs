@@ -84,16 +84,40 @@ owner before work can start.
   termination charge (up to 53,760) to about one bad step, so terminations are not
   feared.
 
+- [x] **Second PPO run with the reward fix** (2026-10-04, authorized; `0377c52`).
+  `configs/rl/ppo_comfort_v2.yaml` = run 1 with reward normalization/clipping replaced
+  by a fixed 0.1 scale (termination charge keeps its size). Run `5a24bb1fb250`, full
+  90 min, 14.0 M steps, trained detached from the terminal. Evaluation on seeds
+  1000-1019 peaked at 2 M steps (-4635), then fluctuated between -5000 and -10400.
+  Seeds 3000-3999, comfort task (same columns as above; "never settled" as printed by
+  the batch runner):
+
+  | Policy | Return | Median | Comfort | Never settled | Ended early | TAS RMS | Hdg RMS | Activity | Bank p95 |
+  |---|---|---|---|---|---|---|---|---|---|
+  | PID `f9f9a8fd6be1` | -1468 | -1309 | -26.6 | 140 | 0 | 1.56 | 14.4 | 0.29 | 28 |
+  | LQR `9368815af54f` | -1479 | -1342 | -18.5 | 16 | 0 | 1.24 | 14.9 | 0.78 | 27 |
+  | PPO run 1 best (3 M) | -2576 | -1992 | -149 | 784 | 11 (alpha) | 6.32 | 12.3 | 2.19 | 34 |
+  | PPO run 2 best (2 M) `e2e261773382` | -6065 | -1850 | -367 | 946 | 83 (79 bank, 4 alpha) | 4.27 | 15.1 | 2.40 | 60 |
+  | PPO run 2 final (14 M) `63f3bab4b1f1` | -6422 | -2161 | -465 | 999 | 129 (110 alpha, 19 altitude) | 6.39 | 24.1 | 3.45 | 37 |
+
+  **Result: worse than run 1.** The typical episode is slightly better (run 2 best has
+  the best PPO median, -1850), but terminations rose from 11 to 83, so the hypothesis
+  "clipping hides the termination charge" is not confirmed as the main problem.
+  Likely causes: without normalization the value targets span about -5 to -5000
+  (scaled), which PPO's value network fits poorly; the 20-seed evaluation used to pick
+  "best" is too noisy (2 M scored -4635 there, -6065 on 1000 seeds); exploration noise
+  and learning rate are constant, so the policy keeps drifting late in training. More
+  plain-PPO compute is not recommended; residual RL (below) starts from a controller
+  that never terminates.
+
 ## Pending
 
 ### Next directions (pick one)
 
-- [ ] **Second PPO run with the reward fix** (**needs decision:** more compute).
-  `normalize.clip_rewards` very large (no clipping) or a fixed reward scale instead of
-  normalization, so the termination charge keeps its size. Then evaluate on seeds
-  3000-3999 as above.
-- [ ] Residual RL: the agent learns corrections on top of the LQR (faster learning,
-  starts from a safe controller). Decide after the second run.
+- [ ] **Residual RL** (recommended next RL step after run 2): the agent learns small
+  corrections on top of the LQR (faster learning, starts from a controller with no
+  terminations). Also: larger evaluation set for picking "best" (e.g. 100 seeds),
+  learning-rate decay. **Needs decision:** compute.
 - [ ] **Tuned aircraft model** to close the step 2 deviations, as a separate copy of
   `c172p` (see "Aircraft model fidelity"). Decided 2026-10-04: deviations accepted for
   now, tuning is a possible later step.
