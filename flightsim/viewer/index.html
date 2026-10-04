@@ -86,6 +86,22 @@
   #readout .target { color: var(--bug); }
   #run { color: var(--dim); font-size: 14px; word-break: break-all; }
 
+  #pad-status { position: absolute; left: 16px; top: 12px; padding: 4px 10px; border-radius: 4px;
+    background: rgba(44, 48, 52, .86); font-size: 14px; }
+  #pad-status:empty { display: none; }
+  dialog { background: var(--panel); color: var(--marking); border: 1px solid #5b6167; border-radius: 6px;
+    padding: 16px 20px; max-width: min(30em, calc(100vw - 32px)); }
+  dialog::backdrop { background: rgba(0, 0, 0, .45); }
+  dialog h2 { margin: 0 0 6px; font-size: 20px; font-weight: 600; }
+  dialog p { margin: 0 0 12px; color: var(--dim); }
+  .stick-row { display: grid; grid-template-columns: 4em 5.5em 1fr 2.5em; gap: 4px 10px; align-items: center; margin-bottom: 10px; }
+  .stick-row .what { color: var(--dim); }
+  .stick-row .axis { grid-row: span 2; font-weight: 600; }
+  .stick-row label { display: contents; }
+  .stick-row output { text-align: right; font-variant-numeric: tabular-nums; }
+  .stick-row input[type="range"] { width: 100%; accent-color: var(--marking); min-height: 0; padding: 0; border: 0; }
+  .dialog-buttons { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; }
+
   @media (max-width: 760px) {
     body { height: auto; min-height: 100dvh; overflow: auto; grid-template-rows: auto 45vh auto; }
     #panel { --g: min(28vw, 120px); grid-template-columns: repeat(3, var(--g)); grid-template-rows: none; }
@@ -112,11 +128,13 @@
       <option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option>
       <option value="5">5×</option><option value="10">10×</option><option value="30">30×</option>
     </select>
+    <button id="stick-open" type="button">Stick settings</button>
     <div id="progress"><div id="progress-track"><div id="progress-fill"></div></div><span id="clock">0:00</span></div>
   </div>
 
   <main id="view">
     <div id="message" role="status" aria-live="polite"></div>
+    <div id="pad-status" role="status" aria-live="polite"></div>
     <div id="hint">Drag to look around, scroll to zoom, space to pause</div>
   </main>
 
@@ -142,6 +160,18 @@
       <div id="run"></div>
     </div>
   </section>
+
+  <dialog id="stick-dialog" aria-labelledby="stick-title">
+    <form method="dialog">
+      <h2 id="stick-title">Stick settings</h2>
+      <p>For gamepads and joysticks. Sensitivity sets how far full stick moves the control; expo makes small movements around centre gentler.</p>
+      <div id="stick-rows"></div>
+      <div class="dialog-buttons">
+        <button type="button" id="stick-reset">Reset to defaults</button>
+        <button value="done">Done</button>
+      </div>
+    </form>
+  </dialog>
 
   <script type="module" src="./app.js"></script>
 </body>

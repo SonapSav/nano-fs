@@ -203,6 +203,10 @@ owner before work can start.
 ### Manual flight hardware
 
 - [x] Xbox controller works for manual flights (standard gamepad mapping, step 5).
+- [x] Stick sensitivity (2026-10-04): per-axis sensitivity and expo for gamepad sticks
+  (`flightsim/viewer/stick.js`), set in a "Stick settings" dialog and remembered per
+  browser; defaults soften pitch (0.5 / 0.5). A status line shows whether a gamepad is
+  detected. Requested after pitch felt too sensitive on the Xbox controller.
 - [ ] **Joystick support for the Thrustmaster T.Flight HOTAS X** (owner plans to buy it,
   2026-10-04). Browsers report it without the standard layout, so it is ignored today.
   Plan: per-device axis mapping (pitch, roll, rudder = twist grip, throttle = lever;

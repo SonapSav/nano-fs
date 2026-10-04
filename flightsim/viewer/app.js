@@ -5,6 +5,7 @@
 import { FlightScene } from "./scene.js";
 import { drawAll, units } from "./gauges.js";
 import { HANDLED_KEYS, PilotInput } from "./input.js";
+import { AXES, DEFAULTS, saveSettings } from "./stick.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -101,12 +102,16 @@ function startInput() {
     const v = pilot.update((now - last) / 1000);
     last = now;
     if (!paused) send({ type: "input", ...v });
+    $("pad-status").textContent = pilot.gamepadName
+      ? `Gamepad: ${pilot.gamepadName.replace(/\s*\(.*$/, "")}`
+      : "No gamepad detected: press a button on it to connect";
   }, 1000 / INPUT_SEND_HZ);
 }
 
 function stopInput() {
   clearInterval(inputTimer);
   inputTimer = null;
+  $("pad-status").textContent = "";
   els.hint.textContent = VIEW_HINT;
 }
 
@@ -220,6 +225,47 @@ function frame() {
   scene.render();
   requestAnimationFrame(frame);
 }
+
+// Stick settings dialog: edits pilot.stick in place, applies immediately, saves per browser.
+const AXIS_LABELS = { pitch: "Pitch", roll: "Roll", rudder: "Rudder" };
+function renderStickRows() {
+  const rows = $("stick-rows");
+  rows.replaceChildren();
+  for (const axis of AXES) {
+    const row = document.createElement("div");
+    row.className = "stick-row";
+    row.innerHTML = `<span class="axis">${AXIS_LABELS[axis]}</span>`;
+    for (const [key, label, min] of [["sensitivity", "Sensitivity", 0.1], ["expo", "Expo", 0]]) {
+      const id = `stick-${axis}-${key}`;
+      const lab = document.createElement("label");
+      lab.htmlFor = id;
+      const input = Object.assign(document.createElement("input"), { type: "range", id, min, max: 1, step: 0.05 });
+      input.value = pilot.stick[axis][key];
+      input.setAttribute("aria-label", `${AXIS_LABELS[axis]} ${label.toLowerCase()}`);
+      const out = document.createElement("output");
+      out.htmlFor = id;
+      out.textContent = Number(input.value).toFixed(2);
+      input.addEventListener("input", () => {
+        pilot.stick[axis][key] = Number(input.value);
+        out.textContent = Number(input.value).toFixed(2);
+        saveSettings(pilot.stick);
+      });
+      const what = Object.assign(document.createElement("span"), { className: "what", textContent: label });
+      lab.append(what, input);
+      row.append(lab, out);
+    }
+    rows.append(row);
+  }
+}
+$("stick-open").addEventListener("click", () => {
+  renderStickRows();
+  $("stick-dialog").showModal();
+});
+$("stick-reset").addEventListener("click", () => {
+  pilot.stick = structuredClone(DEFAULTS);
+  saveSettings(pilot.stick);
+  renderStickRows();
+});
 
 populateSources([]);
 if (document.fonts) document.fonts.ready.then(() => (dirty = true));

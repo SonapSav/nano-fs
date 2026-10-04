@@ -16,6 +16,8 @@ const AXIS_KEYS = {
 const THROTTLE_KEYS = { KeyW: 1, PageUp: 1, KeyS: -1, PageDown: -1 };
 export const HANDLED_KEYS = new Set([...Object.values(AXIS_KEYS).flatMap(Object.keys), ...Object.keys(THROTTLE_KEYS)]);
 
+import { loadSettings, shape } from "./stick.js";
+
 const dz = (v) => (Math.abs(v) < DEADZONE ? 0 : (v - Math.sign(v) * DEADZONE) / (1 - DEADZONE));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -25,6 +27,7 @@ export class PilotInput {
     this.shift = false;
     this.value = { elevator: 0, aileron: 0, rudder: 0, throttle: 0 };
     this.gamepadName = null;
+    this.stick = loadSettings(); // per-axis sensitivity and expo (stick.js)
   }
 
   reset(throttle) {
@@ -63,9 +66,9 @@ export class PilotInput {
       // Standard mapping: left stick = yoke (forward is -1 on axis 1), right stick x = rudder,
       // triggers = throttle up (RT) and down (LT). A deflected stick overrides the keys.
       const [ax, ay, rx] = [dz(pad.axes[0] ?? 0), dz(pad.axes[1] ?? 0), dz(pad.axes[2] ?? 0)];
-      if (ax) this.value.aileron = ax;
-      if (ay) this.value.elevator = -ay;
-      if (rx) this.value.rudder = -rx;
+      if (ax) this.value.aileron = shape(ax, this.stick.roll);
+      if (ay) this.value.elevator = shape(-ay, this.stick.pitch);
+      if (rx) this.value.rudder = shape(-rx, this.stick.rudder);
       throttleDir += (pad.buttons[7]?.value ?? 0) - (pad.buttons[6]?.value ?? 0);
     }
     this.value.throttle = clamp(this.value.throttle + throttleDir * THROTTLE_RATE_PER_S * dt, 0, 1);
