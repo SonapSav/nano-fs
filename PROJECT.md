@@ -93,8 +93,8 @@ owner before work can start.
   offline use matters.
 - [ ] Airspeed indicator shows calibrated airspeed as indicated (no position or
   instrument error modelled).
-- [ ] **Needs decision:** the Docker viewer is published on all host interfaces (reachable
-  from the local network). Bind to `127.0.0.1` if it should be local only.
+- [x] Viewer network exposure (decided 2026-10-04): keep the Docker viewer published on
+  all host interfaces, reachable from the local network.
 
 ### Data and logging
 
@@ -109,7 +109,7 @@ owner before work can start.
 
 ### Housekeeping
 
-- [ ] `data/demos/74899ee1d8e6-s1-m512eaf16.parquet` is a headless test flight from
-  step 5 testing; delete it unless wanted. (`74899ee1d8e6-s0-mf3b6bfa2.parquet` was not
-  created by Claude: presumably the owner's flight.)
+- [x] Deleted the step 5 test demonstration `data/demos/74899ee1d8e6-s1-m512eaf16.parquet`
+  (2026-10-04). `74899ee1d8e6-s0-mf3b6bfa2.parquet` was not created by Claude:
+  presumably the owner's flight, kept.
 - [ ] Some tests still take a now-unused `cruise` fixture argument; tidy up.
