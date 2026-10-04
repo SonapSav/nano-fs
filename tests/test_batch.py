@@ -91,4 +91,4 @@ def test_rejects_duplicate_seeds_and_unknown_policy(tmp_path):
     with pytest.raises(ValueError, match="unique"):
         run_batch(load_raw(WINDY, SHORT), "pid", load_raw(AUTOPILOT), [1, 1], tmp_path)
     with pytest.raises(ValueError, match="unknown policy"):
-        run_batch(load_raw(WINDY, SHORT), "rl", None, [1], tmp_path)
+        run_batch(load_raw(WINDY, SHORT), "no_such_policy", None, [1], tmp_path)
