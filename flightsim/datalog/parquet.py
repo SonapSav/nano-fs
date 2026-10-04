@@ -7,13 +7,13 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from flightsim.config import RunConfig
+from flightsim.config import Provenance
 from flightsim.core import aircraft_hash
 from flightsim.datalog import schema as S
 from flightsim.runner import RunResult
 
 
-def to_table(result: RunResult, cfg: RunConfig) -> pa.Table:
+def to_table(result: RunResult, cfg: Provenance) -> pa.Table:
     n = len(result.states)
     run_id = S.make_run_id(cfg.config_hash, cfg.seed)
     columns = {
@@ -39,7 +39,7 @@ def to_table(result: RunResult, cfg: RunConfig) -> pa.Table:
     return pa.Table.from_pydict(columns, schema=S.SCHEMA.with_metadata(metadata))
 
 
-def write_log(path: str | Path, result: RunResult, cfg: RunConfig) -> Path:
+def write_log(path: str | Path, result: RunResult, cfg: Provenance) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(to_table(result, cfg), path, compression="zstd")

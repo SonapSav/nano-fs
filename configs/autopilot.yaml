@@ -1,0 +1,17 @@
+# Baseline PID autopilot gains (step 3). Tuned on c172p at 5000 ft / 100 KTAS, 20 Hz:
+# 100 m altitude step settles within 5 m in ~40 s (climb rate limited), 1.5 m overshoot;
+# 90 deg heading change settles within 2 deg in ~25 s at 25 deg bank, <= 3.2 m altitude loss.
+heading_hold:
+  k_heading: 1.0           # rad bank per rad heading error
+  max_bank_deg: 25
+  k_bank: 1.0              # aileron per rad bank error
+  k_roll_rate: 0.2         # aileron per rad/s roll rate
+k_altitude: 0.1            # m/s climb per m altitude error
+max_climb_mps: 3.0         # ~590 ft/min
+k_climb: 0.03              # rad pitch per m/s climb-rate error
+ki_climb: 0.005
+max_pitch_offset_deg: 10
+k_pitch: 2.0               # elevator per rad pitch error
+k_pitch_rate: 0.5          # elevator per rad/s pitch rate
+k_speed: 0.05              # throttle per m/s airspeed error
+ki_speed: 0.01

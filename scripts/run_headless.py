@@ -24,7 +24,7 @@ def main() -> None:
     t0 = time.perf_counter()
     result = run(cfg)
     wall_s = time.perf_counter() - t0
-    log_path = write_log(Path(args.out_dir) / f"{make_run_id(cfg.config_hash, cfg.seed)}.parquet", result, cfg)
+    log_path = write_log(Path(args.out_dir) / f"{make_run_id(cfg.config_hash, cfg.seed)}.parquet", result, cfg.provenance)
 
     s0, s1 = result.states[0], result.states[-1]
     trim = result.trim

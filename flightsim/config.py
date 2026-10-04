@@ -44,6 +44,20 @@ class RunConfig:
     def n_steps(self) -> int:
         return round(self.duration_s * self.sim_rate_hz)
 
+    @property
+    def provenance(self) -> "Provenance":
+        return Provenance(self.aircraft, self.seed, self.config_hash, self.config_json)
+
+
+@dataclass(frozen=True)
+class Provenance:
+    """What a log records about where it came from."""
+
+    aircraft: str
+    seed: int
+    config_hash: str
+    config_json: str
+
 
 def canonical_json(raw: dict) -> str:
     return json.dumps(raw, sort_keys=True, separators=(",", ":"))
@@ -54,13 +68,27 @@ def config_hash(raw: dict) -> str:
     return hashlib.sha256(canonical_json(raw).encode()).hexdigest()
 
 
+def parse_loading(raw: dict | None) -> Loading:
+    raw = raw or {}
+    pointmasses, fuel = raw.get("pointmasses_kg"), raw.get("fuel_tanks_kg")
+    return Loading(
+        pointmasses_kg=tuple(pointmasses) if pointmasses is not None else None,
+        fuel_tanks_kg=tuple(fuel) if fuel is not None else None,
+    )
+
+
+def parse_heading_hold(hh: dict) -> HeadingHoldGains:
+    return HeadingHoldGains(
+        k_heading=float(hh["k_heading"]),
+        max_bank_rad=math.radians(hh["max_bank_deg"]),
+        k_bank=float(hh["k_bank"]),
+        k_roll_rate=float(hh["k_roll_rate"]),
+    )
+
+
 def load_config(path: str | Path) -> RunConfig:
     raw = yaml.safe_load(Path(path).read_text())
     ic = raw["initial_conditions"]
-    loading = raw.get("loading", {})
-    hh = raw["heading_hold"]
-    pointmasses = loading.get("pointmasses_kg")
-    fuel = loading.get("fuel_tanks_kg")
     return RunConfig(
         aircraft=raw["aircraft"],
         sim_rate_hz=float(raw["sim_rate_hz"]),
@@ -71,17 +99,9 @@ def load_config(path: str | Path) -> RunConfig:
             tas_mps=float(ic["tas_mps"]),
             heading_rad=math.radians(ic["heading_deg"]),
         ),
-        loading=Loading(
-            pointmasses_kg=tuple(pointmasses) if pointmasses is not None else None,
-            fuel_tanks_kg=tuple(fuel) if fuel is not None else None,
-        ),
+        loading=parse_loading(raw.get("loading")),
         target_heading_rad=math.radians(raw["target_heading_deg"]),
-        heading_hold=HeadingHoldGains(
-            k_heading=float(hh["k_heading"]),
-            max_bank_rad=math.radians(hh["max_bank_deg"]),
-            k_bank=float(hh["k_bank"]),
-            k_roll_rate=float(hh["k_roll_rate"]),
-        ),
+        heading_hold=parse_heading_hold(raw["heading_hold"]),
         config_hash=config_hash(raw),
         config_json=canonical_json(raw),
     )

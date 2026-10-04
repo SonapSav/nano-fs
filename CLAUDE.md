@@ -72,6 +72,7 @@ Work through these in order. Finish and validate each step before starting the n
 - **Units:** use SI internally (meters, m/s, radians, kg). JSBSim works in imperial units (ft, slug, lbf), so all conversion happens inside the JSBSim wrapper in `core/`; everything outside `core/` is SI. The logging schema is strictly SI so swapping the physics core never changes the logs. Name variables with units where ambiguous (e.g. `alt_m`, `tas_mps`; imperial names like `alt_ft` only inside `core/`).
 - **Time:** fixed timestep only. No variable dt anywhere in the physics path.
 - **Config over code:** aircraft, initial conditions, wind, and task parameters live in config files (YAML or JSON), not hard-coded.
+- **Controllers act through the env:** baselines and learned agents use the same action interface and decision rate (`flightsim/envs/policies.py`), so comparisons are fair. Episode logs use the same Parquet schema, one file per episode, seed = episode seed.
 - **Tests:** physics validation checks (trim, stall speed, oscillation periods) are automated tests with stated tolerances, not one-off notebooks.
   - Published reference values live in `docs/REFERENCES.md` with their source; tests cite it. Primary source: 1985 Model 172P POH. Its fuel flows assume leaned mixture, so lean before comparing fuel burn.
   - Reference values must name one specific aircraft variant and source (e.g. a specific 172 model-year POH). The JSBSim model will not match published data exactly, so tolerances should reflect that.
@@ -83,8 +84,8 @@ Work through these in order. Finish and validate each step before starting the n
 flightsim/          # installable package (uv_build backend)
   core/             # JSBSim wrapper, State/Controls types (only place JSBSim is imported)
   datalog/          # schema + Parquet writer ("logging" would shadow the stdlib module)
-  envs/             # Gymnasium environments
-  control/          # heading hold (step 1), PID baseline, manual input
+  envs/             # Gymnasium env, its config, policy adapters (PID, trim hold), episode metrics
+  control/          # heading hold (step 1), PID autopilot (step 3), manual input
   stream/           # WebSocket server
   viewer/           # Three.js app
   analysis/         # mode identification, validation maneuvers, validation checks
@@ -103,6 +104,7 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 
 ## JSBSim pitfalls (verified)
 - `FGLinearization` suspends integration (dt = 0) and `resume_integration()` does not undo it. Always linearize through `JSBSimCore.linearize()`, which restores dt; `step()` raises if JSBSim's clock did not advance by dt.
+- A reused `FGFDMExec` is not bit-reproducible: after `run_ic()` results differ in the last bits (~1e-15) from a fresh instance. For anything that must be reproducible, build a fresh `JSBSimCore` per run/episode (about 4 ms).
 - `run_ic()` keeps previous control commands. `JSBSimCore.reset()` therefore always applies a `Controls` (defaults unless given) so runs never depend on history.
 - `run_ic()` does not zero JSBSim's sim time; the core counts its own steps for `t_s`.
 - Model tank capacity is 185 lb each; larger loads are silently capped.
@@ -120,6 +122,7 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - **Research priority:** autopilot / control design first. The log schema should favor what control work needs: full state, control surface commands and positions, trim condition, and enough precision to fit dynamic modes. RL and pilot training come later.
 
 ## Progress
+- Step 3 (Gymnasium + PID baseline): done 2026-10-04. `flightsim/AltitudeHeadingHold-v0` (`configs/envs/altitude_heading_hold.yaml`): randomized cruise start, random altitude (±150 m) and heading (±120°) targets, 120 s episodes, 20 Hz decisions, absolute commands as actions. Baseline PID autopilot (`configs/autopilot.yaml`) over 100 seeds: all episodes settle (alt within 10 m by ≤52 s, heading within 3° by ≤31 s), mean return -1317 vs -10857 for holding trim. Run `scripts/compare_controllers.py`.
 - Step 2 (validation): done 2026-10-04. `scripts/validate.py` runs the checks in `configs/validation/c172p.yaml` and writes `docs/VALIDATION.md` (20 pass, 4 known deviations). Known deviations: stall speeds 3.4-4.7 kt fast in 3 of 6 cases; phugoid period 27.8 s vs ~35 s flight test (damping matches). Also qualitative: model spiral mode is stable at mid CG, the real aircraft's diverges. No independent C172 short-period measurement exists in open sources; only MIL-F-8785C limits are checked.
 - Step 1 (headless run + log): done 2026-10-04. `scripts/run_headless.py` trims at 5000 ft / 100 KTAS, holds heading for 300 s, writes `data/<run_id>.parquet`.
 
@@ -135,5 +138,6 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 ## Common commands
 - Local: `uv sync`, `uv run pytest`, `uv run python scripts/<script>.py`
 - Validation report: `uv run python scripts/validate.py` (regenerates `docs/VALIDATION.md`)
+- Controller comparison: `uv run python scripts/compare_controllers.py --episodes 100 [--log-dir data/episodes]`
 - Logs go to `data/` (gitignored; `data/.gitkeep` is committed so Docker never creates it as root).
 - Docker: `docker compose build`, `docker compose run --rm sim pytest`, `docker compose run --rm sim python scripts/<script>.py`
