@@ -1,0 +1,19 @@
+# Step 6: the altitude/heading-hold task with randomized wind and turbulence.
+base: altitude_heading_hold.yaml
+
+wind:
+  steady_speed_mps: [0, 10]         # uniform; direction uniform over 360 deg
+  turbulence:
+    # MIL-F-8785C 3.7.2 (above 2000 ft): isotropic, Dryden scale length 1750 ft.
+    scale_length_m: 533.4
+    # RMS intensities from MIL-F-8785C Figure 7 (read from the plot, flat region below
+    # ~9000 ft): light 5, moderate 10, severe 21 ft/s TAS.
+    sigma_mps:
+      none: 0.0
+      light: 1.524
+      moderate: 3.048
+      severe: 6.4
+    probability:
+      none: 0.25
+      light: 0.45
+      moderate: 0.30

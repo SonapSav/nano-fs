@@ -1,6 +1,5 @@
 import asyncio
 import json
-from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -19,9 +18,12 @@ from flightsim.stream.sources import ManualSource
 ROOT = Path(__file__).parent.parent
 
 
+ENV_CONFIG = ROOT / "configs" / "envs" / "altitude_heading_hold.yaml"
+
+
 @pytest.fixture(scope="module")
 def env_cfg():
-    return replace(load_env_config(ROOT / "configs" / "envs" / "altitude_heading_hold.yaml"), episode_s=8.0)
+    return load_env_config(ENV_CONFIG, {"episode_s": 8.0})
 
 
 class FakeClock:
@@ -106,7 +108,7 @@ def test_demo_run_id_depends_on_inputs(env_cfg):
 
 
 def test_short_flights_are_not_saved(env_cfg, tmp_path):
-    source = ManualSource(replace(env_cfg, episode_s=2.0), seed=1)
+    source = ManualSource(load_env_config(ENV_CONFIG, {"episode_s": 2.0}), seed=1)
     _fly(source, {})
     assert source.save(tmp_path) is None
 
@@ -116,7 +118,7 @@ def test_server_manual_session_applies_input_and_saves(env_cfg, tmp_path):
 
     async def main():
         ready = asyncio.get_running_loop().create_future()
-        server = asyncio.create_task(run_server(ServerConfig(tmp_path, replace(env_cfg, episode_s=6.0), gains), "127.0.0.1", 0, ready.set_result))
+        server = asyncio.create_task(run_server(ServerConfig(tmp_path, load_env_config(ENV_CONFIG, {"episode_s": 6.0}), gains), "127.0.0.1", 0, ready.set_result))
         port = await ready
         try:
             async with connect(f"ws://127.0.0.1:{port}/ws") as ws:

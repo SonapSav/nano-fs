@@ -16,6 +16,7 @@ from dataclasses import replace
 import gymnasium as gym
 import numpy as np
 
+from flightsim.atmosphere.turbulence import DrydenTurbulence, to_ned
 from flightsim.config import Provenance
 from flightsim.control.autopilot import Targets
 from flightsim.control.heading_hold import wrap_angle_rad
@@ -67,6 +68,8 @@ class AltitudeHeadingHoldEnv(gym.Env):
         super().reset(seed=seed)
         cfg, rng = self.cfg, self.np_random
         self.episode_seed = seed
+        # Draw order is part of reproducibility: initial condition, targets, then wind.
+        # Adding draws only at the end keeps episodes of calm configs unchanged.
         ic = InitialConditions(
             alt_msl_m=cfg.nominal.alt_msl_m + rng.uniform(-cfg.randomize_alt_m, cfg.randomize_alt_m),
             tas_mps=cfg.nominal.tas_mps + rng.uniform(-cfg.randomize_tas_mps, cfg.randomize_tas_mps),
@@ -75,20 +78,27 @@ class AltitudeHeadingHoldEnv(gym.Env):
             )
             % (2 * math.pi),
         )
+        target_alt = ic.alt_msl_m + rng.uniform(-cfg.target_alt_offset_m, cfg.target_alt_offset_m)
+        target_heading = wrap_angle_rad(
+            ic.heading_rad + rng.uniform(-cfg.target_heading_offset_rad, cfg.target_heading_offset_rad)
+        ) % (2 * math.pi)
+        self.wind = self._draw_wind(rng)
+        ic = replace(ic, wind_north_mps=self.wind["north_mps"], wind_east_mps=self.wind["east_mps"])
+
         # A fresh core per episode: a reused JSBSim instance is not bit-reproducible
         # (state survives run_ic), and construction costs only a few milliseconds.
         self._core = JSBSimCore(cfg.aircraft, 1.0 / cfg.sim_rate_hz)
         self._core.reset(ic, cfg.loading)
         self.trim = self._core.trim()
         self.trim_state = self._core.state()
-        self.targets = Targets(
-            alt_msl_m=ic.alt_msl_m + rng.uniform(-cfg.target_alt_offset_m, cfg.target_alt_offset_m),
-            heading_rad=wrap_angle_rad(
-                ic.heading_rad + rng.uniform(-cfg.target_heading_offset_rad, cfg.target_heading_offset_rad)
-            )
-            % (2 * math.pi),
-            tas_mps=self.trim_state.tas_mps,
-        )
+        self.targets = Targets(alt_msl_m=target_alt, heading_rad=target_heading, tas_mps=self.trim_state.tas_mps)
+        self._turbulence = None
+        if self.wind["turbulence_sigma_mps"] > 0:
+            self._turbulence = DrydenTurbulence(
+                self.wind["turbulence_sigma_mps"], cfg.wind.scale_length_m, self.trim_state.tas_mps,
+                1.0 / cfg.sim_rate_hz, np.random.default_rng(self.wind["turbulence_seed"]),
+            )  # fmt: skip
+        self.initial_conditions = ic
         self._state = self.trim_state
         self._prev_action = controls_to_action(self.trim)
         self._decisions = 0
@@ -105,7 +115,7 @@ class AltitudeHeadingHoldEnv(gym.Env):
             throttle=float(action[3] + 1.0) / 2.0,
         )
         for _ in range(self.cfg.sim_steps_per_action):
-            self._state = self._core.step(u)
+            self._state = self._sim_step(u)
             if self.record:
                 self._controls.append(u)
                 self._states.append(self._state)
@@ -120,6 +130,47 @@ class AltitudeHeadingHoldEnv(gym.Env):
         info = self._info()
         info["termination_reason"] = reason
         return self._observation(), reward, bool(reason), truncated, info
+
+    def _sim_step(self, u: Controls) -> State:
+        if self._turbulence is not None:
+            self._core.set_gust_ned_mps(*to_ned(*self._turbulence.step(), self._state.psi_rad))
+        self._state = self._core.step(u)
+        return self._state
+
+    def _draw_wind(self, rng: np.random.Generator) -> dict:
+        w = self.cfg.wind
+        if w is None:
+            return {"north_mps": 0.0, "east_mps": 0.0, "speed_mps": 0.0, "from_deg": 0.0,
+                    "turbulence": "none", "turbulence_sigma_mps": 0.0, "turbulence_seed": 0}  # fmt: skip
+        speed = rng.uniform(*w.steady_speed_mps)
+        from_rad = rng.uniform(0.0, 2.0 * math.pi)
+        levels = sorted(w.turbulence_probability)
+        level = levels[int(rng.choice(len(levels), p=[w.turbulence_probability[k] for k in levels]))]
+        return {
+            # Wind FROM direction from_rad blows TOWARD from_rad + pi.
+            "north_mps": -speed * math.cos(from_rad),
+            "east_mps": -speed * math.sin(from_rad),
+            "speed_mps": speed,
+            "from_deg": math.degrees(from_rad),
+            "turbulence": level,
+            "turbulence_sigma_mps": w.turbulence_sigma_mps[level],
+            "turbulence_seed": int(rng.integers(2**63)),
+        }
+
+    def conditions(self) -> dict:
+        """This episode's randomized conditions, in SI units (degrees for readability)."""
+        ic, t = self.initial_conditions, self.targets
+        return {
+            "initial_alt_msl_m": ic.alt_msl_m,
+            "initial_tas_mps": ic.tas_mps,
+            "initial_heading_deg": math.degrees(ic.heading_rad),
+            "target_alt_msl_m": t.alt_msl_m,
+            "target_heading_deg": math.degrees(t.heading_rad),
+            "wind_speed_mps": self.wind["speed_mps"],
+            "wind_from_deg": self.wind["from_deg"],
+            "turbulence": self.wind["turbulence"],
+            "turbulence_sigma_mps": self.wind["turbulence_sigma_mps"],
+        }
 
     # --- Task definition -------------------------------------------------------
 
@@ -179,7 +230,7 @@ class AltitudeHeadingHoldEnv(gym.Env):
         self.reset(seed=seed)
         states = [self._state]
         for u in controls:
-            states.append(self._core.step(u))
+            states.append(self._sim_step(u))
         return states
 
     # --- Logging ---------------------------------------------------------------

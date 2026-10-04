@@ -1,4 +1,3 @@
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -13,5 +12,6 @@ def cruise() -> RunConfig:
     return load_config(CRUISE)
 
 
-def shortened(cfg: RunConfig, duration_s: float) -> RunConfig:
-    return replace(cfg, duration_s=duration_s)
+def shortened(duration_s: float, **overrides) -> RunConfig:
+    """The cruise config with overrides applied through the config data (so the hash follows)."""
+    return load_config(CRUISE, {"duration_s": duration_s, **overrides})

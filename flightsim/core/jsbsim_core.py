@@ -63,6 +63,9 @@ class InitialConditions:
     lat_rad: float = 0.0
     lon_rad: float = 0.0
     flight_path_rad: float = 0.0
+    # Steady horizontal wind: velocity of the air mass (the direction it blows TOWARD), NED.
+    wind_north_mps: float = 0.0
+    wind_east_mps: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -120,11 +123,26 @@ class JSBSimCore:
         for i, kg in enumerate(loading.fuel_tanks_kg or ()):
             fdm[f"propulsion/tank[{i}]/contents-lbs"] = kg / LBM_TO_KG
         fdm["ic/h-sl-ft"] = ic.alt_msl_m / FT_TO_M
-        fdm["ic/vt-fps"] = ic.tas_mps / FT_TO_M
-        fdm["ic/psi-true-rad"] = ic.heading_rad
-        fdm["ic/gamma-rad"] = ic.flight_path_rad
+        if ic.wind_north_mps or ic.wind_east_mps:
+            # JSBSim's IC wind handling only gives an air-relative start (zero sideslip, crabbed
+            # into the wind) if the ground velocity is set directly: ground = air + wind.
+            # ic/vw-north-fps ignores writes, so the wind goes in as magnitude + direction
+            # (ic/vw-dir-deg is the direction the air moves toward). Verified 2026-10-04.
+            fdm["ic/vw-mag-fps"] = math.hypot(ic.wind_north_mps, ic.wind_east_mps) / FT_TO_M
+            fdm["ic/vw-dir-deg"] = math.degrees(math.atan2(ic.wind_east_mps, ic.wind_north_mps))
+            fdm["ic/psi-true-rad"] = ic.heading_rad
+            horizontal = ic.tas_mps * math.cos(ic.flight_path_rad)
+            fdm["ic/vn-fps"] = (horizontal * math.cos(ic.heading_rad) + ic.wind_north_mps) / FT_TO_M
+            fdm["ic/ve-fps"] = (horizontal * math.sin(ic.heading_rad) + ic.wind_east_mps) / FT_TO_M
+            fdm["ic/vd-fps"] = -ic.tas_mps * math.sin(ic.flight_path_rad) / FT_TO_M
+        else:
+            fdm["ic/vw-mag-fps"] = 0.0
+            fdm["ic/vt-fps"] = ic.tas_mps / FT_TO_M
+            fdm["ic/psi-true-rad"] = ic.heading_rad
+            fdm["ic/gamma-rad"] = ic.flight_path_rad
         fdm["ic/lat-geod-rad"] = ic.lat_rad
         fdm["ic/long-gc-rad"] = ic.lon_rad
+        self.set_gust_ned_mps(0.0, 0.0, 0.0)  # gusts are not part of the IC and survive run_ic
         if not fdm.run_ic():
             raise RuntimeError("JSBSim run_ic failed")
         fdm["propulsion/set-running"] = -1  # all engines running
@@ -141,6 +159,12 @@ class JSBSimCore:
         except jsbsim.TrimFailureError as e:
             raise TrimError(str(e)) from e
         return self.controls()
+
+    def set_gust_ned_mps(self, north: float, east: float, down: float) -> None:
+        """Turbulence velocity added to the steady wind from the next step on (NED, m/s)."""
+        self._fdm["atmosphere/gust-north-fps"] = north / FT_TO_M
+        self._fdm["atmosphere/gust-east-fps"] = east / FT_TO_M
+        self._fdm["atmosphere/gust-down-fps"] = down / FT_TO_M
 
     def _apply(self, controls: Controls) -> None:
         for name, prop in _CONTROL_PROPS.items():

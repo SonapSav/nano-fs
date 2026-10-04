@@ -2,7 +2,6 @@ import asyncio
 import json
 import urllib.error
 import urllib.request
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -24,7 +23,7 @@ ENV_CONFIG = ROOT / "configs" / "envs" / "altitude_heading_hold.yaml"
 
 @pytest.fixture(scope="module")
 def env_cfg():
-    return replace(load_env_config(ENV_CONFIG), episode_s=6.0)  # short episodes keep tests fast
+    return load_env_config(ENV_CONFIG, {"episode_s": 6.0})  # short episodes keep tests fast
 
 
 @pytest.fixture(scope="module")

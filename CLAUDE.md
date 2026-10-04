@@ -71,7 +71,7 @@ Work through these in order. Finish and validate each step before starting the n
   - No wall-clock timestamps and a deterministic `run_id` (`<config_hash[:12]>-s<seed>`), so the same seed and config give byte-identical files (verified locally vs Docker).
 - **Units:** use SI internally (meters, m/s, radians, kg). JSBSim works in imperial units (ft, slug, lbf), so all conversion happens inside the JSBSim wrapper in `core/`; everything outside `core/` is SI. The logging schema is strictly SI so swapping the physics core never changes the logs. Name variables with units where ambiguous (e.g. `alt_m`, `tas_mps`; imperial names like `alt_ft` only inside `core/`).
 - **Time:** fixed timestep only. No variable dt anywhere in the physics path.
-- **Config over code:** aircraft, initial conditions, wind, and task parameters live in config files (YAML or JSON), not hard-coded.
+- **Config over code:** aircraft, initial conditions, wind, and task parameters live in config files (YAML or JSON), not hard-coded. Variants extend a base file (`base: other.yaml`); changes go through `overrides` (dotted keys allowed) so they are part of the config hash. Never `dataclasses.replace()` a loaded config to change behaviour.
 - **Controllers act through the env:** baselines and learned agents use the same action interface and decision rate (`flightsim/envs/policies.py`), so comparisons are fair. Episode logs use the same Parquet schema, one file per episode, seed = episode seed.
 - **Tests:** physics validation checks (trim, stall speed, oscillation periods) are automated tests with stated tolerances, not one-off notebooks.
   - Published reference values live in `docs/REFERENCES.md` with their source; tests cite it. Primary source: 1985 Model 172P POH. Its fuel flows assume leaned mixture, so lean before comparing fuel burn.
@@ -89,7 +89,9 @@ flightsim/          # installable package (uv_build backend)
   stream/           # protocol, frame sources (replay, live PID), HTTP + WebSocket server
   viewer/           # static Three.js app (no build step); three.js 0.186.1 vendored in viewer/vendor
   analysis/         # mode identification, validation maneuvers, validation checks
-  config.py         # YAML loading + config hash
+  atmosphere/       # Dryden turbulence (MIL-F-8785C)
+  batch.py          # parallel seeded episode batches
+  config.py         # YAML loading (base: inheritance, overrides) + config hash
   runner.py         # headless run loop
 configs/            # YAML run configs; configs/validation/ holds reference data + tolerances
 docs/               # REFERENCES.md (sources), VALIDATION.md (generated)
@@ -108,6 +110,8 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - `run_ic()` keeps previous control commands. `JSBSimCore.reset()` therefore always applies a `Controls` (defaults unless given) so runs never depend on history.
 - `run_ic()` does not zero JSBSim's sim time; the core counts its own steps for `t_s`.
 - Model tank capacity is 185 lb each; larger loads are silently capped.
+- Steady wind at trim: `ic/vw-north-fps` ignores writes; set `ic/vw-mag-fps` + `ic/vw-dir-deg` (direction the air moves TOWARD) and then the ground velocity `ic/vn-fps`/`ic/ve-fps`/`ic/vd-fps` = air velocity + wind. Setting `ic/vt-fps` with wind gives a slipping, wrong-airspeed start, or a failed trim. `JSBSimCore.reset` handles this; calm resets keep the original path.
+- `atmosphere/gust-*-fps` survive `run_ic()`; `JSBSimCore.reset` zeroes them. Turbulence is ours (seeded, `flightsim/atmosphere/turbulence.py`), not JSBSim's `turb-type`.
 
 ## How to work with me (Claude Code)
 - Start with step 1 only: scaffold the project, get a headless run working, log it, and confirm the log looks physically sensible before building further.
@@ -122,6 +126,7 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - **Research priority:** autopilot / control design first. The log schema should favor what control work needs: full state, control surface commands and positions, trim condition, and enough precision to fit dynamic modes. RL and pilot training come later.
 
 ## Progress
+- Step 6 (batch runner + wind): done 2026-10-04. `scripts/batch_run.py` runs seeded episodes in parallel and writes `data/batch/<batch_id>/` (manifest.json, episodes.parquet summary sorted by seed, optional logs/). Results are byte-identical for any worker count (tested). Wind task `configs/envs/altitude_heading_hold_wind.yaml` (extends the calm task): steady wind 0-10 m/s from a random direction, Dryden turbulence none/light/moderate (MIL-F-8785C 3.7.2, see `docs/REFERENCES.md`). 1000-episode PID batch: no early terminations, 150 never settled within 3 deg heading (130 of them in moderate turbulence). Default workers = physical cores: on this 6-core/12-thread CPU, 12 workers are no faster than 6.
 - Step 5 (manual control): done 2026-10-04. "Fly it yourself" in the viewer flies the step 3 task episode in real time (speed capped at 1x) with keyboard (arrows, Z/X, W/S, Shift = full deflection) or a standard-mapping gamepad. Input is relative to trim; stale input (>0.5 s) centres the stick and holds throttle. Flights >= 5 s are saved to `data/demos/<config>-s<seed>-m<input hash>.parquet` with `flightsim.pilot = human` metadata (schema unchanged). `AltitudeHeadingHoldEnv.refly(seed, controls)` reproduces a demonstration's logged states exactly (tested).
 - Step 4 (stream + viewer): done 2026-10-04. `python -m flightsim.stream` (or `docker compose up viewer`) serves the viewer and the `/ws` stream on port 8686. Sources: replay of any log under `data/`, or a live PID episode of the step 3 task. Protocol in `flightsim/stream/protocol.py`: a frame is exactly a log schema v1 row (tested: live frames == logged rows). Viewer: Three.js chase view plus a C172 six-pack with POH airspeed/tach markings and magenta target bugs; URL params `?source=live|<log path>&seed=&speed=&autoplay=1`.
 - Step 3 (Gymnasium + PID baseline): done 2026-10-04. `flightsim/AltitudeHeadingHold-v0` (`configs/envs/altitude_heading_hold.yaml`): randomized cruise start, random altitude (±150 m) and heading (±120°) targets, 120 s episodes, 20 Hz decisions, absolute commands as actions. Baseline PID autopilot (`configs/autopilot.yaml`) over 100 seeds: all episodes settle (alt within 10 m by ≤52 s, heading within 3° by ≤31 s), mean return -1317 vs -10857 for holding trim. Run `scripts/compare_controllers.py`.
@@ -141,6 +146,7 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - Local: `uv sync`, `uv run pytest`, `uv run python scripts/<script>.py`
 - Validation report: `uv run python scripts/validate.py` (regenerates `docs/VALIDATION.md`)
 - Controller comparison: `uv run python scripts/compare_controllers.py --episodes 100 [--log-dir data/episodes]`
+- Batch: `uv run python scripts/batch_run.py --seeds 0:1000 [--policy trim_hold] [--set wind.steady_speed_mps=[5,15]] [--logs]`
 - Logs go to `data/` (gitignored; `data/.gitkeep` is committed so Docker never creates it as root).
 - Viewer: `uv run python -m flightsim.stream` then open http://localhost:8686/ ; in Docker `docker compose up -d viewer` (published on all host interfaces)
 - Docker: `docker compose build`, `docker compose run --rm sim pytest`, `docker compose run --rm sim python scripts/<script>.py`

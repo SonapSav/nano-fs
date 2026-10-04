@@ -13,9 +13,7 @@ import math
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-import yaml
-
-from flightsim.config import HeadingHoldGains, parse_heading_hold
+from flightsim.config import HeadingHoldGains, load_raw, parse_heading_hold
 from flightsim.control.heading_hold import HeadingHold
 from flightsim.core import Controls, State
 
@@ -83,8 +81,11 @@ class Autopilot:
         )
 
 
-def load_autopilot_gains(path: str | Path) -> AutopilotGains:
-    raw = yaml.safe_load(Path(path).read_text())
+def load_autopilot_gains(path: str | Path, overrides: dict | None = None) -> AutopilotGains:
+    return autopilot_gains_from_raw(load_raw(path, overrides))
+
+
+def autopilot_gains_from_raw(raw: dict) -> AutopilotGains:
     return AutopilotGains(
         heading=parse_heading_hold(raw["heading_hold"]),
         k_altitude=float(raw["k_altitude"]),

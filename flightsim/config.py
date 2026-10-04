@@ -2,6 +2,11 @@
 
 Config files use SI units; angles may be given in degrees with a `_deg` suffix
 for readability and are converted to radians here.
+
+A config file may name a `base:` file (path relative to itself) that it extends.
+Overrides (nested dict, or dotted keys like {"wind.steady_speed_mps": [0, 5]}) are merged
+into the raw data before hashing, so the recorded hash always describes what ran. Do not
+`dataclasses.replace()` a loaded config to change behaviour: the hash would not follow.
 """
 
 import hashlib
@@ -61,6 +66,34 @@ class Provenance:
     pilot: str | None = None  # who flew it, e.g. "human" or "pid"
 
 
+def _deep_merge(base: dict, extra: dict) -> dict:
+    out = dict(base)
+    for k, v in extra.items():
+        out[k] = _deep_merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
+def _undot(overrides: dict) -> dict:
+    nested: dict = {}
+    for key, value in overrides.items():
+        *parents, leaf = key.split(".")
+        node = nested
+        for part in parents:
+            node = node.setdefault(part, {})
+        node[leaf] = _undot(value) if isinstance(value, dict) else value
+    return nested
+
+
+def load_raw(path: str | Path, overrides: dict | None = None) -> dict:
+    """YAML config with its `base:` chain resolved and overrides merged in."""
+    path = Path(path)
+    raw = yaml.safe_load(path.read_text())
+    base = raw.pop("base", None)
+    if base is not None:
+        raw = _deep_merge(load_raw(path.parent / base), raw)
+    return _deep_merge(raw, _undot(overrides or {}))
+
+
 def canonical_json(raw: dict) -> str:
     return json.dumps(raw, sort_keys=True, separators=(",", ":"))
 
@@ -88,8 +121,8 @@ def parse_heading_hold(hh: dict) -> HeadingHoldGains:
     )
 
 
-def load_config(path: str | Path) -> RunConfig:
-    raw = yaml.safe_load(Path(path).read_text())
+def load_config(path: str | Path, overrides: dict | None = None) -> RunConfig:
+    raw = load_raw(path, overrides)
     ic = raw["initial_conditions"]
     return RunConfig(
         aircraft=raw["aircraft"],

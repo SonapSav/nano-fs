@@ -4,9 +4,7 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
-
-from flightsim.config import canonical_json, config_hash, parse_loading
+from flightsim.config import canonical_json, config_hash, load_raw, parse_loading
 from flightsim.core import InitialConditions, Loading
 
 
@@ -32,6 +30,17 @@ class TerminationConfig:
 
 
 @dataclass(frozen=True)
+class WindConfig:
+    """Per-episode wind: steady speed uniform in a range, direction uniform over 360 deg,
+    turbulence level drawn with the given probabilities (Dryden, MIL-F-8785C)."""
+
+    steady_speed_mps: tuple[float, float]
+    turbulence_sigma_mps: dict[str, float]  # level name -> RMS intensity
+    turbulence_probability: dict[str, float]  # level name -> probability (sums to 1)
+    scale_length_m: float
+
+
+@dataclass(frozen=True)
 class EnvConfig:
     aircraft: str
     sim_rate_hz: float
@@ -46,6 +55,7 @@ class EnvConfig:
     loading: Loading
     reward: RewardConfig
     termination: TerminationConfig
+    wind: WindConfig | None
     config_hash: str
     config_json: str
 
@@ -61,8 +71,11 @@ class EnvConfig:
         return round(self.episode_s * self.control_rate_hz)
 
 
-def load_env_config(path: str | Path) -> EnvConfig:
-    raw = yaml.safe_load(Path(path).read_text())
+def load_env_config(path: str | Path, overrides: dict | None = None) -> EnvConfig:
+    return env_config_from_raw(load_raw(path, overrides))
+
+
+def env_config_from_raw(raw: dict) -> EnvConfig:
     ic, rnd, tg, rw, term = (raw[k] for k in ("initial_conditions", "randomize", "targets", "reward", "termination"))
     return EnvConfig(
         aircraft=raw["aircraft"],
@@ -95,6 +108,21 @@ def load_env_config(path: str | Path) -> EnvConfig:
             max_alpha_rad=math.radians(term["max_alpha_deg"]),
             min_alt_agl_m=float(term["min_alt_agl_m"]),
         ),
+        wind=_parse_wind(raw.get("wind")),
         config_hash=config_hash(raw),
         config_json=canonical_json(raw),
     )
+
+
+def _parse_wind(w: dict | None) -> WindConfig | None:
+    if not w:
+        return None
+    turb = w["turbulence"]
+    sigma = {k: float(v) for k, v in turb["sigma_mps"].items()}
+    prob = {k: float(v) for k, v in turb["probability"].items()}
+    if set(prob) - set(sigma):
+        raise ValueError(f"turbulence levels without an intensity: {set(prob) - set(sigma)}")
+    if abs(sum(prob.values()) - 1.0) > 1e-9:
+        raise ValueError("turbulence probabilities must sum to 1")
+    lo, hi = (float(x) for x in w["steady_speed_mps"])
+    return WindConfig((lo, hi), sigma, prob, float(turb["scale_length_m"]))

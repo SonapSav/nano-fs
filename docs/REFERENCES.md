@@ -51,6 +51,13 @@ The JSBSim c172p structural frame matches this datum to about 3 in: POH sample l
 - **Copy used:** everyspec.com, https://everyspec.com/MIL-SPECS/MIL-SPECS-MIL-F/MIL-F-8785C_5295/ (retrieved 2026-10-04). Military specification, not an FAA requirement, but the standard quantitative yardstick for light-aircraft dynamics. Class I = small, light airplanes.
 - **Level 1, Category B (cruise) values used:** short-period damping ratio 0.30-2.00 (Table IV; 0.35-1.30 for Categories A and C); phugoid damping ratio at least 0.04 (3.2.1.2); Dutch roll damping ratio at least 0.08, zeta x wn at least 0.15 rad/s, wn at least 0.4 rad/s (Table VI); roll-mode time constant at most 1.4 s (Table VII); spiral time to double at least 20 s (Table VIII; 12 s for Categories A and C).
 
+### Atmospheric turbulence (used by the step 6 wind model)
+
+- **3.7.1.2 Dryden form:** Phi_u = sigma_u^2 (2 L_u / pi) / (1 + (L_u Omega)^2); Phi_v = sigma_v^2 (L_v / pi) (1 + 3 (L_v Omega)^2) / (1 + (L_v Omega)^2)^2; Phi_w likewise with L_w.
+- **3.7.2 Medium/high altitude (above 2000 ft):** turbulence isotropic, sigma_u = sigma_v = sigma_w; **3.7.2.1** scale lengths L_u = L_v = L_w = 1750 ft for the Dryden form (2500 ft for von Karman).
+- **3.7.2.2 / Figure 7:** RMS intensity versus altitude. Read from the plot for the flat region below about 9000 ft: light about 5 ft/s, moderate about 10 ft/s, severe about 21 ft/s (TAS). These are plot readings, not tabulated values.
+- Not used yet: the low-altitude model (3.7.3, below 1000-2000 ft, Category C), wind shear (3.7.3.2), discrete gusts (3.7.1.3).
+
 ## Searched and not used
 
 - **Roskam, Airplane Flight Dynamics Part I, pp. 480-482**, via the UIUC cessna172-v1 model file (https://m-selig.ae.illinois.edu/apasim/Aircraft-uiuc/cessna172-v1/aircraft.dat). The file itself notes the data is "actually Cessna 182", and it shares lineage with the FlightGear/JSBSim C172 model, so it is not an independent reference.

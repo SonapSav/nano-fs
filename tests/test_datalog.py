@@ -21,7 +21,7 @@ def test_schema_covers_exactly_the_core_state_and_controls():
 
 @pytest.fixture
 def short_run(cruise):
-    cfg = shortened(cruise, 5.0)
+    cfg = shortened(5.0)
     return cfg, run(cfg)
 
 
@@ -45,12 +45,13 @@ def test_log_round_trip(tmp_path, short_run):
 def test_logged_config_reproduces_the_hash(tmp_path, short_run):
     cfg, result = short_run
     _, meta = read_log(write_log(tmp_path / "run.parquet", result, cfg.provenance))
-    assert meta[S.META_CONFIG_JSON] == load_config(CRUISE).config_json
+    assert meta[S.META_CONFIG_JSON] == cfg.config_json
+    assert cfg.config_hash != load_config(CRUISE).config_hash  # the override is part of the hash
     assert config_hash(json.loads(meta[S.META_CONFIG_JSON])) == cfg.config_hash
 
 
 def test_same_config_gives_byte_identical_logs(tmp_path, cruise):
-    cfg = shortened(cruise, 5.0)
+    cfg = shortened(5.0)
     a = write_log(tmp_path / "a.parquet", run(cfg), cfg.provenance)
     b = write_log(tmp_path / "b.parquet", run(cfg), cfg.provenance)
     assert a.read_bytes() == b.read_bytes()
