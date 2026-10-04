@@ -21,7 +21,7 @@ const MANUAL = "manual"; // calm air
 const MANUAL_WIND = "manual_wind";
 const isManual = (v) => v === MANUAL || v === MANUAL_WIND;
 const INPUT_SEND_HZ = 30;
-const VIEW_HINT = "Drag to look around, scroll to zoom, space to pause";
+const VIEW_HINT = "Drag to look around, scroll to zoom, space to pause, C for cockpit view";
 const FLY_HINT = "Arrows pitch and roll; Z/X rudder; W/S throttle; F/V flaps; T/G trim; Shift full deflection. Gamepad: LB/RB flaps, D-pad trim";
 
 const scene = new FlightScene($("view"));
@@ -190,8 +190,31 @@ els.stop.addEventListener("click", () => send({ type: "stop" }));
 els.speed.addEventListener("change", () => send({ type: "speed", value: Number(els.speed.value) }));
 els.source.addEventListener("change", updateSourceOptions);
 els.source.addEventListener("focus", () => send({ type: "list" }));
+// Chase or cockpit view (C key or the button); remembered in this browser.
+function setView(view) {
+  scene.setView(view);
+  const inside = view === "cockpit";
+  $("view-toggle").textContent = inside ? "Chase view" : "Cockpit view";
+  $("view-toggle").setAttribute("aria-pressed", String(inside));
+  try {
+    localStorage.setItem("flightsim.view", view);
+  } catch {
+    // not remembered; the view still changes
+  }
+}
+$("view-toggle").addEventListener("click", () => setView(scene.view === "cockpit" ? "chase" : "cockpit"));
+try {
+  if (localStorage.getItem("flightsim.view") === "cockpit") setView("cockpit");
+} catch {
+  // storage unavailable: start in the chase view
+}
+
 document.addEventListener("keydown", (e) => {
   const inForm = ["INPUT", "SELECT", "BUTTON"].includes(document.activeElement?.tagName);
+  if (e.code === "KeyC" && !inForm && !e.repeat) {
+    setView(scene.view === "cockpit" ? "chase" : "cockpit");
+    return;
+  }
   if (e.code === "Space" && !inForm) {
     e.preventDefault();
     togglePause();

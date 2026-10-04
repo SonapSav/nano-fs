@@ -248,6 +248,12 @@ owner before work can start.
   three.js Sky shader with sun and haze, airfield 09/27 (1000 m, markings, taxiway,
   apron, hangars) at lat/lon 0,0 below every start. Logarithmic depth buffer.
   Tests: `tests/test_viewer_terrain.py` (needs Node; skipped in Docker).
+- [x] **Cockpit view** (2026-10-04): "Cockpit view" button or C key (remembered per
+  browser). Camera at the pilot's eye in the left seat, from the c172p model's EYEPOINT
+  and pilot position (0.10 m forward, 0.36 m left, 0.29 m above the CG), rotating with
+  the aircraft; drag to turn the head, double-click to look ahead. Simple cockpit
+  references: cowling, glare shield, panel face, windscreen posts, roof, door panels
+  (checked by raycasting from the eye).
 - [ ] Scenery follow-ups: roads and rivers; forest edges are still per-vertex (jagged
   up close); trees and houses only in the nearest 3 x 3 tiles; clouds; time of day;
   a quality setting for weaker GPUs. Terrain height in the physics (needed for
