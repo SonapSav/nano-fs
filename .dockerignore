@@ -1,0 +1,7 @@
+.venv/
+.git/
+data/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.parquet

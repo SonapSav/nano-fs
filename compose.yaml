@@ -1,0 +1,8 @@
+services:
+  sim:
+    build: .
+    image: flightsim:dev
+    # Run as the host user so logs written to ./data are not root-owned.
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      - ./data:/app/data

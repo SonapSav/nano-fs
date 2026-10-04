@@ -39,8 +39,10 @@ Rules:
 - The core exposes its own state and control definitions (SI units, our names). JSBSim property names (e.g. `velocities/u-fps`) must never appear outside `core/`.
 
 ## Tech stack
-- **Physics:** JSBSim via its Python bindings (`pip install jsbsim`). Latest on PyPI as of 2026-10-04 is 1.3.1 (wheels for CPython 3.10-3.14). Pin the exact version. Bundled aircraft believed to include `c172p` / `c172x`; confirm by listing them after install.
-- **Language:** Python for everything first. Optimize only after profiling shows a need.
+- **Physics:** JSBSim via its Python bindings, pinned to `jsbsim==1.3.1` (wheels for CPython 3.10-3.14). Bundled aircraft (verified): `c172p`, `c172r`, `c172x`. Note: JSBSim prints a startup banner to stdout even at debug level 0; suppress it in the core wrapper for headless runs.
+- **Language:** Python 3.14 (pinned to 3.14.3 in `.python-version` and the Docker base image). Chosen as the newest version every dependency ships wheels for; 3.15 lacks jsbsim/pyarrow/torch wheels as of 2026-10-04. Python for everything first; optimize only after profiling shows a need.
+- **Environment:** `uv` manages Python and a project-local `.venv`. Dependencies live in `pyproject.toml`; `uv.lock` pins every version and is committed. Add dependencies with `uv add` (dev tools with `uv add --dev`), never `pip install`.
+- **Docker from day 1:** `Dockerfile` (`python:3.14.3-slim` + uv 0.11.2) installs from `uv.lock` with `--locked`, so local and container environments are identical. `compose.yaml` mounts `./data` for logs and runs as the host user. CPU-only image for now; a separate GPU image only if ML training needs it.
 - **ML interface:** Gymnasium environment wrapping the core.
 - **Logging:** Parquet, one row per timestep.
 - **Viewer:** Three.js in the browser, fed over WebSocket. Chase camera plus a basic instrument panel.
@@ -99,3 +101,8 @@ flightsim/
 - Debian 13, Python 3.13.5, `uv` available; Node 20 available for the viewer.
 - 12 CPU cores, 27 GB RAM (good for the parallel batch runner).
 - GPU: AMD integrated (Lucienne), no CUDA. ML training runs on CPU; fine for small RL networks.
+- Decision: develop on this machine. A second PC (12 cores, NVIDIA GTX 1660 6 GB) is available for later; move only when GPU training is needed (needs NVIDIA Container Toolkit). Docker + `uv.lock` keep the move to a clone and rebuild.
+
+## Common commands
+- Local: `uv sync`, `uv run pytest`, `uv run python scripts/<script>.py`
+- Docker: `docker compose build`, `docker compose run --rm sim pytest`, `docker compose run --rm sim python scripts/<script>.py`
