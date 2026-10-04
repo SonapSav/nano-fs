@@ -34,14 +34,14 @@ from flightsim.envs.evaluate import run_episode
 from flightsim.control.lqr import GainSchedule
 from flightsim.envs.policies import LQRPolicy, PIDPolicy, TrimHoldPolicy
 
-POLICIES = ("pid", "lqr", "trim_hold")
+POLICIES = ("pid", "lqr", "rl", "trim_hold")
 BATCH_FORMAT = 4  # 2: lqr policy, envelope metrics; 3: comfort_cost; 4: code_version in manifest
 
 
 def make_manifest(env_raw: dict, policy: str, policy_raw: dict | None, seeds: list[int], logs: bool) -> dict:
     if policy not in POLICIES:
         raise ValueError(f"unknown policy {policy!r}; choose from {POLICIES}")
-    if policy in ("pid", "lqr") and policy_raw is None:
+    if policy in ("pid", "lqr", "rl") and policy_raw is None:
         raise ValueError(f"the {policy} policy needs its config")
     env_cfg = env_config_from_raw(env_raw)
     manifest = {
@@ -72,6 +72,12 @@ def make_policy(policy: str, policy_raw: dict | None, cfg):
     if policy == "lqr":
         schedule = GainSchedule.cached(cfg.aircraft, cfg.loading, policy_raw, 1.0 / cfg.control_rate_hz)
         return LQRPolicy(schedule, cfg.control_rate_hz)
+    if policy == "rl":
+        from flightsim.rl.policy import RLPolicy, model_identity  # torch only when needed
+
+        if model_identity(policy_raw["model_dir"]) != policy_raw:
+            raise ValueError(f"model files in {policy_raw['model_dir']} do not match the recorded hashes")
+        return RLPolicy.load(policy_raw["model_dir"])
     return TrimHoldPolicy()
 
 
