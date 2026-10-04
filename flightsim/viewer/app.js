@@ -37,7 +37,7 @@ let inputTimer = null;
 const params = new URLSearchParams(location.search);
 let autoplay = params.get("autoplay") === "1";
 if (params.has("seed")) els.seed.value = params.get("seed");
-if (params.has("speed")) els.speed.value = params.get("speed");
+if (params.has("speed") && [...els.speed.options].some((o) => o.value === params.get("speed"))) els.speed.value = params.get("speed");
 const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const deg360 = (rad) => ((rad * units.DEG) % 360 + 360) % 360;
 const flying = () => session?.source === "manual" && !els.stop.disabled;

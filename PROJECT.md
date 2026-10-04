@@ -239,6 +239,20 @@ owner before work can start.
 
 ### Viewer
 
+- [x] **Procedural scenery for visual cues** (2026-10-04): seeded, offline, visual only
+  (physics still flies over flat ground at 0 m). `flightsim/viewer/terrain.js`: hills
+  up to ~350 m, valleys, lakes and the airfield at 0 m (consistent with the physics),
+  4 km tiles streamed around the aircraft in 3 detail levels with time-budgeted
+  building (~8 ms/frame), per-pixel field patchwork with hedgerows (shader), forests
+  with instanced trees, villages, analytic normals (no tile seams). `scenery.js`:
+  three.js Sky shader with sun and haze, airfield 09/27 (1000 m, markings, taxiway,
+  apron, hangars) at lat/lon 0,0 below every start. Logarithmic depth buffer.
+  Tests: `tests/test_viewer_terrain.py` (needs Node; skipped in Docker).
+- [ ] Scenery follow-ups: roads and rivers; forest edges are still per-vertex (jagged
+  up close); trees and houses only in the nearest 3 x 3 tiles; clouds; time of day;
+  a quality setting for weaker GPUs. Terrain height in the physics (needed for
+  takeoff/landing away from the 0 m airfield) is part of the takeoff/landing item.
+
 - [ ] Seeking in replays (only play, pause, stop and speed today).
 - [ ] Filter or group batch logs in the flight list (thousands of entries with `--logs`).
 - [ ] Font loads from Google Fonts (falls back to a system font offline); vendor it if

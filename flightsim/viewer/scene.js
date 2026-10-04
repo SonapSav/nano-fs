@@ -1,21 +1,19 @@
 // Three.js scene: flat-earth local frame, simple C172 model, trail, target line, chase camera.
 //
 // World frame: x = east, y = up, z = south (three.js is y-up, right-handed), origin at
-// the first frame's position at sea level. Over the tens of km a flight covers, the
-// flat-earth approximation is far below anything visible.
+// latitude 0, longitude 0 at sea level, where every task starts (so the procedural
+// scenery and its airfield are always in the same place). Over the tens of km a flight
+// covers, the flat-earth approximation is far below anything visible.
 
 import * as THREE from "three";
+import { addAirfield, addGroundFallback, addSky } from "./scenery.js";
+import { Terrain } from "./terrain.js";
 
 const R_EARTH = 6371000;
 const TRAIL_POINTS = 4000;
 
 // NED vector -> world vector.
 const nedToWorld = (n, e, d) => new THREE.Vector3(e, -d, -n);
-
-function seededRandom(seed) {
-  let s = seed >>> 0;
-  return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32);
-}
 
 function buildAircraft() {
   // Built in body axes (x forward, y right, z down), metres, C172-like proportions.
@@ -47,52 +45,21 @@ function buildAircraft() {
   return g;
 }
 
-function buildGround(scene) {
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(400000, 400000),
-    new THREE.MeshLambertMaterial({ color: 0x7c8b55 }),
-  );
-  ground.rotation.x = -Math.PI / 2;
-  scene.add(ground);
-  const grid = new THREE.GridHelper(200000, 200, 0x4c5733, 0x55613a); // 1 km squares
-  grid.position.y = 0.5;
-  scene.add(grid);
-  // Scattered farm buildings for motion cues; fixed seed so every viewer sees the same land.
-  const rnd = seededRandom(172);
-  const geo = new THREE.BoxGeometry(1, 1, 1);
-  const mats = [0xb3a68a, 0x8f3b2f, 0xd9d4c5].map((c) => new THREE.MeshLambertMaterial({ color: c }));
-  const count = 1500;
-  for (let m = 0; m < mats.length; m++) {
-    const inst = new THREE.InstancedMesh(geo, mats[m], count / mats.length);
-    const mtx = new THREE.Matrix4();
-    for (let i = 0; i < count / mats.length; i++) {
-      const w = 15 + rnd() * 40, h = 6 + rnd() * 12, d = 15 + rnd() * 30;
-      mtx.compose(
-        new THREE.Vector3((rnd() - 0.5) * 60000, h / 2, (rnd() - 0.5) * 60000),
-        new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * Math.PI),
-        new THREE.Vector3(w, h, d),
-      );
-      inst.setMatrixAt(i, mtx);
-    }
-    scene.add(inst);
-  }
-}
-
 export class FlightScene {
   constructor(container) {
     this.container = container;
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    // Logarithmic depth: from 0.5 m to 100+ km without distant surfaces flickering.
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping; // the physical sky is HDR
+    this.renderer.toneMappingExposure = 0.55;
     container.prepend(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x9cc3e4);
-    this.scene.fog = new THREE.Fog(0xc9dbe8, 4000, 45000);
-    this.scene.add(new THREE.HemisphereLight(0xdfeefa, 0x5d6b3f, 1.6));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.8);
-    sun.position.set(-0.4, 1, 0.3);
-    this.scene.add(sun);
-    buildGround(this.scene);
+    addSky(this.scene);
+    addGroundFallback(this.scene);
+    addAirfield(this.scene);
+    this.terrain = new Terrain(this.scene);
 
     this.aircraft = buildAircraft();
     this.aircraft.matrixAutoUpdate = false;
@@ -123,7 +90,7 @@ export class FlightScene {
   }
 
   reset() {
-    this.origin = null;
+    this.origin = { lat: 0, lon: 0 }; // fixed, see the header
     this.trailCount = 0;
     this.trailGeo.setDrawRange(0, 0);
     this.targets = null;
@@ -137,7 +104,6 @@ export class FlightScene {
   }
 
   update(row) {
-    if (!this.origin) this.origin = { lat: row.lat_rad, lon: row.lon_rad };
     const n = (row.lat_rad - this.origin.lat) * R_EARTH;
     const e = (row.lon_rad - this.origin.lon) * R_EARTH * Math.cos(this.origin.lat);
     this.position = nedToWorld(n, e, -row.alt_msl_m);
@@ -177,6 +143,7 @@ export class FlightScene {
     const offset = nedToWorld(Math.cos(az) * Math.cos(el) * d, Math.sin(az) * Math.cos(el) * d, -Math.sin(el) * d);
     this.camera.position.copy(this.position).add(offset);
     this.camera.lookAt(this.position);
+    this.terrain.update(this.camera.position.x, this.camera.position.z);
     this.renderer.render(this.scene, this.camera);
   }
 

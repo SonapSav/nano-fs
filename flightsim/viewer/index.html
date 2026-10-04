@@ -61,7 +61,8 @@
     padding: 8px 12px; border-radius: 4px; background: rgba(44, 48, 52, .86);
   }
   #message:empty { display: none; }
-  #hint { position: absolute; right: 16px; bottom: 12px; max-width: 46%; text-align: right; color: #2c3034; font-size: 14px; }
+  #hint { position: absolute; right: 16px; bottom: 12px; max-width: 46%; text-align: right; color: var(--marking);
+    font-size: 14px; text-shadow: 0 1px 2px rgba(0, 0, 0, .7); }
 
   /* Instrument panel */
   #panel {
@@ -115,7 +116,7 @@
     #hint { display: none; }
   }
 </style>
-<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }</script>
 </head>
 <body>
   <div id="bar" role="toolbar" aria-label="Playback">

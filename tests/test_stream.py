@@ -177,9 +177,12 @@ def test_viewer_is_served_with_vendored_three(logged_episode, env_cfg, gains):
             with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as r:
                 return r.headers["Content-Type"], r.read()
 
-        return await asyncio.to_thread(lambda: [get(p) for p in ("/", "/vendor/three.module.js", "/vendor/three.core.js")])
+        paths = ("/", "/vendor/three.module.js", "/vendor/three.core.js", "/vendor/addons/objects/Sky.js")
+        return await asyncio.to_thread(lambda: [get(p) for p in paths])
 
-    (html_type, html), (js_type, js), (_, core) = _with_server(data_dir, env_cfg, gains, body)
+    (html_type, html), (js_type, js), (_, core), (sky_type, sky) = _with_server(data_dir, env_cfg, gains, body)
     assert html_type.startswith("text/html") and b'"three": "./vendor/three.module.js"' in html
+    assert b'"three/addons/": "./vendor/addons/"' in html
+    assert sky_type == "text/javascript" and b"class Sky extends Mesh" in sky
     assert js_type == "text/javascript" and b"from './three.core.js'" in js
     assert b"REVISION = '186'" in core

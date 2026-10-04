@@ -89,7 +89,8 @@ flightsim/          # installable package (uv_build backend)
   envs/             # Gymnasium env, its config, policy adapters (PID, trim hold), episode metrics
   control/          # heading hold (step 1), PID autopilot (step 3), human pilot (step 5), gain-scheduled LQR
   stream/           # protocol, frame sources (replay, live PID), HTTP + WebSocket server
-  viewer/           # static Three.js app (no build step); three.js 0.186.1 vendored in viewer/vendor
+  viewer/           # static Three.js app (no build step); three.js 0.186.1 + Sky addon vendored in viewer/vendor
+                    #   terrain.js / scenery.js: procedural, seeded, visual-only scenery (airfield at 0 m = physics ground)
   analysis/         # mode identification, validation maneuvers, validation checks
   atmosphere/       # Dryden turbulence (MIL-F-8785C)
   batch.py          # parallel seeded episode batches
