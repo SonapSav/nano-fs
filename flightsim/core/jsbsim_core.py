@@ -6,15 +6,18 @@ nothing about wall-clock time: each `step` advances exactly one fixed `dt_s`.
 """
 
 import hashlib
+import math
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
 import jsbsim
+import numpy as np
 
-from flightsim.core.types import Controls, State
+from flightsim.core.types import Controls, LinearModel, MassProperties, State
 
 FT_TO_M = 0.3048
+IN_TO_M = 0.0254
 SLUG_TO_KG = 14.593902937
 LBF_TO_N = 4.4482216152605
 LBM_TO_KG = 0.45359237
@@ -31,6 +34,25 @@ _CONTROL_PROPS = {
     "flaps": "fcs/flap-cmd-norm",
     "pitch_trim": "fcs/pitch-trim-cmd-norm",
 }
+
+
+# JSBSim linearization state name -> (State field name, factor to SI)
+_LIN_STATES = {
+    "Vt": ("tas_mps", FT_TO_M),
+    "Alpha": ("alpha_rad", 1.0),
+    "Theta": ("theta_rad", 1.0),
+    "Q": ("q_radps", 1.0),
+    "Rpm0": ("engine_rpm", 1.0),
+    "Beta": ("beta_rad", 1.0),
+    "Phi": ("phi_rad", 1.0),
+    "P": ("p_radps", 1.0),
+    "Psi": ("psi_rad", 1.0),
+    "R": ("r_radps", 1.0),
+    "Latitude": ("lat_rad", 1.0),
+    "Longitude": ("lon_rad", 1.0),
+    "Alt": ("alt_msl_m", FT_TO_M),
+}
+_LIN_INPUTS = {"ThtlCmd": "throttle", "DaCmd": "aileron", "DeCmd": "elevator", "DrCmd": "rudder"}
 
 
 @dataclass(frozen=True)
@@ -88,8 +110,11 @@ class JSBSimCore:
         self._fdm.set_dt(dt_s)
         self._step_count = 0
 
-    def reset(self, ic: InitialConditions, loading: Loading = Loading()) -> State:
+    def reset(self, ic: InitialConditions, loading: Loading = Loading(), controls: Controls = Controls()) -> State:
+        """Set initial conditions, loading and control commands. `controls` are also the
+        starting point for `trim` (e.g. set flaps here to trim with flaps down)."""
         fdm = self._fdm
+        self._apply(controls)
         for i, kg in enumerate(loading.pointmasses_kg or ()):
             fdm[f"inertia/pointmass-weight-lbs[{i}]"] = kg / LBM_TO_KG
         for i, kg in enumerate(loading.fuel_tanks_kg or ()):
@@ -117,14 +142,45 @@ class JSBSimCore:
             raise TrimError(str(e)) from e
         return self.controls()
 
+    def _apply(self, controls: Controls) -> None:
+        for name, prop in _CONTROL_PROPS.items():
+            self._fdm[prop] = getattr(controls, name)
+
+    def mass_properties(self) -> MassProperties:
+        f = self._fdm
+        return MassProperties(
+            mass_kg=f["inertia/mass-slugs"] * SLUG_TO_KG,
+            cg_x_m=f["inertia/cg-x-in"] * IN_TO_M,
+            cg_y_m=f["inertia/cg-y-in"] * IN_TO_M,
+            cg_z_m=f["inertia/cg-z-in"] * IN_TO_M,
+        )
+
     def controls(self) -> Controls:
         return Controls(**{name: self._fdm[prop] for name, prop in _CONTROL_PROPS.items()})
 
+    def linearize(self) -> LinearModel:
+        """Linear model about the current state (call after `trim`), converted to SI."""
+        lin = jsbsim.FGLinearization(self._fdm)
+        # FGLinearization suspends integration (dt = 0) and resume_integration() does not
+        # undo it, so restore the timestep explicitly or later steps silently freeze.
+        self._fdm.set_dt(self.dt_s)
+        names, scale = zip(*(_LIN_STATES[n] for n in lin.x_names))
+        s = np.diag(scale)
+        s_inv = np.diag(1.0 / np.asarray(scale))
+        return LinearModel(
+            a=s @ lin.system_matrix @ s_inv,
+            b=s @ lin.input_matrix,
+            state_names=names,
+            input_names=tuple(_LIN_INPUTS[n] for n in lin.u_names),
+        )
+
     def step(self, controls: Controls) -> State:
-        for name, prop in _CONTROL_PROPS.items():
-            self._fdm[prop] = getattr(controls, name)
+        self._apply(controls)
+        t_before = self._fdm.get_sim_time()
         if not self._fdm.run():
             raise RuntimeError("JSBSim run() returned False")
+        if not math.isclose(self._fdm.get_sim_time() - t_before, self.dt_s, rel_tol=1e-9):
+            raise RuntimeError("JSBSim did not advance by dt (integration suspended?)")
         self._step_count += 1
         return self.state()
 

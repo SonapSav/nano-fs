@@ -1,0 +1,82 @@
+# Step 2 validation: JSBSim c172p against published data.
+#
+# Values are kept in the units of their source (kt, ft, in, lb) so they can be checked
+# line by line against the documents; the loader converts to SI. Every entry cites a
+# source listed in docs/REFERENCES.md.
+#
+# Tolerances state how far the model may be from the reference. A check that is
+# outside tolerance but understood is marked `known_deviation` with the reason: it is
+# reported (and run as a strict expected failure in the tests) rather than hidden by
+# widening the tolerance.
+
+aircraft: c172p
+
+sources:
+  poh: Cessna 172P Pilot's Operating Handbook (1981 and 1985 editions; tables identical)
+  aaib: AAIB Bulletin 12/2020, G-CBXJ (Cessna 172S flight trial)
+  mil: MIL-F-8785C, Flying Qualities of Piloted Airplanes (1980), Class I, Level 1
+
+cruise:
+  source: poh
+  ref: Figure 5-8, standard temperature, 2400 lb, recommended lean mixture
+  weight_lb: 2400
+  fuel_lb: 370            # model tank capacity is 2 x 185 lb
+  cg_in: 43.4             # middle of the 2400 lb envelope (39.5-47.3 in); Figure 5-8 does not state a CG
+  tolerance:
+    rpm: 50
+    power_pct: 3.0        # percentage points of rated 160 hp
+  points:
+    - {alt_ft: 4000, ktas: 96, rpm: 2200, power_pct: 54}
+    - {alt_ft: 4000, ktas: 102, rpm: 2300, power_pct: 59}
+    - {alt_ft: 6000, ktas: 95, rpm: 2200, power_pct: 52}
+    - {alt_ft: 6000, ktas: 101, rpm: 2300, power_pct: 57}
+
+stall:
+  source: poh
+  ref: Figure 5-3, power off, wings level, 2400 lb (KCAS; the POH notes KIAS is approximate)
+  weight_lb: 2400
+  alt_ft: 5000            # POH does not state an altitude; KCAS stall speed is nearly altitude-independent
+  tolerance_kcas: 3.0
+  # Section 2 CG limits at 2400 lb (normal category): forward 39.5 in, aft 47.3 in.
+  # The model's empty CG is aft of a typical 172P, so the forward limit needs low fuel.
+  cg_cases:
+    forward: {cg_in: 39.5, fuel_lb: 40}
+    aft: {cg_in: 47.3, fuel_lb: 370}
+  points:
+    - {cg: aft, flaps_deg: 0, kcas: 51, known_deviation: "model 54.4 KCAS, 3.4 kt fast: aerodynamic stall past CLmax (1.47 at 16 deg) with tail download at full up elevator"}
+    - {cg: aft, flaps_deg: 10, kcas: 48}
+    - {cg: aft, flaps_deg: 30, kcas: 46}
+    - {cg: forward, flaps_deg: 0, kcas: 52, known_deviation: "model 55.5 KCAS, 3.5 kt fast: elevator reaches full up before CLmax"}
+    - {cg: forward, flaps_deg: 10, kcas: 49}
+    - {cg: forward, flaps_deg: 30, kcas: 46, known_deviation: "model 50.7 KCAS, 4.7 kt fast: elevator-limited at forward CG with full flap"}
+
+phugoid_flight_test:
+  source: aaib
+  ref: Flight trial, Figure 5 (period 35-40 s stated; ~35 s and per-cycle amplitude ratio 0.41-0.47 read from the plot)
+  weight_lb: 2300
+  cg_in: 41.43
+  fuel_lb: 240            # not stated by AAIB; 240 lb is what makes 41.43 in reachable in the model
+  alt_ft: 3500            # from the plot's GPS altitude trace
+  trim_kias: 110          # model CAS used for KIAS (no instrument/position error modelled)
+  release_kias: 134       # released from a ~135 KIAS descent
+  period_s: 35.0
+  period_tolerance_pct: 15
+  zeta: 0.13
+  zeta_tolerance: 0.05
+  period_known_deviation: "model phugoid 27.8 s, about 21% shorter than the ~35 s flight test; damping matches"
+
+flying_qualities:
+  source: mil
+  ref: Category B (cruise) flight phase; Tables IV, VI, VII, VIII and 3.2.1.2
+  condition: {alt_ft: 5000, ktas: 100, weight_lb: 2400, cg_in: 43.4, fuel_lb: 370}
+  short_period_zeta: {min: 0.30, max: 2.00}       # Table IV
+  phugoid_zeta: {min: 0.04}                        # 3.2.1.2
+  dutch_roll_zeta: {min: 0.08}                     # Table VI
+  dutch_roll_zeta_wn_radps: {min: 0.15}            # Table VI
+  dutch_roll_wn_radps: {min: 0.4}                  # Table VI
+  roll_time_constant_s: {max: 1.4}                 # Table VII
+  spiral_time_to_double_s: {min: 20.0}             # Table VIII
+
+consistency:
+  # Internal check, no external source: linear model and nonlinear simulation agree.
+  phugoid_period_linear_vs_nonlinear_pct: 3.0

@@ -87,9 +87,11 @@ flightsim/          # installable package (uv_build backend)
   control/          # heading hold (step 1), PID baseline, manual input
   stream/           # WebSocket server
   viewer/           # Three.js app
+  analysis/         # mode identification, validation maneuvers, validation checks
   config.py         # YAML loading + config hash
   runner.py         # headless run loop
-configs/            # YAML run configs
+configs/            # YAML run configs; configs/validation/ holds reference data + tolerances
+docs/               # REFERENCES.md (sources), VALIDATION.md (generated)
 tests/
 scripts/            # run_headless.py, replay.py, batch_run.py
 ```
@@ -98,6 +100,12 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - Elevator command +: nose down. Aileron +: roll right. Rudder +: trailing edge left, nose LEFT (opposite of pedal intuition).
 - JSBSim trim adjusts throttle, `pitch_trim`, aileron and rudder; `elevator` stays 0. Controllers must output total commands (trim value + correction).
 - Body-axis accelerations in `State` are specific force (what an accelerometer reads): about -1 g on z in level flight.
+
+## JSBSim pitfalls (verified)
+- `FGLinearization` suspends integration (dt = 0) and `resume_integration()` does not undo it. Always linearize through `JSBSimCore.linearize()`, which restores dt; `step()` raises if JSBSim's clock did not advance by dt.
+- `run_ic()` keeps previous control commands. `JSBSimCore.reset()` therefore always applies a `Controls` (defaults unless given) so runs never depend on history.
+- `run_ic()` does not zero JSBSim's sim time; the core counts its own steps for `t_s`.
+- Model tank capacity is 185 lb each; larger loads are silently capped.
 
 ## How to work with me (Claude Code)
 - Start with step 1 only: scaffold the project, get a headless run working, log it, and confirm the log looks physically sensible before building further.
@@ -108,9 +116,11 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 
 ## Decisions
 - **Aircraft:** JSBSim `c172p`. Validation reference values in step 2 must come from a source matching this model.
+- **Validation deviations accepted (2026-10-04):** the 4 known deviations from step 2 (stall speeds 3.4-4.7 kt fast in 3 cases, phugoid period ~21% short) are accepted for now. A tuned copy of the aircraft model is a possible later, separate step. Controllers tuned on this model should be expected to meet a slower phugoid on the real aircraft.
 - **Research priority:** autopilot / control design first. The log schema should favor what control work needs: full state, control surface commands and positions, trim condition, and enough precision to fit dynamic modes. RL and pilot training come later.
 
 ## Progress
+- Step 2 (validation): done 2026-10-04. `scripts/validate.py` runs the checks in `configs/validation/c172p.yaml` and writes `docs/VALIDATION.md` (20 pass, 4 known deviations). Known deviations: stall speeds 3.4-4.7 kt fast in 3 of 6 cases; phugoid period 27.8 s vs ~35 s flight test (damping matches). Also qualitative: model spiral mode is stable at mid CG, the real aircraft's diverges. No independent C172 short-period measurement exists in open sources; only MIL-F-8785C limits are checked.
 - Step 1 (headless run + log): done 2026-10-04. `scripts/run_headless.py` trims at 5000 ft / 100 KTAS, holds heading for 300 s, writes `data/<run_id>.parquet`.
 
 ## Open questions
@@ -124,5 +134,6 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 
 ## Common commands
 - Local: `uv sync`, `uv run pytest`, `uv run python scripts/<script>.py`
+- Validation report: `uv run python scripts/validate.py` (regenerates `docs/VALIDATION.md`)
 - Logs go to `data/` (gitignored; `data/.gitkeep` is committed so Docker never creates it as root).
 - Docker: `docker compose build`, `docker compose run --rm sim pytest`, `docker compose run --rm sim python scripts/<script>.py`

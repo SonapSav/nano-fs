@@ -8,6 +8,8 @@ touching consumers.
 
 from dataclasses import dataclass, fields
 
+import numpy as np
+
 
 @dataclass(frozen=True)
 class Controls:
@@ -87,6 +89,34 @@ class State:
     wind_north_mps: float
     wind_east_mps: float
     wind_down_mps: float
+
+
+@dataclass(frozen=True)
+class MassProperties:
+    mass_kg: float
+    # Centre of gravity in the aircraft's structural frame: x aft, y right, z up, from the
+    # model's datum. For c172p this matches the Cessna datum (front face of firewall) to ~3 in.
+    cg_x_m: float
+    cg_y_m: float
+    cg_z_m: float
+
+
+@dataclass(frozen=True)
+class LinearModel:
+    """Small-perturbation model x_dot = A x + B u about a trim point, in SI units.
+
+    State and input names follow `State` and `Controls` field names.
+    """
+
+    a: np.ndarray
+    b: np.ndarray
+    state_names: tuple[str, ...]
+    input_names: tuple[str, ...]
+
+    def submatrix(self, names: tuple[str, ...]) -> np.ndarray:
+        """A restricted to the given states (e.g. the longitudinal set)."""
+        idx = [self.state_names.index(n) for n in names]
+        return self.a[np.ix_(idx, idx)]
 
 
 STATE_FIELDS = tuple(f.name for f in fields(State))
