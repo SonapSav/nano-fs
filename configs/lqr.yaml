@@ -1,0 +1,36 @@
+# Gain-scheduled LQR autopilot (flightsim/control/lqr.py).
+# Weights follow Bryson's rule: the largest acceptable deviation of each quantity.
+# Tuned 2026-10-04 on windy seeds 1000-1199 for bank parity with the PID autopilot
+# (compare on seeds 0-999, which tuning did not use).
+schedule:                       # design grid; covers the task envelope (alt 1074-1974 m +/- 150 m targets, TAS 46-56 m/s)
+  alt_msl_m: [800, 1300, 1800, 2300]
+  tas_mps: [44, 50, 56, 62]
+reference:                      # governor: references move toward the targets at these rates
+  max_climb_mps: 3.0            # ~590 ft/min, same limit as the PID autopilot
+  max_turn_rate_deg_s: 5.0      # upper limit; also limited by max_bank_deg at the current airspeed
+  max_bank_deg: 22              # steady-turn bank limit; 3 deg under the PID's 25 because the LQR overshoots its reference bank by a few degrees
+  max_climb_accel_mps2: 0.5     # climb rate builds up over ~6 s
+  max_turn_accel_deg_s2: 1.5    # roll-in to a 5 deg/s turn over ~3 s
+alt_error_clip_m: 30            # safety net: larger tracking errors are seen as 30 m
+heading_error_clip_deg: 20      # safety net: larger tracking errors are seen as 20 deg
+weights:
+  states:
+    tas_mps: 2.0
+    alpha_rad: 0.1
+    theta_rad: 0.2
+    q_radps: 0.3
+    beta_rad: 0.05
+    phi_rad: 0.1                # stiff roll regulation: matches the PID's bank excursions in turbulence
+    p_radps: 0.2
+    psi_rad: 0.1
+    r_radps: 0.3
+    alt_msl_m: 10
+  integrals:                    # of altitude (m s), airspeed (m), heading (rad s) errors
+    alt_msl_m: 100
+    tas_mps: 20
+    psi_rad: 1.0
+  inputs:
+    throttle: 0.3
+    aileron: 0.2
+    elevator: 0.2
+    rudder: 0.2

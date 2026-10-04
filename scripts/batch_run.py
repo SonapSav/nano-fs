@@ -43,7 +43,10 @@ def main() -> None:
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
                         help="override an env config value (dotted key, YAML value); part of the config hash")
     parser.add_argument("--policy", choices=POLICIES, default="pid")
-    parser.add_argument("--autopilot", default="configs/autopilot.yaml")
+    parser.add_argument("--autopilot", default="configs/autopilot.yaml", help="PID gains (policy pid)")
+    parser.add_argument("--lqr", default="configs/lqr.yaml", help="LQR config (policy lqr)")
+    parser.add_argument("--policy-set", action="append", default=[], metavar="KEY=VALUE",
+                        help="override a policy config value; part of the batch id")
     parser.add_argument("--seeds", default="0:100", help="start:stop or a comma-separated list")
     # Default: physical cores. Measured on a 6-core/12-thread Ryzen 5 5500U: 6 workers run
     # 4.6x faster than 1, and 12 are no faster than 6 (SMT does not help this workload).
@@ -53,7 +56,8 @@ def main() -> None:
     args = parser.parse_args()
 
     env_raw = load_raw(args.env_config, parse_overrides(args.set))
-    policy_raw = load_raw(args.autopilot) if args.policy == "pid" else None
+    policy_path = {"pid": args.autopilot, "lqr": args.lqr}.get(args.policy)
+    policy_raw = load_raw(policy_path, parse_overrides(args.policy_set)) if policy_path else None
     seeds = parse_seeds(args.seeds)
 
     def progress(done: int, total: int) -> None:

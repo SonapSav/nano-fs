@@ -87,7 +87,7 @@ flightsim/          # installable package (uv_build backend)
   core/             # JSBSim wrapper, State/Controls types (only place JSBSim is imported)
   datalog/          # schema + Parquet writer ("logging" would shadow the stdlib module)
   envs/             # Gymnasium env, its config, policy adapters (PID, trim hold), episode metrics
-  control/          # heading hold (step 1), PID autopilot (step 3), human pilot policy (step 5)
+  control/          # heading hold (step 1), PID autopilot (step 3), human pilot (step 5), gain-scheduled LQR
   stream/           # protocol, frame sources (replay, live PID), HTTP + WebSocket server
   viewer/           # static Three.js app (no build step); three.js 0.186.1 vendored in viewer/vendor
   analysis/         # mode identification, validation maneuvers, validation checks
@@ -112,6 +112,7 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - `run_ic()` keeps previous control commands. `JSBSimCore.reset()` therefore always applies a `Controls` (defaults unless given) so runs never depend on history.
 - `run_ic()` does not zero JSBSim's sim time; the core counts its own steps for `t_s`.
 - Model tank capacity is 185 lb each; larger loads are silently capped.
+- The linearization's engine RPM row is wrong: almost no self-damping (time constant ~11 min) while the nonlinear model settles in a few seconds. Do not use `engine_rpm` as a state in linear designs (the LQR leaves it out).
 - Steady wind at trim: `ic/vw-north-fps` ignores writes; set `ic/vw-mag-fps` + `ic/vw-dir-deg` (direction the air moves TOWARD) and then the ground velocity `ic/vn-fps`/`ic/ve-fps`/`ic/vd-fps` = air velocity + wind. Setting `ic/vt-fps` with wind gives a slipping, wrong-airspeed start, or a failed trim. `JSBSimCore.reset` handles this; calm resets keep the original path.
 - `atmosphere/gust-*-fps` survive `run_ic()`; `JSBSimCore.reset` zeroes them. Turbulence is ours (seeded, `flightsim/atmosphere/turbulence.py`), not JSBSim's `turb-type`.
 
@@ -137,7 +138,8 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - Local: `uv sync`, `uv run pytest`, `uv run python scripts/<script>.py`
 - Validation report: `uv run python scripts/validate.py` (regenerates `docs/VALIDATION.md`)
 - Controller comparison: `uv run python scripts/compare_controllers.py --episodes 100 [--log-dir data/episodes]`
-- Batch: `uv run python scripts/batch_run.py --seeds 0:1000 [--policy trim_hold] [--set wind.steady_speed_mps=[5,15]] [--logs]`
+- Batch: `uv run python scripts/batch_run.py --seeds 0:1000 [--policy pid|lqr|trim_hold] [--set wind.steady_speed_mps=[5,15]] [--policy-set weights.states.phi_rad=0.1] [--logs]`
+- Controller tuning: tune on seeds 1000+ and report on seeds 0-999 (held out). LQR gain schedules are cached in `data/cache/lqr/` (keyed by aircraft, JSBSim version, loading, LQR config and rate).
 - Logs go to `data/` (gitignored; `data/.gitkeep` is committed so Docker never creates it as root).
 - Viewer: `uv run python -m flightsim.stream` then open http://localhost:8686/ ; in Docker `docker compose up -d viewer` (published on all host interfaces)
 - Docker: `docker compose build`, `docker compose run --rm sim pytest`, `docker compose run --rm sim python scripts/<script>.py`

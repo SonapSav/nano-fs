@@ -27,6 +27,12 @@ class EpisodeMetrics:
     alt_settle_s: float  # time after which |alt error| stays within ALT_TOLERANCE_M (inf if never)
     heading_settle_s: float
     action_rate: float  # mean |change in action| per second, summed over channels
+    # How hard it was flown (decision-step samples):
+    max_bank_deg: float
+    min_load_factor: float  # g, from body z specific force
+    max_load_factor: float
+    max_abs_climb_mps: float
+    max_tas_dev_mps: float  # largest |airspeed - target|
 
 
 def _settle_time(t: np.ndarray, err: np.ndarray, tol: float) -> float:
@@ -43,6 +49,7 @@ def run_episode(env: AltitudeHeadingHoldEnv, policy: Policy, seed: int) -> Episo
     policy.reset(info)
     dt = 1.0 / env.cfg.control_rate_hz
     t, e_alt, e_hdg, e_tas, actions = [], [], [], [], []
+    bank, nz, climb = [], [], []
     total, reason = 0.0, None
     while True:
         action = np.asarray(policy(obs, info), dtype=np.float32)
@@ -54,6 +61,10 @@ def run_episode(env: AltitudeHeadingHoldEnv, policy: Policy, seed: int) -> Episo
         e_hdg.append(h)
         e_tas.append(v)
         actions.append(action)
+        s = info["state"]
+        bank.append(abs(s.phi_rad))
+        nz.append(-s.az_mps2 / 9.80665)
+        climb.append(abs(s.v_down_mps))
         if terminated or truncated:
             reason = info["termination_reason"]
             break
@@ -74,4 +85,9 @@ def run_episode(env: AltitudeHeadingHoldEnv, policy: Policy, seed: int) -> Episo
         alt_settle_s=_settle_time(t_arr, alt, ALT_TOLERANCE_M),
         heading_settle_s=_settle_time(t_arr, hdg, HEADING_TOLERANCE_RAD),
         action_rate=float(np.abs(np.diff(act, axis=0)).sum() / duration) if len(act) > 1 else 0.0,
+        max_bank_deg=math.degrees(max(bank)),
+        min_load_factor=min(nz),
+        max_load_factor=max(nz),
+        max_abs_climb_mps=max(climb),
+        max_tas_dev_mps=float(np.abs(tas).max()),
     )

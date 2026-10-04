@@ -12,7 +12,9 @@ from flightsim.control.autopilot import load_autopilot_gains
 from flightsim.datalog import make_run_id, write_log
 from flightsim.envs import AltitudeHeadingHoldEnv, load_env_config
 from flightsim.envs.evaluate import run_episode
-from flightsim.envs.policies import PIDPolicy, TrimHoldPolicy
+from flightsim.config import load_raw
+from flightsim.control.lqr import GainSchedule
+from flightsim.envs.policies import LQRPolicy, PIDPolicy, TrimHoldPolicy
 
 METRICS = [
     ("episode_return", "return", "{:9.1f}"),
@@ -24,6 +26,9 @@ METRICS = [
     ("alt_final_abs_m", "alt final m", "{:8.2f}"),
     ("heading_final_abs_deg", "hdg final deg", "{:8.2f}"),
     ("action_rate", "action rate/s", "{:8.3f}"),
+    ("max_bank_deg", "max bank deg", "{:8.1f}"),
+    ("max_load_factor", "max g", "{:8.2f}"),
+    ("max_abs_climb_mps", "max climb m/s", "{:8.1f}"),
 ]
 
 
@@ -31,6 +36,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--env-config", default="configs/envs/altitude_heading_hold.yaml")
     parser.add_argument("--autopilot", default="configs/autopilot.yaml")
+    parser.add_argument("--lqr", default="configs/lqr.yaml")
     parser.add_argument("--episodes", type=int, default=50)
     parser.add_argument("--first-seed", type=int, default=0)
     parser.add_argument("--log-dir", help="write each episode as <log-dir>/<policy>/<run_id>.parquet")
@@ -38,7 +44,12 @@ def main() -> None:
 
     cfg = load_env_config(args.env_config)
     env = AltitudeHeadingHoldEnv(cfg, record=bool(args.log_dir))
-    policies = [TrimHoldPolicy(), PIDPolicy(load_autopilot_gains(args.autopilot), cfg.control_rate_hz)]
+    schedule = GainSchedule.cached(cfg.aircraft, cfg.loading, load_raw(args.lqr), 1.0 / cfg.control_rate_hz)
+    policies = [
+        TrimHoldPolicy(),
+        PIDPolicy(load_autopilot_gains(args.autopilot), cfg.control_rate_hz),
+        LQRPolicy(schedule, cfg.control_rate_hz),
+    ]
     seeds = range(args.first_seed, args.first_seed + args.episodes)
     print(f"env config hash {cfg.config_hash[:12]}, {args.episodes} episodes (seeds {seeds.start}..{seeds.stop - 1}), "
           f"{cfg.episode_s:.0f} s each at {cfg.control_rate_hz:.0f} Hz decisions")

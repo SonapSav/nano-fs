@@ -37,6 +37,30 @@ owner before work can start.
   1000-episode PID batch: no early terminations, 150 never settled within 3 deg heading
   (130 in moderate turbulence).
 
+## Beyond the build order
+
+- [x] **Gain-scheduled LQR autopilot** (2026-10-04): `flightsim/control/lqr.py`,
+  `configs/lqr.yaml`, policy `lqr` in the batch runner and comparison script. Coupled
+  10-state LQR with integral action, discretized at 20 Hz, designed at a 4x4
+  (altitude, airspeed) grid from JSBSim linearizations; reference governor with
+  rate/acceleration-limited profiles and steady-turn/climb feedforward. Tuned on windy
+  seeds 1000-1199 for bank parity with the PID; results on held-out seeds 0-999
+  (batches `d274d9abd25d` PID, `e8302e39073a` LQR):
+
+  | 1000 windy episodes | PID | LQR |
+  |---|---|---|
+  | Mean return | -1416 | -1412 |
+  | Never settled (all / light / moderate) | 150 / 20 / 130 | 60 / 0 / 60 |
+  | Median heading settling | 98 s | 21 s |
+  | Airspeed RMS | 1.52 m/s | 1.13 m/s |
+  | Calm-air load factor p5-p95 | 0.65-1.34 g | 0.92-1.16 g |
+  | Bank p95 / max | 27.5 / 29.8 deg | 27.2 / 31.0 deg |
+  | Climb rate p95 | 5.4 m/s | 7.0 m/s |
+  | Control activity (action rate) | 0.28 | 0.85 |
+
+  Episode metrics now include peak bank, load factor range, climb rate and airspeed
+  deviation (batch summary format 2).
+
 ## Pending
 
 ### Next directions (pick one)
@@ -76,8 +100,25 @@ owner before work can start.
 
 ### Controller
 
-- [ ] PID heading does not settle within 3 deg in moderate turbulence (130 of 285 such
-  episodes in the 1000-episode batch). A target for a better controller.
+- [x] PID heading settling in turbulence (was 130 of 285 moderate-turbulence episodes
+  unsettled): the LQR halves it (60) and settles every light-turbulence episode.
+- [ ] LQR works the controls about 3x harder than the PID in turbulence (action rate
+  0.85 vs 0.28; 1.5 in moderate turbulence). Consider an input-rate penalty (augment
+  the design with input states) if actuator activity matters.
+- [ ] LQR overshoots its reference bank by a few degrees, so its governor bank limit is
+  22 deg to stay at the PID's ~25 deg envelope. A bank-angle protection or a
+  constrained design (MPC) would enforce it directly.
+- [ ] LQR climb-rate peaks in turbulence are higher than the PID's (p95 7.0 vs 5.4 m/s).
+- [ ] LQR episodes run at ~680x real time vs ~900x for the PID (per-step gain
+  interpolation in numpy); optimize only if batches get too slow.
+- [ ] Watch the LQR autopilot in the viewer (the live source flies the PID only).
+
+### Task and reward
+
+- [ ] **Needs decision:** the reward does not penalize aggressive manoeuvring (bank,
+  load factor, climb rate). An unconstrained LQR scored best by banking 50 deg and
+  pulling -0.4 to 2.9 g; an RL agent would exploit this too. Options: add penalties or
+  envelope terminations to the task (a new task config, so old results stay comparable).
 
 ### Manual control and environment actions
 
@@ -97,6 +138,11 @@ owner before work can start.
   all host interfaces, reachable from the local network.
 
 ### Data and logging
+
+- [ ] **Needs decision:** batch ids and logs record configs, aircraft and JSBSim versions
+  but not the flightsim code version. A code change with unchanged configs reuses the
+  same batch id (seen 2026-10-04). Option: record the git commit (and a dirty flag) in
+  manifests and log metadata.
 
 - [ ] Logs are 10.5 MB per 5 minutes (float64, zstd). For large batches, try Parquet
   `BYTE_STREAM_SPLIT` encoding on float columns (no schema change).

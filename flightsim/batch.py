@@ -30,17 +30,18 @@ from flightsim.datalog import SCHEMA_VERSION, make_run_id, write_log
 from flightsim.envs import AltitudeHeadingHoldEnv
 from flightsim.envs.config import env_config_from_raw
 from flightsim.envs.evaluate import run_episode
-from flightsim.envs.policies import PIDPolicy, TrimHoldPolicy
+from flightsim.control.lqr import GainSchedule
+from flightsim.envs.policies import LQRPolicy, PIDPolicy, TrimHoldPolicy
 
-POLICIES = ("pid", "trim_hold")
-BATCH_FORMAT = 1
+POLICIES = ("pid", "lqr", "trim_hold")
+BATCH_FORMAT = 2  # 2: lqr policy, envelope metrics columns
 
 
 def make_manifest(env_raw: dict, policy: str, policy_raw: dict | None, seeds: list[int], logs: bool) -> dict:
     if policy not in POLICIES:
         raise ValueError(f"unknown policy {policy!r}; choose from {POLICIES}")
-    if policy == "pid" and policy_raw is None:
-        raise ValueError("the pid policy needs autopilot gains")
+    if policy in ("pid", "lqr") and policy_raw is None:
+        raise ValueError(f"the {policy} policy needs its config")
     env_cfg = env_config_from_raw(env_raw)
     manifest = {
         "batch_format": BATCH_FORMAT,
@@ -60,6 +61,15 @@ def make_manifest(env_raw: dict, policy: str, policy_raw: dict | None, seeds: li
     return manifest
 
 
+def make_policy(policy: str, policy_raw: dict | None, cfg):
+    if policy == "pid":
+        return PIDPolicy(autopilot_gains_from_raw(policy_raw), cfg.control_rate_hz)
+    if policy == "lqr":
+        schedule = GainSchedule.cached(cfg.aircraft, cfg.loading, policy_raw, 1.0 / cfg.control_rate_hz)
+        return LQRPolicy(schedule, cfg.control_rate_hz)
+    return TrimHoldPolicy()
+
+
 # --- Worker side --------------------------------------------------------------------
 # Each process builds its environment and policy once, then runs episodes by seed.
 
@@ -69,9 +79,7 @@ _worker: dict = {}
 def _init_worker(env_raw: dict, policy: str, policy_raw: dict | None, logs_dir: str | None) -> None:
     cfg = env_config_from_raw(env_raw)
     _worker["env"] = AltitudeHeadingHoldEnv(cfg, record=logs_dir is not None)
-    _worker["policy"] = (
-        PIDPolicy(autopilot_gains_from_raw(policy_raw), cfg.control_rate_hz) if policy == "pid" else TrimHoldPolicy()
-    )
+    _worker["policy"] = make_policy(policy, policy_raw, cfg)
     _worker["logs_dir"] = Path(logs_dir) if logs_dir else None
 
 
@@ -100,6 +108,8 @@ SUMMARY_SCHEMA = pa.schema(
         ("alt_rms_m", pa.float64()), ("heading_rms_deg", pa.float64()), ("tas_rms_mps", pa.float64()),
         ("alt_final_abs_m", pa.float64()), ("heading_final_abs_deg", pa.float64()),
         ("alt_settle_s", pa.float64()), ("heading_settle_s", pa.float64()), ("action_rate", pa.float64()),
+        ("max_bank_deg", pa.float64()), ("min_load_factor", pa.float64()), ("max_load_factor", pa.float64()),
+        ("max_abs_climb_mps", pa.float64()), ("max_tas_dev_mps", pa.float64()),
     ]
 )  # fmt: skip
 
