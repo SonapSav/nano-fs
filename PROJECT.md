@@ -114,12 +114,43 @@ owner before work can start.
 
 ### Next directions (pick one)
 
-- [ ] **Residual RL on the LQR** (authorized 2026-10-04, in progress): `flightsim/rl/residual.py`,
+- [ ] **After residual RL (2026-10-05), needs decision.** On this task neither plain
+  PPO nor residual RL beats the LQR/PID (about -1470 on seeds 3000-3999). Options:
+  (a) residual on the reference governor instead (let the agent adjust the commanded
+  climb/turn profile, where the cost is); (b) a harder task where the LQR is weak
+  (strong turbulence, large disturbances, engine-out glide, approach); (c) treat the
+  LQR as the reference controller and move to other work (second aircraft, HOTAS,
+  takeoff/landing). Recommendation: (c) for now, or (b) if RL remains a goal.
+
+- [x] **Residual RL on the LQR** (2026-10-05, authorized; `dff26ab`): `flightsim/rl/residual.py`,
   `configs/rl/residual_lqr.yaml`. Command = LQR + agent correction (at most +/-0.2 per
   control); the agent also observes the LQR command; zero correction is exactly the LQR
   (tested). Rewards normalized but unclipped, learning rate 1e-4, best model picked on
-  50 seeds. Model directories carry `residual.json`, so `--policy rl --rl-model <dir>`
-  rebuilds LQR + agent. Training 90 min, then evaluation on seeds 3000-3999.
+  50 seeds (1000-1049). Model directories carry `residual.json`, so
+  `--policy rl --rl-model <dir>` rebuilds LQR + agent.
+  Run `bb4692c0bcb1`: 90 min, 11.3 M steps, no terminations in any evaluation. Training
+  was healthy (value function explained >99% of return variance, small stable updates),
+  but evaluation on seeds 1000-1049 started at -1507 (the LQR), drifted to -1609 by 5 M
+  and recovered only to about -1570 by 11 M; the best model is the step-0 network.
+  Seeds 3000-3999, comfort task:
+
+  | Policy | Return | Median | Comfort | Ended early | TAS RMS | Hdg RMS | Alt RMS | Activity |
+  |---|---|---|---|---|---|---|---|---|
+  | LQR `9368815af54f` | -1479 | -1342 | -18.5 | 0 | 1.24 | 14.9 | 26.1 | 0.78 |
+  | PID `f9f9a8fd6be1` | -1468 | -1309 | -26.6 | 0 | 1.56 | 14.4 | 26.5 | 0.29 |
+  | Residual best (step 0) `39d4075c6430` | -1479 | -1342 | -18.6 | 0 | 1.24 | 14.9 | 26.0 | 0.78 |
+  | Residual final (11.3 M) `730e9e050213` | -1551 | -1390 | -18.6 | 0 | 1.21 | 15.1 | 27.3 | 1.00 |
+
+  Paired with the LQR on the same seeds: final -71.9 per episode (95% CI +/-9.2),
+  better on 14% of seeds; step-0 model +0.4 (identical to the LQR in practice).
+  **Result: residual RL keeps the LQR's safety (no terminations, unlike plain PPO's
+  11-129) but does not improve on it.** The pre-authorized extra 90 min was not used:
+  the late trend was only a slow recovery toward the LQR (about 6 points per M steps).
+  Likely reason: most of the task cost is the transient to targets up to 150 m and
+  75 deg away, whose speed is set by the LQR's reference governor (climb and turn
+  rate limits) and the comfort penalties, not by the inner loop the residual corrects.
+  The inner loop is already close to optimal for this quadratic-like cost, so the
+  agent's corrections mostly add noise (more control activity, slightly worse altitude).
 - [ ] **Tuned aircraft model** to close the step 2 deviations, as a separate copy of
   `c172p` (see "Aircraft model fidelity"). Decided 2026-10-04: deviations accepted for
   now, tuning is a possible later step.
