@@ -73,11 +73,11 @@ def make_policy(policy: str, policy_raw: dict | None, cfg):
         schedule = GainSchedule.cached(cfg.aircraft, cfg.loading, policy_raw, 1.0 / cfg.control_rate_hz)
         return LQRPolicy(schedule, cfg.control_rate_hz)
     if policy == "rl":
-        from flightsim.rl.policy import RLPolicy, model_identity  # torch only when needed
+        from flightsim.rl.policy import load_policy, model_identity  # torch only when needed
 
         if model_identity(policy_raw["model_dir"]) != policy_raw:
             raise ValueError(f"model files in {policy_raw['model_dir']} do not match the recorded hashes")
-        return RLPolicy.load(policy_raw["model_dir"])
+        return load_policy(policy_raw["model_dir"], cfg)
     return TrimHoldPolicy()
 
 

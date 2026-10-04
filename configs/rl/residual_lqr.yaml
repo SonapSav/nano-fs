@@ -1,0 +1,23 @@
+# Residual RL on the LQR (2026-10-04, after PPO runs 1 and 2; see PROJECT.md).
+# The agent adds a correction of at most +/-scale (normalized command units) to each LQR
+# command and also observes the LQR's command (flightsim/rl/residual.py). A fresh PPO
+# network outputs almost zero, so training starts at LQR performance.
+# Differences from ppo_comfort.yaml, from what runs 1 and 2 showed:
+#   - rewards normalized but not clipped (run 1 clipped the termination charge to about
+#     one bad step; run 2 dropped normalization and its value targets were poorly scaled)
+#   - lower learning rate: fine-tuning around a working controller
+#   - best model picked on 50 tuning seeds instead of 20 (20 was too noisy)
+base: ppo_comfort.yaml
+
+residual:
+  lqr_config: ../lqr.yaml
+  scale: 0.2                    # a tenth of full travel per control
+
+ppo:
+  learning_rate: 1.0e-4
+
+normalize:
+  clip_rewards: 1.0e+6          # normalized, effectively unclipped
+
+evaluation:
+  seeds: [1000, 1050]

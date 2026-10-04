@@ -114,10 +114,12 @@ owner before work can start.
 
 ### Next directions (pick one)
 
-- [ ] **Residual RL** (recommended next RL step after run 2): the agent learns small
-  corrections on top of the LQR (faster learning, starts from a controller with no
-  terminations). Also: larger evaluation set for picking "best" (e.g. 100 seeds),
-  learning-rate decay. **Needs decision:** compute.
+- [ ] **Residual RL on the LQR** (authorized 2026-10-04, in progress): `flightsim/rl/residual.py`,
+  `configs/rl/residual_lqr.yaml`. Command = LQR + agent correction (at most +/-0.2 per
+  control); the agent also observes the LQR command; zero correction is exactly the LQR
+  (tested). Rewards normalized but unclipped, learning rate 1e-4, best model picked on
+  50 seeds. Model directories carry `residual.json`, so `--policy rl --rl-model <dir>`
+  rebuilds LQR + agent. Training 90 min, then evaluation on seeds 3000-3999.
 - [ ] **Tuned aircraft model** to close the step 2 deviations, as a separate copy of
   `c172p` (see "Aircraft model fidelity"). Decided 2026-10-04: deviations accepted for
   now, tuning is a possible later step.

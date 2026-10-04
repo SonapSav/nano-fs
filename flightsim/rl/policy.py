@@ -3,15 +3,19 @@ autopilots (same environment interface, decision rate, batch runner and metrics)
 
 A model directory holds `model.zip` (the SB3 model) and `obs_rms.npz` (the observation
 normalization statistics from training, applied here the way VecNormalize applied them).
+A residual agent's directory also holds `residual.json` (scale and LQR config): the
+agent then corrects the LQR's commands (see flightsim/rl/residual.py).
 """
 
 import hashlib
+import json
 from pathlib import Path
 
 import numpy as np
 
 MODEL_FILE = "model.zip"
 OBS_RMS_FILE = "obs_rms.npz"
+RESIDUAL_FILE = "residual.json"
 
 
 def file_sha256(path: str | Path) -> str:
@@ -22,11 +26,26 @@ def model_identity(model_dir: str | Path) -> dict:
     """Config for the batch runner: the directory plus content hashes, so a batch id
     identifies the exact network and normalization."""
     d = Path(model_dir)
-    return {
+    ident = {
         "model_dir": str(d),
         "model_sha256": file_sha256(d / MODEL_FILE),
         "obs_rms_sha256": file_sha256(d / OBS_RMS_FILE),
     }
+    if (d / RESIDUAL_FILE).is_file():
+        ident["residual_sha256"] = file_sha256(d / RESIDUAL_FILE)
+    return ident
+
+
+def load_policy(model_dir: str | Path, env_cfg):
+    """The policy a model directory defines: the agent alone, or the LQR plus its residual."""
+    agent = RLPolicy.load(model_dir)
+    spec = Path(model_dir) / RESIDUAL_FILE
+    if not spec.is_file():
+        return agent
+    from flightsim.rl.residual import ResidualPolicy, make_lqr_policy
+
+    residual = json.loads(spec.read_text())
+    return ResidualPolicy(agent, make_lqr_policy(env_cfg, residual["lqr"]), residual["scale"])
 
 
 def save_obs_rms(path: str | Path, mean: np.ndarray, var: np.ndarray, clip: float, epsilon: float) -> None:

@@ -4,7 +4,8 @@ A run directory <out_dir>/<run_id>/ gets:
   config.json        resolved training config (including the full env config) and versions
   progress.csv       SB3 training log
   evaluation.csv     periodic deterministic evaluation on fixed tuning seeds
-  best/              model.zip + obs_rms.npz with the best evaluation return so far
+  best/              model.zip + obs_rms.npz (+ residual.json for a residual agent) with
+                     the best evaluation return so far
   final/             the same at the end of training
   checkpoints/       periodic snapshots
   summary.json       timesteps, wall time, stop reason, best evaluation
@@ -29,37 +30,47 @@ from flightsim.envs import AltitudeHeadingHoldEnv
 from flightsim.envs.config import env_config_from_raw
 from flightsim.envs.evaluate import run_episode
 from flightsim.provenance import code_version
-from flightsim.rl.policy import OBS_RMS_FILE, RLPolicy, save_obs_rms
+from flightsim.rl.policy import OBS_RMS_FILE, RESIDUAL_FILE, RLPolicy, save_obs_rms
 
 
 def load_training_config(path: str | Path, overrides: dict | None = None) -> dict:
-    """Training config with its env config resolved inline (so the hash covers it).
-    Overrides starting with "env." apply to the env config."""
+    """Training config with its env config (and a residual agent's LQR config) resolved
+    inline, so the hash covers them. Overrides starting with "env." apply to the env config."""
     path = Path(path)
     overrides = overrides or {}
     env_overrides = {k[len("env."):]: v for k, v in overrides.items() if k.startswith("env.")}
     raw = load_raw(path, {k: v for k, v in overrides.items() if not k.startswith("env.")})
     raw["env"] = load_raw(path.parent / raw.pop("env_config"), env_overrides)
+    if "residual" in raw:
+        raw["residual"]["lqr"] = load_raw(path.parent / raw["residual"].pop("lqr_config"))
     return raw
 
 
-def _make_env(env_raw: dict, reward_scale: float):
+def _make_env(env_raw: dict, reward_scale: float, residual: dict | None = None):
     def factory():
         from gymnasium.wrappers import TransformReward
         from stable_baselines3.common.monitor import Monitor
 
-        # Monitor first, so logged episode returns are the task's true (unscaled) returns.
-        env = Monitor(AltitudeHeadingHoldEnv(env_config_from_raw(env_raw)))
+        cfg = env_config_from_raw(env_raw)
+        env = AltitudeHeadingHoldEnv(cfg)
+        if residual is not None:
+            from flightsim.rl.residual import ResidualEnv, make_lqr_policy
+
+            env = ResidualEnv(env, make_lqr_policy(cfg, residual["lqr"]), residual["scale"])
+        # Monitor before scaling, so logged episode returns are the task's true (unscaled) returns.
+        env = Monitor(env)
         return TransformReward(env, lambda r: r * reward_scale) if reward_scale != 1.0 else env
 
     return factory
 
 
-def _save(model, vec_normalize, directory: Path) -> None:
+def _save(model, vec_normalize, directory: Path, residual: dict | None = None) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     model.save(directory / "model.zip")
     rms = vec_normalize.obs_rms
     save_obs_rms(directory / OBS_RMS_FILE, rms.mean, rms.var, vec_normalize.clip_obs, vec_normalize.epsilon)
+    if residual is not None:
+        (directory / RESIDUAL_FILE).write_text(json.dumps(residual, indent=2, sort_keys=True) + "\n")
 
 
 def evaluate(policy, env_raw: dict, seeds: range) -> dict:
@@ -101,7 +112,14 @@ def train(config_path: str | Path, out_dir: str | Path = "data/rl", overrides: d
     # Fixed reward scaling (instead of, or as well as, normalization) keeps the ratio between
     # step costs and the termination charge exactly as the task defines it.
     reward_scale = float(norm.get("reward_scale", 1.0))
-    venv = SubprocVecEnv([_make_env(cfg["env"], reward_scale) for _ in range(cfg["n_envs"])], start_method="forkserver")
+    residual = cfg.get("residual")
+    base_policy = None
+    if residual is not None:
+        from flightsim.rl.residual import make_lqr_policy
+
+        # Design (or load) the LQR schedule here once, so the environment workers find it cached.
+        base_policy = make_lqr_policy(env_config_from_raw(cfg["env"]), residual["lqr"])
+    venv = SubprocVecEnv([_make_env(cfg["env"], reward_scale, residual) for _ in range(cfg["n_envs"])], start_method="forkserver")
     venv = VecNormalize(
         venv, norm_obs=norm["observations"], norm_reward=norm["rewards"],
         clip_obs=norm["clip_observations"], clip_reward=norm["clip_rewards"], gamma=ppo["gamma"],
@@ -125,6 +143,10 @@ def train(config_path: str | Path, out_dir: str | Path = "data/rl", overrides: d
     def run_evaluation(timesteps: int) -> None:
         rms = venv.obs_rms
         policy = RLPolicy(model, rms.mean.copy(), rms.var.copy(), venv.clip_obs, venv.epsilon)
+        if residual is not None:
+            from flightsim.rl.residual import ResidualPolicy
+
+            policy = ResidualPolicy(policy, base_policy, residual["scale"])
         result = {"timesteps": timesteps, "wall_s": round(time.monotonic() - t_start, 1), **evaluate(policy, cfg["env"], eval_seeds)}
         new = not eval_file.exists()
         with eval_file.open("a", newline="") as f:
@@ -135,7 +157,7 @@ def train(config_path: str | Path, out_dir: str | Path = "data/rl", overrides: d
         if result["mean_return"] > state["best"]:
             state["best"] = result["mean_return"]
             state["best_timesteps"] = timesteps
-            _save(model, venv, run_dir / "best")
+            _save(model, venv, run_dir / "best", residual)
         print(f"[{result['wall_s']:7.0f} s] {timesteps:>10,} steps: eval return {result['mean_return']:9.1f} "
               f"(worst {result['worst_return']:9.1f}), ended {result['terminated']}, unsettled {result['never_settled']}", flush=True)  # fmt: skip
 
@@ -145,7 +167,7 @@ def train(config_path: str | Path, out_dir: str | Path = "data/rl", overrides: d
                 run_evaluation(self.num_timesteps)
                 state["next_eval"] = self.num_timesteps + ev["every_timesteps"]
             if self.num_timesteps >= state["next_checkpoint"]:
-                _save(model, venv, run_dir / "checkpoints" / f"{self.num_timesteps}")
+                _save(model, venv, run_dir / "checkpoints" / f"{self.num_timesteps}", residual)
                 state["next_checkpoint"] += cfg["checkpoint_every_timesteps"]
             if time.monotonic() > deadline:
                 state["stop"] = "wall_clock_limit"
@@ -155,7 +177,7 @@ def train(config_path: str | Path, out_dir: str | Path = "data/rl", overrides: d
     try:
         model.learn(total_timesteps=cfg["total_timesteps"], callback=Control())
         run_evaluation(model.num_timesteps)
-        _save(model, venv, run_dir / "final")
+        _save(model, venv, run_dir / "final", residual)
     finally:
         venv.close()
     summary = {

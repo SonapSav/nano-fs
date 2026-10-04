@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -112,3 +113,79 @@ def test_v2_config_differs_from_v1_only_in_reward_handling():
     v2 = load_training_config(RL_CONFIG.parent / "ppo_comfort_v2.yaml")
     assert v2["normalize"]["rewards"] is False and v2["normalize"]["reward_scale"] == 0.1
     assert {k: v for k, v in v1.items() if k != "normalize"} == {k: v for k, v in v2.items() if k != "normalize"}
+
+
+# --- Residual RL on the LQR -----------------------------------------------------------
+
+RESIDUAL_CONFIG = RL_CONFIG.parent / "residual_lqr.yaml"
+
+
+def _lqr_and_env(seconds: float):
+    from flightsim.rl.residual import make_lqr_policy
+
+    cfg = load_env_config(COMFORT, {"episode_s": seconds})
+    return cfg, make_lqr_policy(cfg, load_raw(ROOT / "configs" / "lqr.yaml"))
+
+
+def test_residual_config_inlines_the_lqr_config_and_does_not_clip_rewards():
+    cfg = load_training_config(RESIDUAL_CONFIG)
+    assert cfg["residual"]["lqr"] == load_raw(ROOT / "configs" / "lqr.yaml")
+    assert cfg["normalize"]["rewards"] is True and cfg["normalize"]["clip_rewards"] == 1.0e6
+    assert cfg["evaluation"]["seeds"] == [1000, 1050]
+
+
+def test_combine_scales_and_clips():
+    from flightsim.rl.residual import combine
+
+    out = combine(np.array([0.9, -0.5, 0.0, 0.1], dtype=np.float32), np.array([1.0, -1.0, 0.5, 0.0]), 0.2)
+    np.testing.assert_allclose(out, [1.0, -0.7, 0.1, 0.1], atol=1e-6)
+
+
+def test_zero_residual_flies_exactly_like_the_lqr():
+    from flightsim.rl.residual import ResidualEnv, ResidualPolicy
+
+    cfg, lqr = _lqr_and_env(10.0)
+    alone = run_episode(AltitudeHeadingHoldEnv(cfg), lqr, 4)
+
+    class Zero:
+        def reset(self, info):
+            pass
+
+        def __call__(self, obs, info):
+            assert obs.shape == (20,)  # task observation + LQR action
+            return np.zeros(4, dtype=np.float32)
+
+    as_policy = run_episode(AltitudeHeadingHoldEnv(cfg), ResidualPolicy(Zero(), lqr, 0.2), 4)
+    assert replace(as_policy, policy="lqr") == alone  # identical flight; only the name differs
+
+    env = ResidualEnv(AltitudeHeadingHoldEnv(cfg), lqr, 0.2)
+    obs, _ = env.reset(seed=4)
+    total, done = 0.0, False
+    while not done:
+        obs, reward, terminated, truncated, _ = env.step(np.zeros(4, dtype=np.float32))
+        total += reward
+        done = terminated or truncated
+    assert total == alone.episode_return
+
+
+@pytest.fixture(scope="module")
+def tiny_residual_run(tmp_path_factory):
+    return train(RESIDUAL_CONFIG, tmp_path_factory.mktemp("rl_residual"), TINY)
+
+
+def test_residual_run_saves_its_spec_and_the_batch_runner_rebuilds_the_controller(tiny_residual_run, tmp_path):
+    from flightsim.rl.policy import load_policy
+    from flightsim.rl.residual import ResidualPolicy
+
+    best = tiny_residual_run / "best"
+    spec = json.loads((best / "residual.json").read_text())
+    assert spec["scale"] == 0.2 and spec["lqr"] == load_raw(ROOT / "configs" / "lqr.yaml")
+    ident = model_identity(best)
+    assert "residual_sha256" in ident
+    cfg = load_env_config(COMFORT, {"episode_s": 5.0})
+    policy = load_policy(best, cfg)
+    assert isinstance(policy, ResidualPolicy)
+    a, b = run_episode(AltitudeHeadingHoldEnv(cfg), policy, 3), run_episode(AltitudeHeadingHoldEnv(cfg), policy, 3)
+    assert a == b
+    _, manifest, table = run_batch(load_raw(COMFORT, {"episode_s": 5.0}), "rl", ident, [0, 1], tmp_path, workers=1)
+    assert manifest["policy_config"]["residual_sha256"] == ident["residual_sha256"] and table.num_rows == 2
