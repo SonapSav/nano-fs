@@ -28,17 +28,48 @@ const WHITE = 0xf2f2ee;
 const STRIPE = 0x1f3a6b; // dark blue cheat line
 const STRIPE2 = 0xb3262e; // red pinstripe
 const GLASS = 0x1b2630;
+const REG_COLOUR = 0x1f2933;
 
-function paintedMaterial() {
-  // Fuselage paint from structural coordinates: cheat line, pinstripe, windows, windscreen.
+export const REGISTRATION = "SX-123"; // painted on both sides of the rear fuselage
+// Registration area on the tail cone (structural inches): letters about 12 in (30 cm,
+// the ICAO Annex 7 minimum on the fuselage) high, below the cheat line, which sweeps up
+// over them toward the tail.
+const REG = { x0: 124, x1: 198, z0: 23.5, z1: 37 };
+
+function registrationTexture(text) {
+  const c = document.createElement("canvas");
+  c.width = 1024;
+  c.height = Math.round((1024 * (REG.z1 - REG.z0)) / (REG.x1 - REG.x0));
+  const g = c.getContext("2d");
+  g.fillStyle = "#fff";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  let size = c.height * 0.92; // fit the height, then shrink to fit the width
+  g.font = `bold ${size}px "Helvetica Neue", Arial, sans-serif`;
+  const w = g.measureText(text).width;
+  if (w > c.width * 0.96) {
+    size *= (c.width * 0.96) / w;
+    g.font = `bold ${size}px "Helvetica Neue", Arial, sans-serif`;
+  }
+  g.fillText(text, c.width / 2, c.height / 2 + size * 0.04);
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 4;
+  return tex;
+}
+
+function paintedMaterial(registration) {
+  // Fuselage paint from structural coordinates: cheat line, pinstripe, windows, windscreen,
+  // registration.
   const m = new THREE.MeshLambertMaterial({ color: WHITE, side: THREE.DoubleSide });
   m.onBeforeCompile = (shader) => {
+    shader.uniforms.regTex = { value: registrationTexture(registration) }; // created on first render (needs a document)
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nattribute vec4 aPaint;\nvarying vec4 vPaint;")
       .replace("#include <begin_vertex>", "#include <begin_vertex>\nvPaint = aPaint;");
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", `#include <common>
-varying vec4 vPaint; // structural x, |y|, z (inches) and ring position (0 bottom, 0.5 top)
+varying vec4 vPaint; // structural x, y, z (inches) and ring position (0 bottom, 0.5 top)
+uniform sampler2D regTex;
 float box(vec2 p, vec2 lo, vec2 hi, float r) {
   vec2 c = (lo + hi) * 0.5, h = (hi - lo) * 0.5 - r;
   vec2 d = abs(p - c) - h;
@@ -46,10 +77,10 @@ float box(vec2 p, vec2 lo, vec2 hi, float r) {
 }`)
       .replace("#include <color_fragment>", `#include <color_fragment>
 {
-  float x = vPaint.x, ay = vPaint.y, z = vPaint.z, a = vPaint.w;
+  float x = vPaint.x, ay = abs(vPaint.y), z = vPaint.z, a = vPaint.w;
   float aa = fwidth(a) + 1e-4, ax = fwidth(x) + 1e-3;
   // Cheat line rising toward the tail, with a red pinstripe above it.
-  float lift = 0.07 * smoothstep(120.0, 250.0, x);
+  float lift = 0.12 * smoothstep(105.0, 200.0, x);
   float band = smoothstep(0.205 + lift - aa, 0.205 + lift, a) - smoothstep(0.245 + lift, 0.245 + lift + aa, a);
   float pin = smoothstep(0.255 + lift - aa, 0.255 + lift, a) - smoothstep(0.264 + lift, 0.264 + lift + aa, a);
   float tail = step(-34.0, x);
@@ -65,6 +96,14 @@ float box(vec2 p, vec2 lo, vec2 hi, float r) {
   float screen = smoothstep(8.0, 9.5, x) * (1.0 - smoothstep(28.5, 30.0, x)) * smoothstep(45.5, 47.0, z);
   float rear = smoothstep(93.0, 95.0, x) * (1.0 - smoothstep(126.0, 128.0, x)) * (1.0 - smoothstep(12.0, 14.0, ay)) * smoothstep(51.0, 52.5, z);
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${new THREE.Color(GLASS).toArray().join(",")}), clamp(glass + screen + rear, 0.0, 1.0));
+  // Registration: reads left to right for a viewer on either side (nose to tail on the
+  // left side, tail to nose on the right).
+  if (x > ${REG.x0.toFixed(1)} && x < ${REG.x1.toFixed(1)} && z > ${REG.z0.toFixed(1)} && z < ${REG.z1.toFixed(1)} && ay > 2.0) {
+    float u = (x - ${REG.x0.toFixed(1)}) / ${(REG.x1 - REG.x0).toFixed(1)};
+    if (vPaint.y > 0.0) u = 1.0 - u;
+    float ink = texture2D(regTex, vec2(u, (z - ${REG.z0.toFixed(1)}) / ${(REG.z1 - REG.z0).toFixed(1)})).r;
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${new THREE.Color(REG_COLOUR).toArray().join(",")}), ink);
+  }
 }`);
   };
   return m;
@@ -97,7 +136,7 @@ function fuselage(stations, material, steps = 6, ring = 48) {
       const y = r.w * Math.sign(s) * Math.abs(s) ** e, z = zc - h * Math.sign(c) * Math.abs(c) ** e;
       pos.push(...toBody(r.x, y, z).toArray());
       const a = k / ring;
-      paint.push(r.x, Math.abs(y), z, a <= 0.5 ? a : 1 - a);
+      paint.push(r.x, y, z, a <= 0.5 ? a : 1 - a);
     }
   }
   for (let i = 0; i < rows.length - 1; i++) {
@@ -207,7 +246,7 @@ function wheel(center, radius, width, material) {
 
 // --- The aircraft -----------------------------------------------------------------------
 
-export function buildC172() {
+export function buildC172({ registration = REGISTRATION } = {}) {
   const group = new THREE.Group();
   const white = new THREE.MeshLambertMaterial({ color: WHITE, side: THREE.DoubleSide });
   const grey = new THREE.MeshLambertMaterial({ color: 0x5c6166 });
@@ -233,7 +272,7 @@ export function buildC172() {
     { x: 235, w: 5.5, zb: 26, zt: 39, n: 2.2 },
     { x: 255, w: 3.8, zb: 28.5, zt: 37, n: 2.2 },
     { x: 272, w: 1.5, zb: 30.5, zt: 35.5, n: 2.0 },
-  ], paintedMaterial()));
+  ], paintedMaterial(registration)));
 
   // Spinner (red) ahead of the cowling, on the thrust line.
   const spinnerProfile = [];
