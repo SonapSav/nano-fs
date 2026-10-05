@@ -400,7 +400,7 @@ owner before work can start.
   their logged positions (signs tested); the propeller shows as a disc when turning.
   Default chase distance 22 m (was 32), zoom in to 8 m.
 - [x] **Registration and sound** (2026-10-05). SX-123 painted on both sides of the rear
-  fuselage (about 12 in, the ICAO Annex 7 minimum; `REGISTRATION` in aircraft.js), reading
+  fuselage (about 10 in, aft on the tail cone clear of the stripes; `REGISTRATION` in aircraft.js), reading
   left to right from either side. Sound (`flightsim/viewer/sound.js`, Web Audio, no
   files): engine tone at the firing frequency rpm/30 (O-320, 4 cylinders) with
   combustion noise, brighter with power; wind rising with airspeed; flap motor while

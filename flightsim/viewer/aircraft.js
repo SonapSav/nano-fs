@@ -31,10 +31,9 @@ const GLASS = 0x1b2630;
 const REG_COLOUR = 0x1f2933;
 
 export const REGISTRATION = "SX-123"; // painted on both sides of the rear fuselage
-// Registration area on the tail cone (structural inches): letters about 12 in (30 cm,
-// the ICAO Annex 7 minimum on the fuselage) high, below the cheat line, which sweeps up
-// over them toward the tail.
-const REG = { x0: 124, x1: 198, z0: 23.5, z1: 37 };
+// Registration area on the tail cone (structural inches): letters about 10 in (25 cm)
+// high, aft of where the cheat line has swept up, so they sit clear below it.
+const REG = { x0: 160, x1: 218, z0: 25, z1: 35 };
 
 function registrationTexture(text) {
   const c = document.createElement("canvas");
