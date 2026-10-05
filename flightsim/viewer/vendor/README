@@ -1,3 +1,7 @@
 three.js 0.186.1 (npm 'three'), unmodified. MIT license: three.LICENSE
 - build/three.module.js, build/three.core.js
 - addons/objects/Sky.js (examples/jsm/objects/Sky.js), imported as three/addons/objects/Sky.js
+
+Barlow Condensed (Google Fonts v13, weights 400/500/600, latin subset), unmodified.
+SIL Open Font License 1.1: fonts/OFL.txt. fonts/barlow-condensed.css holds the
+@font-face rules from Google Fonts with local file names.

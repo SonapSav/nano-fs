@@ -188,6 +188,31 @@ def test_viewer_is_served_with_vendored_three(logged_episode, env_cfg, gains):
     assert b"REVISION = '186'" in core
 
 
+def test_viewer_works_offline_with_the_vendored_font(logged_episode, env_cfg, gains):
+    """No external resources: the font is served locally, with its licence."""
+    import re
+
+    data_dir, _ = logged_episode
+
+    async def body(port):
+        def get(path):
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as r:
+                return r.headers["Content-Type"], r.read()
+
+        def fetch_all():
+            html = get("/")[1].decode()
+            css = get("/vendor/fonts/barlow-condensed.css")[1].decode()
+            fonts = [get("/vendor/fonts/" + name) for name in re.findall(r"url\(\./(.*?)\)", css)]
+            return html, css, fonts
+
+        return await asyncio.to_thread(fetch_all)
+
+    html, css, fonts = _with_server(data_dir, env_cfg, gains, body)
+    assert not re.search(r"(src|href)=\"https?://", html)
+    assert len(fonts) == 3 and all(ctype == "font/woff2" and body[:4] == b"wOF2" for ctype, body in fonts)
+    assert (ROOT / "flightsim" / "viewer" / "vendor" / "fonts" / "OFL.txt").is_file()
+
+
 def test_server_streams_the_lqr_autopilot(env_cfg, gains, tmp_path):
     """The LQR flies the same episode live as in a batch run; the hello says who flies."""
     from flightsim.config import load_raw

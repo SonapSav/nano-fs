@@ -47,7 +47,7 @@ Rules:
 - **Docker from day 1:** `Dockerfile` (`python:3.14.3-slim` + uv 0.11.2) installs from `uv.lock` with `--locked`, so local and container environments are identical. `compose.yaml` mounts `./data` for logs and runs as the host user. CPU-only image for now; a separate GPU image only if ML training needs it.
 - **ML interface:** Gymnasium environment wrapping the core. RL with Stable-Baselines3 (PPO) on PyTorch from the CPU-only index (`[tool.uv.sources]` in `pyproject.toml`).
 - **Logging:** Parquet, one row per timestep.
-- **Viewer:** Three.js in the browser, fed over WebSocket. Chase camera plus a basic instrument panel. Served by `websockets` (HTTP + WebSocket on one port, no other deps). three.js is vendored, not loaded from a CDN, so it works offline; update it deliberately. The viewer may only send playback requests; it must never send anything that reaches the physics.
+- **Viewer:** Three.js in the browser, fed over WebSocket. Chase camera plus a basic instrument panel. Served by `websockets` (HTTP + WebSocket on one port, no other deps). three.js and the Barlow Condensed font are vendored, not loaded from a CDN, so the viewer works offline; update them deliberately. The viewer may only send playback requests; it must never send anything that reaches the physics.
 - **Ports:** expose services on host port **8686** (not 8000, 3000 or other common defaults). If more ports are needed later, ask.
 - **Testing:** pytest.
 
@@ -89,7 +89,7 @@ flightsim/          # installable package (uv_build backend)
   envs/             # Gymnasium env, its config, policy adapters (PID, trim hold), episode metrics
   control/          # heading hold (step 1), PID autopilot (step 3), human pilot (step 5), gain-scheduled LQR
   stream/           # protocol, frame sources (replay, live PID), HTTP + WebSocket server
-  viewer/           # static Three.js app (no build step); three.js 0.186.1 + Sky addon vendored in viewer/vendor
+  viewer/           # static Three.js app (no build step); three.js 0.186.1 + Sky addon + font vendored in viewer/vendor
                     #   terrain.js / scenery.js: procedural, seeded, visual-only scenery (airfield at 0 m = physics ground)
   analysis/         # mode identification, validation maneuvers, validation checks
   atmosphere/       # Dryden turbulence (MIL-F-8785C)

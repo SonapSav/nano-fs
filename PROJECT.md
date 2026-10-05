@@ -339,8 +339,8 @@ owner before work can start.
 
 - [ ] Seeking in replays (only play, pause, stop and speed today).
 - [ ] Filter or group batch logs in the flight list (thousands of entries with `--logs`).
-- [ ] Font loads from Google Fonts (falls back to a system font offline); vendor it if
-  offline use matters.
+- [x] Font vendored (2026-10-05): Barlow Condensed 400/500/600, latin subset, SIL OFL 1.1
+  (`flightsim/viewer/vendor/fonts/`). The viewer loads nothing from the internet (tested).
 - [ ] Airspeed indicator shows calibrated airspeed as indicated (no position or
   instrument error modelled).
 - [x] Viewer network exposure (decided 2026-10-04): keep the Docker viewer published on
