@@ -27,6 +27,7 @@ from flightsim.control.heading_hold import wrap_angle_rad
 from flightsim.core import Controls, InitialConditions, JSBSimCore, State
 from flightsim.envs.config import BASE_ACTIONS, EnvConfig
 from flightsim.runner import RunResult
+from flightsim.world import ground_elevation_m
 
 ACTION_NAMES = BASE_ACTIONS  # default controls
 G0 = 9.80665
@@ -100,6 +101,8 @@ class AltitudeHeadingHoldEnv(gym.Env):
                 cfg.nominal.heading_rad + rng.uniform(-cfg.randomize_heading_rad, cfg.randomize_heading_rad)
             )
             % (2 * math.pi),
+            lat_rad=cfg.nominal.lat_rad,
+            lon_rad=cfg.nominal.lon_rad,
         )
         target_alt = ic.alt_msl_m + rng.uniform(-cfg.target_alt_offset_m, cfg.target_alt_offset_m)
         target_heading = wrap_angle_rad(
@@ -111,7 +114,7 @@ class AltitudeHeadingHoldEnv(gym.Env):
         # A fresh core per episode: a reused JSBSim instance is not bit-reproducible
         # (state survives run_ic), and construction costs only a few milliseconds.
         self._core = JSBSimCore(cfg.aircraft, 1.0 / cfg.sim_rate_hz)
-        self._core.reset(ic, cfg.loading)
+        self._core.reset(ic, cfg.loading, ground_elevation_m=self._ground_m(ic.lat_rad, ic.lon_rad))
         self.trim = self._core.trim()
         self.trim_state = self._core.state()
         self.targets = Targets(alt_msl_m=target_alt, heading_rad=target_heading, tas_mps=self.trim_state.tas_mps)
@@ -154,7 +157,12 @@ class AltitudeHeadingHoldEnv(gym.Env):
         info["comfort_terms"] = dict(self.last_comfort_terms)
         return self._observation(), reward, bool(reason), truncated, info
 
+    def _ground_m(self, lat_rad: float, lon_rad: float) -> float:
+        return ground_elevation_m(lat_rad, lon_rad) if self.cfg.terrain == "procedural" else 0.0
+
     def _sim_step(self, u: Controls) -> State:
+        if self.cfg.terrain == "procedural":
+            self._core.set_ground_elevation_m(ground_elevation_m(self._state.lat_rad, self._state.lon_rad))
         if self._turbulence is not None:
             self._core.set_gust_ned_mps(*to_ned(*self._turbulence.step(), self._state.psi_rad))
         self._state = self._core.step(u)

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from flightsim.config import canonical_json, config_hash, load_raw, parse_loading
 from flightsim.core import InitialConditions, Loading
+from flightsim.world.terrain import R_EARTH_M
 
 
 # Controls a task may give its pilot, in action-vector order. Every task has the first four;
@@ -94,6 +95,7 @@ class EnvConfig:
     actions: tuple[str, ...]
     config_hash: str
     config_json: str
+    terrain: str = "flat"  # "flat" (ground at 0 m everywhere) or "procedural" (the viewer's terrain)
 
     @property
     def sim_steps_per_action(self) -> int:
@@ -111,6 +113,15 @@ def load_env_config(path: str | Path, overrides: dict | None = None) -> EnvConfi
     return env_config_from_raw(load_raw(path, overrides))
 
 
+TERRAIN_MODELS = ("flat", "procedural")
+
+
+def _parse_terrain(name) -> str:
+    if name not in TERRAIN_MODELS:
+        raise ValueError(f"terrain must be one of {TERRAIN_MODELS}, got {name!r}")
+    return name
+
+
 def env_config_from_raw(raw: dict) -> EnvConfig:
     ic, rnd, tg, rw, term = (raw[k] for k in ("initial_conditions", "randomize", "targets", "reward", "termination"))
     return EnvConfig(
@@ -119,7 +130,9 @@ def env_config_from_raw(raw: dict) -> EnvConfig:
         control_rate_hz=float(raw["control_rate_hz"]),
         episode_s=float(raw["episode_s"]),
         nominal=InitialConditions(
-            alt_msl_m=float(ic["alt_msl_m"]), tas_mps=float(ic["tas_mps"]), heading_rad=math.radians(ic["heading_deg"])
+            alt_msl_m=float(ic["alt_msl_m"]), tas_mps=float(ic["tas_mps"]), heading_rad=math.radians(ic["heading_deg"]),
+            # Optional start position, metres north and east of the airfield (the world origin).
+            lat_rad=float(ic.get("north_m", 0.0)) / R_EARTH_M, lon_rad=float(ic.get("east_m", 0.0)) / R_EARTH_M,
         ),
         randomize_alt_m=float(rnd["alt_msl_m"]),
         randomize_tas_mps=float(rnd["tas_mps"]),
@@ -153,6 +166,7 @@ def env_config_from_raw(raw: dict) -> EnvConfig:
         ),
         wind=_parse_wind(raw.get("wind")),
         actions=_parse_actions(raw.get("actions")),
+        terrain=_parse_terrain(raw.get("terrain", "flat")),
         config_hash=config_hash(raw),
         config_json=canonical_json(raw),
     )

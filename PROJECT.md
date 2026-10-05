@@ -356,11 +356,15 @@ owner before work can start.
   turned and hides when the nose direction is out of view.
 - [ ] **Scenery plan** (discussed 2026-10-05; do together with takeoff/landing, in this
   order, about 2 days for 1-3):
-  1. **Terrain height in the physics.** Visual hills reach ~350 m but the physics ground
-     is flat at 0 m, so low flight passes through hills. Port the seeded height function
-     to Python (bit-identical to terrain.js, tested against it) and feed JSBSim's
-     terrain elevation each step; deterministic, so logs stay reproducible.
-     (Alternative considered: flatten everywhere you can fly low.) ~half a day + tests.
+  1. [x] **Terrain height in the physics** (2026-10-05). `flightsim/world/terrain.py` is a
+     bit-identical port of terrain.js `height()` (2,000 points compared with Node; the
+     JS now uses sqrt instead of ** and hypot so both agree exactly). Env configs take
+     `terrain: flat | procedural` (default flat: existing tasks are bit-identical) and an
+     optional start position (`initial_conditions.north_m/east_m` from the airfield).
+     With procedural terrain every simulation step sets JSBSim's ground elevation under
+     the aircraft (lakes are solid at their surface, -0.5 m); `alt_agl_m` in the logs and
+     the "ground" termination follow the terrain; the gear rests on hillsides (tested).
+     Cost ~25 us per step. Existing configs stay flat for now; scenarios will use it.
   2. **Landing cues:** aircraft shadow on the ground (~1 h); PAPI lights for a 3 deg
      glide path (~2 h; also a reference for an approach autopilot); windsock driven by
      the wind model (~1 h); runway edge markings, touchdown zone, approach light bar

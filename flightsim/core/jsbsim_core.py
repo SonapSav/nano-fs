@@ -113,10 +113,15 @@ class JSBSimCore:
         self._fdm.set_dt(dt_s)
         self._step_count = 0
 
-    def reset(self, ic: InitialConditions, loading: Loading = Loading(), controls: Controls = Controls()) -> State:
+    def reset(
+        self, ic: InitialConditions, loading: Loading = Loading(), controls: Controls = Controls(), ground_elevation_m: float = 0.0
+    ) -> State:
         """Set initial conditions, loading and control commands. `controls` are also the
-        starting point for `trim` (e.g. set flaps here to trim with flaps down)."""
+        starting point for `trim` (e.g. set flaps here to trim with flaps down).
+        `ground_elevation_m` is the terrain height under the initial position; during a run,
+        `set_ground_elevation_m` keeps it current (the gear and AGL follow it)."""
         fdm = self._fdm
+        fdm["ic/terrain-elevation-ft"] = ground_elevation_m / FT_TO_M
         self._apply(controls)
         for i, kg in enumerate(loading.pointmasses_kg or ()):
             fdm[f"inertia/pointmass-weight-lbs[{i}]"] = kg / LBM_TO_KG
@@ -162,6 +167,11 @@ class JSBSimCore:
         except jsbsim.TrimFailureError as e:
             raise TrimError(str(e)) from e
         return self.controls()
+
+    def set_ground_elevation_m(self, elevation_m: float) -> None:
+        """Terrain height under the aircraft from the next step on. JSBSim treats the ground
+        as level at this height around the aircraft (slopes under the gear are ignored)."""
+        self._fdm["position/terrain-elevation-asl-ft"] = elevation_m / FT_TO_M
 
     def set_gust_ned_mps(self, north: float, east: float, down: float) -> None:
         """Turbulence velocity added to the steady wind from the next step on (NED, m/s)."""

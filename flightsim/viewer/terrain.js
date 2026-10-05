@@ -1,6 +1,7 @@
-// Procedural terrain: visual only. The physics flies over flat ground at sea level, so
-// the terrain is shaped to agree with it where it matters: the airfield, lakes and
-// valley floors sit at 0 m and hills rise above (at most ~350 m, far below cruise).
+// Procedural terrain. Its height is shared with the physics: flightsim/world/terrain.py is
+// a bit-identical port, used by tasks with `terrain: procedural` (other tasks fly over
+// flat ground at 0 m). The airfield, valley floors and lake surfaces sit at about 0 m and
+// hills rise above (at most ~350 m).
 //
 // Everything is a pure function of world position and a fixed seed, so every viewer and
 // every flight sees the same world. World frame: x = east, y = up, z = south (metres).
@@ -53,11 +54,16 @@ function lakeness(x, z) {
   return 1 - smoothstep(0.24, 0.31, fbm(x / 3000, z / 3000, 3, 7));
 }
 
+// The physics lands on this same terrain: flightsim/world/terrain.py is an exact port.
+// Keep the two in step, using only operations that give identical results in Python and
+// JavaScript (sqrt, not ** or hypot); tests/test_world_terrain.py compares them.
 export function height(x, z) {
   const n = fbm(x / 7000, z / 7000, 5, 1);
-  let h = Math.max(0, (n - 0.42) / 0.58) ** 1.5 * 350; // valleys at 0, hills up to ~350 m
+  const t = Math.max(0, (n - 0.42) / 0.58);
+  let h = t * Math.sqrt(t) * 350; // valleys at 0, hills up to ~350 m
   h -= lakeness(x, z) * 25; // lakes dip below the water plane (just under 0 m)
-  const r = Math.hypot(x - AIRFIELD.x, z - AIRFIELD.z);
+  const dx = x - AIRFIELD.x, dz = z - AIRFIELD.z;
+  const r = Math.sqrt(dx * dx + dz * dz);
   return h * smoothstep(AIRFIELD.flatRadiusM, AIRFIELD.flatRadiusM + 1200, r); // flat airfield at 0 m
 }
 

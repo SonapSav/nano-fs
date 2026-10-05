@@ -95,6 +95,7 @@ flightsim/          # installable package (uv_build backend)
                     #   sound.js: synthesized engine, wind, stall horn, flap motor (Web Audio, driven by frames)
   analysis/         # mode identification, validation maneuvers, validation checks
   atmosphere/       # Dryden turbulence (MIL-F-8785C)
+  world/            # terrain height shared with the viewer (bit-identical port of viewer/terrain.js)
   batch.py          # parallel seeded episode batches
   config.py         # YAML loading (base: inheritance, overrides) + config hash
   runner.py         # headless run loop
@@ -118,7 +119,8 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - The linearization's engine RPM row is wrong: almost no self-damping (time constant ~11 min) while the nonlinear model settles in a few seconds. Do not use `engine_rpm` as a state in linear designs (the LQR leaves it out).
 - Steady wind at trim: `ic/vw-north-fps` ignores writes; set `ic/vw-mag-fps` + `ic/vw-dir-deg` (direction the air moves TOWARD) and then the ground velocity `ic/vn-fps`/`ic/ve-fps`/`ic/vd-fps` = air velocity + wind. Setting `ic/vt-fps` with wind gives a slipping, wrong-airspeed start, or a failed trim. `JSBSimCore.reset` handles this; calm resets keep the original path.
 - `propulsion/set-running` resets the mixture command to full rich (other commands are kept); `JSBSimCore.reset` re-applies the requested mixture. The c172p tanks use 6.6 lb/gal fuel, so convert fuel mass (`JSBSimCore.engine()`), not JSBSim's gallon figures, when comparing with the POH (6 lb/gal).
-- `atmosphere/gust-*-fps` survive `run_ic()`; `JSBSimCore.reset` zeroes them. Turbulence is ours (seeded, `flightsim/atmosphere/turbulence.py`), not JSBSim's `turb-type`.
+- `atmosphere/gust-*-fps` survive `run_ic()`; `JSBSimCore.reset` zeroes them.
+- Terrain: JSBSim's default ground is a level plane at `position/terrain-elevation-asl-ft` (the gear and `h-agl-ft` follow it, also when changed mid-run). Envs with `terrain: procedural` set it every step from `flightsim/world` at the aircraft's position (slopes under the gear are ignored); `JSBSimCore.reset(..., ground_elevation_m=)` sets it for the start. Turbulence is ours (seeded, `flightsim/atmosphere/turbulence.py`), not JSBSim's `turb-type`.
 
 ## How to work with me (Claude Code)
 - **Read `PROJECT.md` at the start of every session.** It is the single list of what is done and what is pending. Keep it current: when work completes, tick the item with the date and commit; when a new pending item or decision comes up, add it there (not in this file).
