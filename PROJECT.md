@@ -318,13 +318,22 @@ owner before work can start.
   Stick settings readout and calibration wrote stick values into the control input
   (they now only read the gamepad). Also noted: the C172 does not level its own wings,
   so after a roll input the bank stays until rolled level.
+- [x] **Axis mapping** (2026-10-05): the owner's Xbox pad developed a hardware fault (left
+  stick X rests at -0.73 and never reports right of centre; recorded from the kernel
+  `/dev/input/js0`, so not the browser). Stick settings now maps each control (roll,
+  pitch, rudder, throttle lever) to any axis, with invert and a Detect button (move the
+  control, the axis that moves most is taken), per device (keyed by gamepad id; standard
+  pads default to left stick = yoke, right stick X = rudder). Devices without a standard
+  layout (joysticks) are used too. Calibration is per device and only measures the
+  mapped stick axes. A mapped throttle lever takes over once moved (flights still start at
+  trim power). Settings key v3; the v2 feel is kept, its centre dropped. Tested (Node unit
+  tests; headless run with a simulated faulty pad: roll on the right stick works).
 - [ ] **Joystick support for the Thrustmaster T.Flight HOTAS X** (owner plans to buy it,
-  2026-10-04). Browsers report it without the standard layout, so it is ignored today.
-  Plan: per-device axis mapping (pitch, roll, rudder = twist grip, throttle = lever;
-  invert, dead zone) keyed by device name, set through a calibration screen in the
-  viewer (move each control when prompted). Do not hard-code axis indices: they vary by
-  browser and OS and cannot be verified without the device. The same mechanism covers a
-  yoke and rudder pedals later. Test with the device once it arrives.
+  2026-10-04). Browsers report it without the standard layout; it is now used and its
+  axes can be mapped (pitch, roll, rudder = twist grip, throttle = lever) with Detect,
+  see above. Still to do: button mapping for flaps and trim on non-standard devices
+  (today only the standard layout's bumpers and D-pad), and a check with the real device
+  once it arrives. Do not hard-code axis indices: they vary by browser and OS.
 
 ### Viewer
 

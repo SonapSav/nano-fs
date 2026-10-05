@@ -100,7 +100,7 @@
     background: rgba(44, 48, 52, .86); font-size: 14px; }
   #pad-status:empty { display: none; }
   dialog { background: var(--panel); color: var(--marking); border: 1px solid #5b6167; border-radius: 6px;
-    padding: 16px 20px; max-width: min(30em, calc(100vw - 32px)); }
+    padding: 16px 20px; max-width: min(30em, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; }
   dialog::backdrop { background: rgba(0, 0, 0, .45); }
   dialog h2 { margin: 0 0 6px; font-size: 20px; font-weight: 600; }
   dialog p { margin: 0 0 12px; color: var(--dim); }
@@ -111,6 +111,13 @@
   .stick-row output { text-align: right; font-variant-numeric: tabular-nums; }
   .stick-row input[type="range"] { width: 100%; accent-color: var(--marking); min-height: 0; padding: 0; border: 0; }
   #stick-live { font-variant-numeric: tabular-nums; color: var(--marking); margin: 4px 0 0; }
+  dialog h3 { margin: 14px 0 4px; font-size: 16px; font-weight: 600; }
+  #stick-device { margin-bottom: 6px; }
+  .axis-row { display: grid; grid-template-columns: 4.5em 11em auto auto 1fr; gap: 6px 10px; align-items: center; margin-bottom: 6px; }
+  .axis-row .axis { font-weight: 600; }
+  .axis-row .live, #stick-axes-raw { font-variant-numeric: tabular-nums; color: var(--dim); }
+  .axis-row .prompt { grid-column: 2 / -1; color: #e2b93b; }
+  .axis-row label { display: flex; gap: 4px; align-items: center; color: var(--dim); }
   #stick-live .drift { color: #e2b93b; }
   .calibrate { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 10px; }
   #stick-calibrate-status { color: var(--dim); }
@@ -191,10 +198,15 @@
           <input type="range" id="stick-deadzone" min="0" max="0.3" step="0.01"></label>
         <output for="stick-deadzone" id="stick-deadzone-out"></output>
       </div>
-      <p id="stick-live" aria-live="off">Move the sticks to see their raw position here.</p>
+      <h3>Controller axes</h3>
+      <p id="stick-device">No gamepad detected: press a button on it to connect.</p>
+      <div id="axis-rows"></div>
+      <p id="stick-axes-raw" aria-live="off"></p>
+      <p id="stick-live" aria-live="off"></p>
       <div class="calibrate">
         <button type="button" id="stick-calibrate">Calibrate centre (hands off)</button>
         <button type="button" id="stick-calibrate-clear">Clear calibration</button>
+        <button type="button" id="stick-axes-default">Default axes</button>
         <span id="stick-calibrate-status" role="status"></span>
       </div>
       <div class="dialog-buttons">

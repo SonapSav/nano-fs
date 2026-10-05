@@ -27,7 +27,7 @@ export const HANDLED_KEYS = new Set([
   ...Object.keys(THROTTLE_KEYS), ...Object.keys(FLAP_KEYS), ...Object.keys(TRIM_KEYS),
 ]);
 
-import { centred, deadzone, loadSettings, shape } from "./stick.js";
+import { choosePad, controlValue, deadzone, loadSettings, profileFor, shape } from "./stick.js";
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -45,6 +45,8 @@ export class PilotInput {
     this.value = { elevator: 0, aileron: 0, rudder: 0, throttle, flaps, pitch_trim: pitchTrim };
     this.down.clear();
     this._padPrev = {};
+    this._leverStart = null; // a throttle lever takes over only once it is moved
+    this._leverMoved = false;
   }
 
   _stepFlaps(dir) {
@@ -70,19 +72,26 @@ export class PilotInput {
   // Read the gamepad (its name and raw axes) without changing the control input; the
   // Stick settings readout and calibration use this.
   readPad() {
-    const pad = [...(navigator.getGamepads?.() ?? [])].find((g) => g && g.connected && g.mapping === "standard");
+    const pad = choosePad([...(navigator.getGamepads?.() ?? [])], this.stick);
+    this.pad = pad;
     this.gamepadName = pad ? pad.id : null;
     this.rawAxes = pad ? [...pad.axes] : null;
     return pad;
   }
 
-  // Sticks (roll, pitch, rudder) that read outside the dead zone after calibration:
-  // [{axis, value}] for those that do. With hands off, this is uncorrected drift.
+  // The current device's settings (axis mapping, centre); null without a gamepad.
+  profile() {
+    return this.pad ? profileFor(this.stick, this.pad) : null;
+  }
+
+  // Mapped sticks (roll, pitch, rudder) that read outside the dead zone after
+  // calibration: [{axis, value}]. With hands off, this is uncorrected drift.
   offCentre() {
     if (!this.readPad()) return [];
+    const profile = this.profile();
     return ["roll", "pitch", "rudder"]
-      .map((axis, i) => ({ axis, value: centred(this.rawAxes[i] ?? 0, this.stick.centre[i]) }))
-      .filter((a) => Math.abs(a.value) >= this.stick.deadzone);
+      .map((axis) => ({ axis, value: controlValue(profile, this.rawAxes, axis) }))
+      .filter((a) => a.value !== null && Math.abs(a.value) >= this.stick.deadzone);
   }
 
   // Advance by dt seconds and return the current input.
@@ -99,24 +108,42 @@ export class PilotInput {
     for (const [code, sign] of Object.entries(THROTTLE_KEYS)) if (this.down.has(code)) throttleDir += sign;
     let trimDir = 0;
     for (const [code, sign] of Object.entries(TRIM_KEYS)) if (this.down.has(code)) trimDir += sign;
+    let lever = null;
     if (pad) {
-      // Standard mapping: left stick = yoke (forward is -1 on axis 1), right stick x = rudder,
-      // triggers = throttle up (RT) and down (LT). A deflected stick overrides the keys.
-      // Calibrated centre first, then the dead zone around it.
-      const axis = (i) => deadzone(centred(pad.axes[i] ?? 0, this.stick.centre[i]), this.stick.deadzone);
-      const [ax, ay, rx] = [axis(0), axis(1), axis(2)];
-      if (ax) this.value.aileron = shape(ax, this.stick.roll);
-      if (ay) this.value.elevator = shape(-ay, this.stick.pitch);
-      if (rx) this.value.rudder = shape(-rx, this.stick.rudder);
-      throttleDir += (pad.buttons[7]?.value ?? 0) - (pad.buttons[6]?.value ?? 0);
-      for (const [b, sign] of Object.entries(PAD_TRIM)) if (pad.buttons[b]?.pressed) trimDir += sign;
-      for (const [b, dir] of Object.entries(PAD_FLAPS)) {
-        const pressed = Boolean(pad.buttons[b]?.pressed);
-        if (pressed && !this._padPrev[b]) this._stepFlaps(dir); // one detent per press
-        this._padPrev[b] = pressed;
+      // Axes as mapped in Stick settings (defaults for standard gamepads: left stick =
+      // yoke, right stick X = rudder). Calibrated centre first, then the dead zone, then
+      // the response curve. A deflected stick overrides the keys.
+      const profile = this.profile();
+      const get = (c) => {
+        const v = controlValue(profile, pad.axes, c);
+        return v === null ? 0 : deadzone(v, this.stick.deadzone);
+      };
+      const [roll, pitch, yaw] = [get("roll"), get("pitch"), get("rudder")];
+      if (roll) this.value.aileron = shape(roll, this.stick.roll);
+      if (pitch) this.value.elevator = shape(pitch, this.stick.pitch);
+      if (yaw) this.value.rudder = -shape(yaw, this.stick.rudder); // right pedal: nose right = negative rudder
+      lever = controlValue(profile, pad.axes, "throttle");
+      if (pad.mapping === "standard") {
+        // Standard layout: triggers = throttle up (RT) and down (LT), bumpers = flaps, D-pad = trim.
+        throttleDir += (pad.buttons[7]?.value ?? 0) - (pad.buttons[6]?.value ?? 0);
+        for (const [b, sign] of Object.entries(PAD_TRIM)) if (pad.buttons[b]?.pressed) trimDir += sign;
+        for (const [b, dir] of Object.entries(PAD_FLAPS)) {
+          const pressed = Boolean(pad.buttons[b]?.pressed);
+          if (pressed && !this._padPrev[b]) this._stepFlaps(dir); // one detent per press
+          this._padPrev[b] = pressed;
+        }
       }
     }
     this.value.throttle = clamp(this.value.throttle + throttleDir * THROTTLE_RATE_PER_S * dt, 0, 1);
+    if (lever !== null) {
+      // A throttle lever is absolute; it takes over once moved, so a flight starts at the
+      // trimmed power whatever the lever position.
+      this._leverStart ??= lever;
+      if (this._leverMoved || Math.abs(lever - this._leverStart) > 0.03) {
+        this._leverMoved = true;
+        this.value.throttle = clamp(lever, 0, 1);
+      }
+    }
     this.value.pitch_trim = clamp(this.value.pitch_trim + clamp(trimDir, -1, 1) * TRIM_RATE_PER_S * dt, -1, 1);
     return { ...this.value };
   }

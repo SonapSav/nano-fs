@@ -5,7 +5,7 @@
 import { FlightScene } from "./scene.js";
 import { drawAll, units } from "./gauges.js";
 import { HANDLED_KEYS, PilotInput } from "./input.js";
-import { AXES, DEFAULTS, MAX_CALIBRATION_SPREAD, MAX_CENTRE, centred, saveSettings } from "./stick.js";
+import { AXES, CONTROLS, DEFAULTS, MAX_CALIBRATION_SPREAD, MAX_CENTRE, controlValue, defaultProfile, detectAxis, saveSettings } from "./stick.js";
 import { groupLogs } from "./flightlist.js";
 
 const $ = (id) => document.getElementById(id);
@@ -408,68 +408,162 @@ $("stick-deadzone").addEventListener("input", (e) => {
   saveSettings(pilot.stick);
 });
 
-// Live raw stick positions while the dialog is open, so stick drift is visible.
+// Controller axes: which axis drives each control, per device (stick.js profiles).
+const CONTROL_LABELS = { roll: "Roll", pitch: "Pitch", rudder: "Rudder", throttle: "Throttle" };
+const STANDARD_AXIS_NAMES = ["left stick X", "left stick Y", "right stick X", "right stick Y"];
+const DETECT_PROMPTS = {
+  roll: "Move the stick fully RIGHT and hold…",
+  pitch: "Push the stick fully FORWARD (nose down) and hold…",
+  rudder: "Push the RIGHT pedal (or twist right) and hold…",
+  throttle: "Move the throttle to FULL power and hold…",
+};
+const signed = (v, d = 3) => (v >= 0 ? "+" : "") + (v ?? 0).toFixed(d);
+const axisName = (pad, i) => `Axis ${i}${pad.mapping === "standard" && STANDARD_AXIS_NAMES[i] ? ` (${STANDARD_AXIS_NAMES[i]})` : ""}`;
+
+function renderAxisRows() {
+  const rows = $("axis-rows");
+  rows.replaceChildren();
+  const pad = pilot.readPad();
+  $("stick-device").textContent = pad
+    ? `${pad.id.replace(/\s*\(.*$/, "")}${pad.mapping === "standard" ? "" : " (no standard layout: map its axes below)"}`
+    : "No gamepad detected: press a button on it to connect.";
+  if (!pad) return;
+  const profile = pilot.profile();
+  for (const control of CONTROLS) {
+    const m = profile.map[control];
+    const row = document.createElement("div");
+    row.className = "axis-row";
+    const label = Object.assign(document.createElement("span"), { className: "axis", textContent: CONTROL_LABELS[control] });
+    const select = document.createElement("select");
+    select.setAttribute("aria-label", `${CONTROL_LABELS[control]} axis`);
+    select.add(new Option(control === "throttle" ? "None (keys, triggers)" : control === "rudder" ? "None (keys Z/X)" : "None (keyboard)", ""));
+    for (let i = 0; i < pad.axes.length; i++) select.add(new Option(axisName(pad, i), String(i)));
+    select.value = m.axis === null ? "" : String(m.axis);
+    select.addEventListener("change", () => {
+      m.axis = select.value === "" ? null : Number(select.value);
+      saveSettings(pilot.stick);
+      showCalibration();
+    });
+    const invert = Object.assign(document.createElement("input"), { type: "checkbox", checked: m.invert });
+    invert.addEventListener("change", () => {
+      m.invert = invert.checked;
+      saveSettings(pilot.stick);
+    });
+    const invLabel = document.createElement("label");
+    invLabel.append(invert, "Invert");
+    const detect = Object.assign(document.createElement("button"), { type: "button", textContent: "Detect" });
+    detect.addEventListener("click", () => detectFor(control, row, detect));
+    const live = Object.assign(document.createElement("span"), { className: "live" });
+    live.dataset.control = control;
+    row.append(label, select, invLabel, detect, live);
+    rows.append(row);
+  }
+}
+
+// Detect: the pilot moves the control in its positive direction; the axis that moves most
+// is mapped, inverted if it moved negative.
+function detectFor(control, row, button) {
+  const pad = pilot.readPad();
+  if (!pad) return;
+  const baseline = [...pad.axes];
+  const samples = [];
+  const prompt = Object.assign(document.createElement("span"), { className: "prompt", textContent: DETECT_PROMPTS[control], role: "status" });
+  row.append(prompt);
+  button.disabled = true;
+  const timer = setInterval(() => {
+    if (pilot.readPad()) samples.push([...pilot.rawAxes]);
+    if (samples.length >= 60) { // 3 s
+      clearInterval(timer);
+      const found = detectAxis(baseline, samples);
+      if (found) {
+        Object.assign(pilot.profile().map[control], found);
+        saveSettings(pilot.stick);
+        renderAxisRows();
+        showCalibration();
+      } else {
+        prompt.textContent = "No movement detected: try again and move it all the way.";
+        button.disabled = false;
+      }
+    }
+  }, 50);
+}
+
+// Live values while the dialog is open, so mapping and stick drift are visible.
 let liveTimer = null;
 function updateLive() {
-  pilot.readPad(); // raw axes only; the control input is not touched
-  const axes = pilot.rawAxes;
+  const pad = pilot.readPad(); // raw axes only; the control input is not touched
   const el = $("stick-live");
-  if (!axes) {
-    el.textContent = "No gamepad detected: press a button on it to connect.";
+  if (!pad) {
+    $("stick-axes-raw").textContent = "";
+    el.textContent = "";
     return;
   }
-  const fmt = (v) => (v >= 0 ? "+" : "") + (v ?? 0).toFixed(3);
-  const names = [["Left stick X (roll)", 0], ["Left stick Y (pitch)", 1], ["Right stick X (rudder)", 2]];
-  el.innerHTML = names
-    .map(([n, i]) => {
-      const raw = axes[i] ?? 0;
-      const corrected = centred(raw, pilot.stick.centre[i]);
-      const drift = Math.abs(corrected) >= pilot.stick.deadzone ? ' class="drift"' : "";
-      return `<span${drift}>${n}: raw ${fmt(raw)}, after calibration ${fmt(corrected)}</span>`;
-    })
-    .join("<br>") + "<br>Hands off, a value in yellow is drift that reaches the controls: calibrate the centre, or raise the dead zone.";
+  const profile = pilot.profile();
+  $("stick-axes-raw").textContent = "Raw axes: " + pad.axes.map((v, i) => `${i}: ${signed(v, 2)}`).join("  ");
+  let drift = false;
+  for (const span of document.querySelectorAll("#axis-rows .live")) {
+    const v = controlValue(profile, pad.axes, span.dataset.control);
+    const off = span.dataset.control !== "throttle" && v !== null && Math.abs(v) >= pilot.stick.deadzone;
+    drift ||= off;
+    span.textContent = v === null ? "" : span.dataset.control === "throttle" ? `${Math.round(v * 100)}%` : signed(v, 2);
+    span.style.color = off ? "#e2b93b" : "";
+  }
+  el.textContent = drift
+    ? "Hands off, a value in yellow is drift that reaches the controls: calibrate the centre, or raise the dead zone."
+    : "Hands off, all mapped sticks rest inside the dead zone.";
 }
 $("stick-dialog").addEventListener("close", () => clearInterval(liveTimer));
 
 function showCalibration() {
-  const c = pilot.stick.centre;
-  const any = c.some((v) => v !== 0);
-  $("stick-calibrate-status").textContent = any
-    ? `Centre: ${c.map((v) => (v >= 0 ? "+" : "") + v.toFixed(3)).join(", ")}`
-    : "Not calibrated";
+  const profile = pilot.profile();
+  if (!profile) {
+    $("stick-calibrate-status").textContent = "";
+    return;
+  }
+  const parts = ["roll", "pitch", "rudder"]
+    .filter((c) => profile.map[c].axis !== null && profile.centre[profile.map[c].axis] !== undefined)
+    .map((c) => `${c} ${signed(profile.centre[profile.map[c].axis])}`);
+  $("stick-calibrate-status").textContent = parts.length ? `Centre: ${parts.join(", ")}` : "Not calibrated";
 }
 
-// Average each stick's rest position over one second, hands off.
+// Average the mapped sticks' rest positions over one second, hands off.
 $("stick-calibrate").addEventListener("click", () => {
   const button = $("stick-calibrate");
-  if (!pilot.rawAxes) {
+  const pad = pilot.readPad();
+  if (!pad) {
     $("stick-calibrate-status").textContent = "No gamepad detected: press a button on it first.";
     return;
   }
+  const profile = pilot.profile();
+  const axes = [...new Set(["roll", "pitch", "rudder"].map((c) => profile.map[c].axis).filter((a) => a !== null))];
+  if (!axes.length) {
+    $("stick-calibrate-status").textContent = "Map the stick axes first.";
+    return;
+  }
   button.disabled = true;
-  const sums = [0, 0, 0], lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  const sums = axes.map(() => 0), lo = axes.map(() => Infinity), hi = axes.map(() => -Infinity);
   let n = 0;
   $("stick-calibrate-status").textContent = "Measuring, keep your hands off the sticks…";
   const timer = setInterval(() => {
-    pilot.readPad();
-    if (pilot.rawAxes) {
-      for (let i = 0; i < 3; i++) {
-        const v = pilot.rawAxes[i] ?? 0;
-        sums[i] += v;
-        lo[i] = Math.min(lo[i], v);
-        hi[i] = Math.max(hi[i], v);
-      }
+    if (pilot.readPad()) {
+      axes.forEach((a, k) => {
+        const v = pilot.rawAxes[a] ?? 0;
+        sums[k] += v;
+        lo[k] = Math.min(lo[k], v);
+        hi[k] = Math.max(hi[k], v);
+      });
       n++;
     }
     if (n >= 20) {
       clearInterval(timer);
       const centre = sums.map((s) => s / n);
-      if (hi.some((h, i) => h - lo[i] > MAX_CALIBRATION_SPREAD)) {
+      if (hi.some((h, k) => h - lo[k] > MAX_CALIBRATION_SPREAD)) {
         $("stick-calibrate-status").textContent = "A stick moved while measuring; take your hands off the sticks and try again.";
       } else if (centre.some((c) => Math.abs(c) >= MAX_CENTRE)) {
-        $("stick-calibrate-status").textContent = "A stick rests too far from centre for drift; let go of it and try again.";
+        const bad = axes.filter((a, k) => Math.abs(centre[k]) >= MAX_CENTRE).map((a) => `axis ${a} at ${signed(centre[axes.indexOf(a)], 2)}`);
+        $("stick-calibrate-status").textContent = `Rests too far from centre for drift (${bad.join(", ")}): let go of it, or if it is faulty, map that control to another axis.`;
       } else {
-        pilot.stick.centre = centre;
+        profile.centre = Object.fromEntries(axes.map((a, k) => [a, centre[k]]));
         saveSettings(pilot.stick);
         showCalibration();
       }
@@ -478,14 +572,24 @@ $("stick-calibrate").addEventListener("click", () => {
   }, 50);
 });
 $("stick-calibrate-clear").addEventListener("click", () => {
-  pilot.stick.centre = [0, 0, 0];
+  const profile = pilot.profile();
+  if (!profile) return;
+  profile.centre = {};
   saveSettings(pilot.stick);
+  showCalibration();
+});
+$("stick-axes-default").addEventListener("click", () => {
+  if (!pilot.readPad()) return;
+  pilot.stick.devices[pilot.pad.id] = defaultProfile(pilot.pad.mapping === "standard");
+  saveSettings(pilot.stick);
+  renderAxisRows();
   showCalibration();
 });
 
 $("stick-open").addEventListener("click", () => {
   renderStickRows();
   renderDeadzone();
+  renderAxisRows();
   showCalibration();
   updateLive();
   clearInterval(liveTimer);
@@ -493,8 +597,8 @@ $("stick-open").addEventListener("click", () => {
   $("stick-dialog").showModal();
 });
 $("stick-reset").addEventListener("click", () => {
-  const centre = pilot.stick.centre; // reset the feel, keep the controller's calibration
-  pilot.stick = { ...structuredClone(DEFAULTS), centre };
+  const devices = pilot.stick.devices; // reset the feel, keep each controller's axes and calibration
+  pilot.stick = { ...structuredClone(DEFAULTS), devices };
   saveSettings(pilot.stick);
   renderStickRows();
   renderDeadzone();
