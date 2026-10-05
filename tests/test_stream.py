@@ -124,6 +124,25 @@ def test_server_paces_to_wall_clock(logged_episode, env_cfg, gains):
     assert elapsed == pytest.approx(6.0 / 4, abs=0.4)
 
 
+def test_every_play_in_a_session_is_paced(logged_episode, env_cfg, gains):
+    """Regression: a second play on the same connection used to stream unpaced."""
+    data_dir, _ = logged_episode
+
+    async def body(port):
+        loop = asyncio.get_running_loop()
+        walls = []
+        async with connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            for _ in range(2):
+                await ws.send(json.dumps({"type": "play", "source": "live", "seed": 3, "speed": 4}))
+                t0 = loop.time()
+                await _collect(ws)
+                walls.append(loop.time() - t0)
+        return walls
+
+    for wall in _with_server(data_dir, env_cfg, gains, body):
+        assert wall == pytest.approx(6.0 / 4, abs=0.4)
+
+
 def test_pause_holds_the_stream(logged_episode, env_cfg, gains):
     data_dir, _ = logged_episode
 
@@ -239,3 +258,84 @@ def test_server_streams_the_lqr_autopilot(env_cfg, gains, tmp_path):
     assert frames[-1]["alt_msl_m"] == states[-1].alt_msl_m  # same flight as the batch path
     assert frames[-1]["alt_msl_m"] != pid_frames[-1]["alt_msl_m"]
     assert error["type"] == "error" and "unknown autopilot 'rl'" in error["message"]
+
+
+def test_replay_seeking(logged_episode, env_cfg, gains):
+    """Seek while playing, seek while paused (one frame, stays paused), start part-way,
+    and no seeking in live flights."""
+    data_dir, path = logged_episode
+    rel = path.relative_to(data_dir).as_posix()
+
+    async def next_frame(ws, timeout=2.0):
+        while True:
+            msg = json.loads(await asyncio.wait_for(ws.recv(), timeout))
+            if msg["type"] in ("frame", "end"):
+                return msg
+
+    async def body(port):
+        out = {}
+        async with connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            # 1. While playing: jump back from ~3 s to 0.5 s.
+            await ws.send(json.dumps({"type": "play", "source": "replay", "path": rel, "speed": 4}))
+            await ws.recv()  # hello
+            while (await next_frame(ws))["row"]["t_s"] < 3.0:
+                pass
+            await ws.send(json.dumps({"type": "seek", "t_s": 0.5}))
+            times = []
+            while True:
+                msg = await next_frame(ws)
+                if msg["type"] == "end":
+                    break
+                times.append(msg["row"]["t_s"])
+            out["after_seek"] = times
+
+            # 2. While paused: one frame at the new position, then nothing until resume.
+            await ws.send(json.dumps({"type": "play", "source": "replay", "path": rel, "speed": 1}))
+            await ws.recv()  # hello
+            await next_frame(ws)
+            await ws.send(json.dumps({"type": "pause"}))
+            await asyncio.sleep(0.2)
+            while True:  # drain frames sent before the pause
+                try:
+                    await asyncio.wait_for(ws.recv(), 0.05)
+                except TimeoutError:
+                    break
+            await ws.send(json.dumps({"type": "seek", "t_s": 4.0}))
+            out["paused_frame"] = (await next_frame(ws))["row"]["t_s"]
+            try:
+                await asyncio.wait_for(ws.recv(), 0.5)
+                out["stayed_paused"] = False
+            except TimeoutError:
+                out["stayed_paused"] = True
+            await ws.send(json.dumps({"type": "speed", "value": 64}))
+            await ws.send(json.dumps({"type": "resume"}))
+            out["after_resume"] = (await next_frame(ws))["row"]["t_s"]
+            while (await next_frame(ws))["type"] != "end":
+                pass
+
+            # 3. Start part-way.
+            await ws.send(json.dumps({"type": "play", "source": "replay", "path": rel, "speed": 64, "start_s": 5.0}))
+            await ws.recv()  # hello
+            out["start"] = (await next_frame(ws))["row"]["t_s"]
+            while (await next_frame(ws))["type"] != "end":
+                pass
+
+            # 4. Live flights cannot seek.
+            await ws.send(json.dumps({"type": "play", "source": "live", "seed": 3, "speed": 1}))
+            await ws.recv()  # hello
+            await ws.send(json.dumps({"type": "seek", "t_s": 1.0}))
+            while (msg := json.loads(await ws.recv()))["type"] != "error":
+                pass
+            out["live_error"] = msg["message"]
+        return out
+
+    out = _with_server(data_dir, env_cfg, gains, body)
+    t = out["after_seek"]
+    jumps = [i for i in range(1, len(t)) if t[i] < t[i - 1]]  # frames sent before the seek arrive first
+    assert len(jumps) == 1 and t[jumps[0]] == pytest.approx(0.5, abs=1 / 120 + 1e-9)
+    after = t[jumps[0]:]
+    assert all(b > a for a, b in zip(after, after[1:])) and after[-1] == pytest.approx(6.0)
+    assert out["paused_frame"] == pytest.approx(4.0, abs=1 / 120 + 1e-9) and out["stayed_paused"]
+    assert 4.0 < out["after_resume"] < 4.2
+    assert out["start"] == pytest.approx(5.0, abs=1 / 120 + 1e-9)
+    assert "only possible during a replay" in out["live_error"]

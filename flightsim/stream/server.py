@@ -68,13 +68,17 @@ class Session:
         self.speed = 1.0
         self.paused = asyncio.Event()  # set = paused
         self._rebase = True
+        self._seeked = False
 
     def _open(self, msg: dict) -> Source:
         if msg.get("source") == "replay":
             path = (self.cfg.data_dir / str(msg["path"])).resolve()
             if not path.is_relative_to(self.cfg.data_dir.resolve()) or path.suffix != ".parquet" or not path.is_file():
                 raise ValueError(f"no such log: {msg['path']}")
-            return ReplaySource(path)
+            source = ReplaySource(path)
+            if "start_s" in msg:
+                source.seek(float(msg["start_s"]))
+            return source
         if msg.get("source") == "live":
             policy = self.cfg.autopilot(str(msg.get("autopilot", "pid")))
             return LiveSource(self.cfg.env_cfg, None, int(msg.get("seed", 0)), policy=policy)
@@ -97,6 +101,7 @@ class Session:
             self.record = bool(msg.get("record", True))
             self.speed = self._clamp(msg.get("speed", 1.0))
             self.paused.clear()
+            self._rebase = True  # pace the new flight from its first frame
             self.task = asyncio.create_task(self._stream(source))
         elif kind == "input":
             # Pilot input: only meaningful during a manual flight, where it becomes the
@@ -114,6 +119,12 @@ class Session:
         elif kind == "speed":
             self.speed = self._clamp(msg.get("value", 1.0))
             self._rebase = True
+        elif kind == "seek":
+            # Replays only: playback continues (or, when paused, shows one frame) from t_s.
+            if not isinstance(self.source, ReplaySource) or not self.task or self.task.done():
+                raise ValueError("seeking is only possible during a replay")
+            self.source.seek(float(msg["t_s"]))
+            self._seeked = True
         elif kind == "stop":
             await self.stop()
         else:
@@ -159,15 +170,22 @@ class Session:
         next_t = None
         wall0 = sim0 = 0.0
         last_row = None
+        self._seeked = show_one = False
         for t, row in source.frames():
             last_row = row
+            if self._seeked:  # first row after a seek: send it now and restart pacing here
+                self._seeked, next_t, self._rebase = False, None, True
+                show_one = self.paused.is_set()
             if next_t is not None and t < next_t - 1e-9:
                 continue
             next_t = t + frame_dt
-            if self.paused.is_set():
-                while self.paused.is_set():
+            if self.paused.is_set() and not show_one:
+                while self.paused.is_set() and not self._seeked:
                     await asyncio.sleep(0.05)
+                if self._seeked:
+                    continue  # the next row comes from the new position
                 self._rebase = True
+            show_one = False
             if self._rebase:
                 wall0, sim0, self._rebase = time.monotonic(), t, False
             delay = wall0 + (t - sim0) / self.speed - time.monotonic()

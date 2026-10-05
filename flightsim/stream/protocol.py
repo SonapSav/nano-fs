@@ -16,7 +16,7 @@ Server -> client messages (JSON):
 
 Client -> server messages:
   {"type": "list"}
-  {"type": "play", "source": "replay", "path": "<relative to the data dir>", "speed": 1.0}
+  {"type": "play", "source": "replay", "path": "<relative to the data dir>", "speed": 1.0, "start_s"?: 0.0}
   {"type": "play", "source": "live", "autopilot": "pid" | "lqr" (default "pid"), "seed": 0, "speed": 1.0}
   {"type": "play", "source": "manual", "conditions": "calm" | "windy", "seed": 0, "record": true}
       (speed is capped at 1)
@@ -28,6 +28,9 @@ Client -> server messages:
       environment's decision rate. This is the only message that reaches the physics,
       and only as a policy action.
   {"type": "pause"} | {"type": "resume"} | {"type": "speed", "value": 2.0} | {"type": "stop"}
+  {"type": "seek", "t_s": 42.0}
+      Replays only: continue from the first row at or after t_s; while paused, the
+      frame at the new position is sent and playback stays paused.
 """
 
 import json

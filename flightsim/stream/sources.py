@@ -1,6 +1,7 @@
 """Frame sources for the state stream. Each yields (t_s, row) at the simulation rate;
 the server decimates and paces them. Sources never see wall-clock time."""
 
+import bisect
 import hashlib
 import math
 from collections.abc import Iterator
@@ -38,13 +39,21 @@ class ReplaySource(Source):
     def __init__(self, path: Path):
         table, meta = read_log(path)
         self._rows = table.to_pylist()
-        t = table.column("t_s")
-        duration = t[-1].as_py() if len(t) else 0.0
-        rate = (len(t) - 1) / duration if duration > 0 else 0.0
+        self._times = [row["t_s"] for row in self._rows]
+        self._next = 0
+        duration = self._times[-1] if self._rows else 0.0
+        rate = (len(self._rows) - 1) / duration if duration > 0 else 0.0
         super().__init__("replay", meta["flightsim.run_id"], meta["flightsim.aircraft"], round(rate, 6), duration, None, meta)
 
+    def seek(self, t_s: float) -> None:
+        """Continue from the first row at or after t_s (clamped to the log), also while
+        frames() is being iterated."""
+        self._next = min(bisect.bisect_left(self._times, float(t_s) - 1e-9), max(0, len(self._rows) - 1))
+
     def frames(self) -> Iterator[tuple[float, dict]]:
-        for row in self._rows:
+        while self._next < len(self._rows):
+            row = self._rows[self._next]
+            self._next += 1
             yield row["t_s"], row
 
 
