@@ -215,6 +215,9 @@ owner before work can start.
   the flight menu (`?source=live_lqr`). Live play messages take `autopilot: pid | lqr`;
   hello reports the `pilot`. The server loads (or designs, ~15 s) the gain schedule at
   startup (`--lqr configs/lqr.yaml`).
+
+### Task and reward
+
 - [x] **Comfort task** (decided and done 2026-10-04, option C):
   `configs/envs/altitude_heading_hold_comfort.yaml` extends the windy task. Soft comfort
   penalties beyond 25 deg bank, |n - 1| > 0.3 g and 3 m/s climb/descent; episodes end at
