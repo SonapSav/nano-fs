@@ -114,13 +114,14 @@ owner before work can start.
 
 ### Next directions (pick one)
 
-- [ ] **After residual RL (2026-10-05), needs decision.** On this task neither plain
+- [x] **After residual RL: decided (c) on 2026-10-05.** The LQR is the reference
+  controller; RL is paused. Kept for later: On this task neither plain
   PPO nor residual RL beats the LQR/PID (about -1470 on seeds 3000-3999). Options:
   (a) residual on the reference governor instead (let the agent adjust the commanded
   climb/turn profile, where the cost is); (b) a harder task where the LQR is weak
   (strong turbulence, large disturbances, engine-out glide, approach); (c) treat the
   LQR as the reference controller and move to other work (second aircraft, HOTAS,
-  takeoff/landing). Recommendation: (c) for now, or (b) if RL remains a goal.
+  takeoff/landing). Revisit (a) or (b) if RL becomes a goal again.
 
 - [x] **Residual RL on the LQR** (2026-10-05, authorized; `dff26ab`): `flightsim/rl/residual.py`,
   `configs/rl/residual_lqr.yaml`. Command = LQR + agent correction (at most +/-0.2 per
