@@ -147,14 +147,17 @@ function fuselage(stations, material, steps = 6, ring = 48) {
     }
   }
   // Close both ends with a fan around the centre.
+  // (The end fans have their own vertices, so they do not bend the skin's normals.)
   for (const [i, flip] of [[0, true], [rows.length - 1, false]]) {
     const r = rows[i], c = pos.length / 3;
     pos.push(...toBody(r.x, 0, (r.zt + r.zb) / 2).toArray());
     paint.push(r.x, 0, (r.zt + r.zb) / 2, 0.25);
-    for (let k = 0; k < ring; k++) {
+    for (let k = 0; k <= ring; k++) {
       const a = i * (ring + 1) + k;
-      index.push(...(flip ? [c, a + 1, a] : [c, a, a + 1]));
+      pos.push(pos[a * 3], pos[a * 3 + 1], pos[a * 3 + 2]);
+      paint.push(paint[a * 4], paint[a * 4 + 1], paint[a * 4 + 2], paint[a * 4 + 3]);
     }
+    for (let k = 0; k < ring; k++) index.push(...(flip ? [c, c + 2 + k, c + 1 + k] : [c, c + 1 + k, c + 2 + k]));
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
@@ -194,17 +197,23 @@ function surface(sections, { f0 = 0, f1 = 1, t = 0.12, m = 0.02, p = 0.4, normal
       index.push(a, b, a + 1, a + 1, b, b + 1);
     }
   }
-  for (const i of [0, sections.length - 1]) {
+  // End caps get their own vertices, so their (sideways) normals are not averaged into
+  // the skin's: shared vertices made the skin near one tip shade as if curving inward.
+  // Both caps are wound to face outward (away from the other end).
+  for (const [i, outward] of [[0, false], [sections.length - 1, true]]) {
+    const base = pos.length / 3;
+    for (let k = 0; k < per; k++) pos.push(pos[(i * per + k) * 3], pos[(i * per + k) * 3 + 1], pos[(i * per + k) * 3 + 2]);
     for (let k = 0; k < fs.length - 1; k++) {
-      // End cap: quads between the upper and lower point at each chord station.
-      const u0 = i * per + k, u1 = u0 + 1, l0 = i * per + per - 1 - k, l1 = l0 - 1;
-      index.push(u0, l0, u1, u1, l0, l1);
+      // Quads between the upper and lower point at each chord station.
+      const u0 = base + k, u1 = u0 + 1, l0 = base + per - 1 - k, l1 = l0 - 1;
+      index.push(...(outward ? [u0, l0, u1, u1, l0, l1] : [u0, u1, l0, u1, l1, l0]));
     }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
   g.setIndex(index);
   g.computeVertexNormals();
+  g.userData = { ringSize: per, sections: sections.length }; // skin vertices come first (tests)
   return g;
 }
 
@@ -241,7 +250,7 @@ function glow() {
 }
 
 // A light: a half-sphere lens on a dark bezel, facing `outward` (body axes), with a glow.
-function lamp(position, outward, colour, radiusIn, glowM) {
+function lamp(position, outward, colour, radiusIn, glowM, length = 1) {
   const g = new THREE.Group();
   g.position.copy(position);
   g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), outward.clone().normalize());
@@ -249,11 +258,12 @@ function lamp(position, outward, colour, radiusIn, glowM) {
     new THREE.SphereGeometry(radiusIn * IN, 20, 10, 0, 2 * Math.PI, 0, Math.PI / 2), // dome along +y
     new THREE.MeshBasicMaterial({ color: colour }),
   );
+  lens.scale.y = length; // > 1: a teardrop-like lens standing proud of the surface
   const bezel = new THREE.Mesh(new THREE.CylinderGeometry(radiusIn * 1.15 * IN, radiusIn * 1.15 * IN, 0.25 * IN, 20), new THREE.MeshLambertMaterial({ color: 0x3a3d40 }));
   bezel.position.y = -0.12 * IN;
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow(), color: colour, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
   halo.scale.setScalar(glowM);
-  halo.position.y = radiusIn * 0.5 * IN;
+  halo.position.y = radiusIn * length * 0.6 * IN;
   g.add(lens, bezel, halo);
   g.userData = { lens, halo };
   return g;
@@ -372,7 +382,7 @@ export function buildC172({ registration = REGISTRATION } = {}) {
     group.add(ellipsoid([60, yy(43), -6], 16, 5, 8.5, white));
     // Navigation lights on the wingtips at their thickest point (about 30% chord; the tip
     // is ~5 in thick), facing outward and a little forward: red left, green right.
-    group.add(lamp(toBody(43, yy(214), wingZ(214) + 0.7), new THREE.Vector3(0.35, side, 0), side > 0 ? 0x2bff5a : 0xff2a2a, 1.0, 0.35));
+    group.add(lamp(toBody(43, yy(214), wingZ(214) + 0.7), new THREE.Vector3(0.35, side, 0), side > 0 ? 0x2bff5a : 0xff2a2a, 1.3, 0.35, 1.8));
   }
 
   // Horizontal tail with elevator (symmetric section).
@@ -393,7 +403,7 @@ export function buildC172({ registration = REGISTRATION } = {}) {
   group.add(pivots.rudder);
   // Flashing red beacon on top of the fin; white position light at the tail facing aft.
   // (The fin tip is ~2.8 in thick and the tail cone ends ~3 in wide: lenses fit inside.)
-  const beacon = lamp(toBody(255, 0, 87.1), new THREE.Vector3(0, 0, -1), 0xff3a2a, 1.0, 0.6);
+  const beacon = lamp(toBody(255, 0, 87.1), new THREE.Vector3(0, 0, -1), 0xff3a2a, 1.1, 0.6, 1.4);
   group.add(beacon);
   group.add(lamp(toBody(272.3, 0, 33), new THREE.Vector3(-1, 0, 0), 0xffffff, 0.8, 0.3));
 

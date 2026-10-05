@@ -40,6 +40,20 @@ const row = {};
 for (const k of Object.keys(names)) row[names[k]] = 0.3;
 m.update(row);
 for (const k of Object.keys(names)) out.deflected[k] = te(m.pivots[k]);
+// Shading normals on each lifting surface's end sections must lie across the span: end
+// caps that shared vertices with the skin bent them span-wise (one tip looked concave).
+let worst = 0;
+m.group.traverse((o) => {
+  const u = o.geometry?.userData;
+  if (!o.isMesh || !u?.ringSize) return;
+  const p = o.geometry.attributes.position, n = o.geometry.attributes.normal, per = u.ringSize;
+  const centre = (s) => { const c = new THREE.Vector3(); for (let k = 0; k < per; k++) c.add(new THREE.Vector3().fromBufferAttribute(p, s * per + k)); return c.divideScalar(per); };
+  const span = centre(u.sections - 1).sub(centre(0)).normalize();
+  for (const s of [0, u.sections - 1]) for (let k = 0; k < per; k++) {
+    worst = Math.max(worst, Math.abs(new THREE.Vector3().fromBufferAttribute(n, s * per + k).dot(span)));
+  }
+});
+out.worstSpanwiseNormal = worst;
 console.log(JSON.stringify(out));
 """
 
@@ -70,3 +84,7 @@ def test_surfaces_deflect_the_way_logged_positions_mean(model):
     for k in ("elevator", "aileronL", "aileronR", "flapL", "flapR"):
         assert d[k][2] - n[k][2] > 0.05, k  # trailing edge down (body z is down)
     assert d["rudder"][1] - n["rudder"][1] < -0.05  # trailing edge left (body y is right)
+
+
+def test_tip_shading_is_not_bent_by_end_caps(model):
+    assert model["worstSpanwiseNormal"] < 0.35
