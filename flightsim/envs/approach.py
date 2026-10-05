@@ -57,6 +57,23 @@ STRIKES = {"TAIL_SKID": "tail_strike", "LEFT_TIP": "wingtip_strike", "RIGHT_TIP"
 BOUNCE_S = 0.3  # airborne this long after a touchdown counts as a bounce
 
 
+def approach_geometry(cfg: EnvConfig) -> dict | None:
+    """The runway and glide path of an approach task, for displays (None for other tasks).
+    Elevation is the ground at the threshold (0 m on flat terrain)."""
+    a = cfg.approach
+    if a is None:
+        return None
+    elevation = (
+        ground_elevation_m(a.threshold_north_m / R_EARTH_M, a.threshold_east_m / R_EARTH_M) if cfg.terrain == "procedural" else 0.0
+    )
+    return {
+        "threshold_north_m": a.threshold_north_m, "threshold_east_m": a.threshold_east_m,
+        "heading_deg": math.degrees(a.runway_heading_rad), "length_m": a.runway_length_m, "width_m": a.runway_width_m,
+        "aim_point_m": a.aim_point_m, "glide_path_deg": math.degrees(a.glide_path_rad), "elevation_m": elevation,
+        "touchdown_zone_m": list(a.touchdown_zone_m),
+    }  # fmt: skip
+
+
 def isa_density_ratio(alt_m: float) -> float:
     """Density / sea-level density in the ISA troposphere."""
     return (1.0 - 2.25577e-5 * alt_m) ** 4.25588

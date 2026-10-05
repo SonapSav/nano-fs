@@ -3,6 +3,7 @@ the server decimates and paces them. Sources never see wall-clock time."""
 
 import bisect
 import hashlib
+import json
 import math
 import re
 from collections.abc import Iterator
@@ -16,6 +17,8 @@ from flightsim.control.autopilot import AutopilotGains
 from flightsim.control.manual import HumanPolicy
 from flightsim.datalog import make_run_id, read_log, write_log
 from flightsim.envs import EnvConfig, make_env
+from flightsim.envs.approach import approach_geometry
+from flightsim.envs.config import env_config_from_raw
 from flightsim.envs.policies import PIDPolicy
 from flightsim.stream.protocol import frame_row
 
@@ -31,10 +34,20 @@ class Source:
     meta: dict = field(default_factory=dict)
     end_reason: str = "finished"
     landing: dict | None = None  # approach task: the landing result, sent with the end message
+    approach: dict | None = None  # approach task: runway and glide path (envs.approach.approach_geometry)
     pilot_name: str | None = None  # who flies a live flight: "pid", "lqr" or "human"
 
     def frames(self) -> Iterator[tuple[float, dict]]:
         raise NotImplementedError
+
+
+def _logged_approach(meta: dict) -> dict | None:
+    """Approach geometry from a log's config (None for other tasks or unreadable configs)."""
+    try:
+        raw = json.loads(meta.get("flightsim.config_json", "null"))
+        return approach_geometry(env_config_from_raw(raw)) if raw and "approach" in raw else None
+    except (ValueError, KeyError, TypeError):
+        return None
 
 
 class ReplaySource(Source):
@@ -46,6 +59,7 @@ class ReplaySource(Source):
         duration = self._times[-1] if self._rows else 0.0
         rate = (len(self._rows) - 1) / duration if duration > 0 else 0.0
         super().__init__("replay", meta["flightsim.run_id"], meta["flightsim.aircraft"], round(rate, 6), duration, None, meta)
+        self.approach = _logged_approach(meta)
 
     def seek(self, t_s: float) -> None:
         """Continue from the first row at or after t_s (clamped to the log), also while
@@ -76,6 +90,7 @@ class LiveSource(Source):
         run_id = make_run_id(env_cfg.config_hash, seed)
         super().__init__(source, run_id, env_cfg.aircraft, env_cfg.sim_rate_hz, env_cfg.episode_s, targets)
         self.pilot_name = "human" if source == "manual" else self._policy.name
+        self.approach = approach_geometry(env_cfg)
         self._config_hash = env_cfg.config_hash
 
     def frames(self) -> Iterator[tuple[float, dict]]:

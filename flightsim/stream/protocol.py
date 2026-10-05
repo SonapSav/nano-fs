@@ -7,7 +7,8 @@ Commands are null when no command follows the state (end of a log).
 Server -> client messages (JSON):
   {"type": "hello", "protocol": 1, "source": "live" | "manual" | "replay", "run_id", "aircraft",
    "sim_rate_hz", "frame_rate_hz", "duration_s" (null if unknown), "targets" (or null),
-   "meta" (log metadata, replay only), "pilot" ("pid" | "lqr" | "human"; null for replay)}
+   "meta" (log metadata, replay only), "pilot" ("pid" | "lqr" | "human"; null for replay),
+   "approach" (approach task: runway and glide path, see envs.approach.approach_geometry; else null)}
   {"type": "frame", "row": {<log column>: value, ...}}
   {"type": "end", "reason": "finished" | "landed" | "stopped" | "terminated:<why>", "landing"?: {...}}
       landing: the approach task's result (touchdown point, sink rate, ...), approach only

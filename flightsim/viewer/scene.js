@@ -6,8 +6,8 @@
 // covers, the flat-earth approximation is far below anything visible.
 
 import * as THREE from "three";
-import { addAirfield, addGroundFallback, addSky } from "./scenery.js";
-import { Terrain } from "./terrain.js";
+import { Papi, addAirfield, addGroundFallback, addRunwayLights, addSky } from "./scenery.js";
+import { Terrain, WATER_LEVEL_M, height as terrainHeight } from "./terrain.js";
 import { buildC172 } from "./aircraft.js";
 
 const R_EARTH = 6371000;
@@ -27,6 +27,30 @@ const BODY_FROM_CAMERA = new THREE.Matrix4().makeBasis(
 
 const CHASE_DISTANCE_M = 22; // default chase camera distance (the aircraft is 8.2 m long, 10.9 m span)
 
+// Top view of the C172 (span 10.9 m, length 8.2 m), nose toward -z, as a shadow.
+function buildShadow() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 256;
+  const g = c.getContext("2d"), m = 256 / 12; // 12 m across
+  g.fillStyle = "#000";
+  const rect = (cx, cy, w, h) => g.fillRect(128 + (cx - w / 2) * m, 128 + (cy - h / 2) * m, w * m, h * m);
+  g.beginPath();
+  g.ellipse(128, 128 + 0.4 * m, 0.6 * m, 4.1 * m, 0, 0, Math.PI * 2); // fuselage, nose up (toward -z)
+  g.fill();
+  rect(0, -0.9, 10.9, 1.5); // wing
+  rect(0, 3.6, 3.4, 1.1); // tailplane
+  const tex = new THREE.CanvasTexture(c);
+  const plane = new THREE.Mesh(
+    new THREE.PlaneGeometry(12, 12),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.42, depthWrite: false, color: 0x000000, alphaTest: 0.01 }),
+  );
+  plane.rotation.x = -Math.PI / 2;
+  const group = new THREE.Group();
+  group.add(plane);
+  group.visible = false;
+  return group;
+}
+
 export class FlightScene {
   constructor(container) {
     this.container = container;
@@ -38,9 +62,11 @@ export class FlightScene {
     container.prepend(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
-    addSky(this.scene);
+    this.sunDir = addSky(this.scene).sunDir;
     addGroundFallback(this.scene);
     addAirfield(this.scene);
+    addRunwayLights(this.scene);
+    this.papi = new Papi(this.scene);
     this.terrain = new Terrain(this.scene);
 
     this.model = buildC172();
@@ -65,6 +91,15 @@ export class FlightScene {
     this.targetLine.frustumCulled = false;
     this.targetLine.visible = false;
     this.scene.add(this.targetLine);
+
+    // Approach: magenta gates along the glide path (setApproach).
+    this.glidePath = new THREE.Group();
+    this.glidePath.visible = false;
+    this.scene.add(this.glidePath);
+    this.approach = null;
+
+    this.shadow = buildShadow();
+    this.scene.add(this.shadow);
 
     this.camera = new THREE.PerspectiveCamera(60, 1, 0.5, 120000);
     this.orbit = { azimuth: 0, elevation: 0.18, distance: CHASE_DISTANCE_M };
@@ -100,6 +135,51 @@ export class FlightScene {
     this.targets = targets;
   }
 
+  // Approach task geometry (stream hello "approach"), or null: draws the glide path from
+  // the aim point back 5 nm along the extended centreline.
+  setApproach(a) {
+    this.approach = a;
+    this.glidePath.visible = Boolean(a);
+    this.glidePath.clear();
+    if (!a) return;
+    const h = (a.heading_deg * Math.PI) / 180, tan = Math.tan((a.glide_path_deg * Math.PI) / 180);
+    const at = (along) => {
+      const n = a.threshold_north_m + along * Math.cos(h), e = a.threshold_east_m + along * Math.sin(h);
+      return nedToWorld(n, e, -(a.elevation_m + Math.max(0, a.aim_point_m - along) * tan));
+    };
+    // Gates (40 m wide, 24 m tall frames, centred on the glide path) every 400 m from 200 m
+    // before the threshold out to 5 nm: fly through their centres.
+    const material = new THREE.MeshBasicMaterial({ color: 0xd23cc8, transparent: true, opacity: 0.8 });
+    const bar = (w, ht) => new THREE.Mesh(new THREE.BoxGeometry(w, ht, 0.6), material);
+    for (let along = -200; along > a.aim_point_m - 9260; along -= 400) {
+      const gate = new THREE.Group();
+      const top = bar(40, 1.5), bottom = bar(40, 1.5), left = bar(1.5, 24), right = bar(1.5, 24);
+      top.position.y = 12;
+      bottom.position.y = -12;
+      left.position.x = -20;
+      right.position.x = 20;
+      gate.add(top, bottom, left, right);
+      gate.position.copy(at(along));
+      gate.rotation.y = -h; // face along the approach
+      this.glidePath.add(gate);
+    }
+    this.targetLine.visible = false;
+  }
+
+  // The aircraft's shadow: its outline cast along the sun onto the ground below, fading
+  // out with height (the strongest height cue close to the ground).
+  updateShadow() {
+    const p = this.position, s = this.sunDir;
+    const ground = Math.max(terrainHeight(p.x, p.z), WATER_LEVEL_M);
+    const agl = p.y - ground;
+    this.shadow.visible = agl < 200;
+    if (!this.shadow.visible) return;
+    const t = (p.y - ground) / s.y;
+    this.shadow.position.set(p.x - s.x * t, ground + 0.25, p.z - s.z * t);
+    this.shadow.rotation.y = -(this.heading ?? 0);
+    this.shadow.children[0].material.opacity = 0.42 * Math.max(0, 1 - agl / 200);
+  }
+
   update(row) {
     const n = (row.lat_rad - this.origin.lat) * R_EARTH;
     const e = (row.lon_rad - this.origin.lon) * R_EARTH * Math.cos(this.origin.lat);
@@ -127,7 +207,8 @@ export class FlightScene {
     pos.needsUpdate = true;
     this.trailGeo.setDrawRange(0, this.trailCount);
 
-    if (this.targets) {
+    this.updateShadow();
+    if (this.targets && !this.approach) {
       const h = this.targets.heading_rad;
       const start = new THREE.Vector3(this.position.x, this.targets.alt_msl_m, this.position.z);
       const end = start.clone().add(nedToWorld(Math.cos(h), Math.sin(h), 0).multiplyScalar(3000));
@@ -157,6 +238,7 @@ export class FlightScene {
   }
 
   render() {
+    this.papi.update(new THREE.Vector3().copy(EYE_BODY).applyMatrix4(this.aircraft.matrix)); // as the pilot sees them
     if (this.view === "cockpit") {
       // Eye fixed in the aircraft; the camera rotates with it, plus the pilot's head turn.
       this.camera.position.copy(EYE_BODY).applyMatrix4(this.aircraft.matrix);

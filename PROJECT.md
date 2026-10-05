@@ -172,9 +172,17 @@ owner before work can start.
     as JSBSim exposes nothing for structural contacts). A simple scripted pilot lands
     every tested seed main wheels first (~310-350 fpm, 49 KCAS) but floats long (460-540 m
     past the threshold): the baseline autopilot (below) should do better.
-  - [ ] Landing cues in the viewer: PAPI, glide path line, approach lights, shadow,
-    touchdown zone markings; glide path / centreline / distance readouts. The runway is
-    hard to see from 3 nm today.
+  - [x] Landing cues in the viewer (2026-10-05): PAPI on the left of each runway at the
+    aim point (FAA L-880 4-box: units at glide path +30', +10', -10', -30', 15 m from the
+    edge, 9 m apart, from a manufacturer manual following AC 150/5345-28), coloured from
+    the pilot's eye (so correct in chase view too); approach lights (bars every 60 m to
+    420 m), green threshold bars, edge lights every 60 m, drawn at a fixed pixel size so
+    they show from miles out; painted runway edge stripes; magenta glide path gates
+    (40 x 24 m) every 400 m; the aircraft's shadow cast along the sun, fading out above
+    200 m; readouts "Glide path" (ft high/low), "Centreline" (m left/right) and "To
+    threshold" (nm), also in replays (approach geometry from the log's config). Fixed on
+    the way: the fallback ground plane (one 200 km quad) covered the runway at some
+    low camera positions (depth imprecision); it is now split into ~3 km cells.
   - [ ] Approach autopilot baseline (glide path, centreline, speed, flare) and batch
     metrics for landings (touchdown point, sink rate, ...).
   - [ ] Later: brakes and rollout, crosswind variant (needs the low-altitude wind model),

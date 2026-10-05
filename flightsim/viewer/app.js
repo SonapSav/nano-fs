@@ -170,6 +170,8 @@ function handle(msg) {
       updateSeekable();
       scene.reset();
       scene.setTargets(msg.targets);
+      scene.setApproach(msg.approach ?? null);
+      showApproachRows(Boolean(msg.approach));
       els.run.textContent = `${msg.source === "live" ? `${(msg.pilot ?? "pid").toUpperCase()} autopilot` : { manual: "You are flying", replay: "Replay" }[msg.source]} ${msg.run_id}`;
       say(msg.source === "manual"
         ? (els.source.value === MANUAL_APPROACH ? "Follow the glide path to runway 09 (ahead), flare and land main wheels first." : "Fly to the magenta altitude and heading bugs.")
@@ -400,12 +402,39 @@ document.addEventListener("keyup", (e) => pilot.keyup(e));
 window.addEventListener("blur", () => pilot.releaseAll());
 window.addEventListener("resize", () => (dirty = true));
 
+// Approach: glide path and centreline deviations replace the cruise targets.
+function showApproachRows(on) {
+  $("l-talt").textContent = on ? "Glide path" : "Altitude target";
+  $("l-thdg").textContent = on ? "Centreline" : "Heading target";
+  $("l-dist").hidden = $("r-dist").hidden = !on;
+}
+
+function approachDeviations(row, a) {
+  const R_EARTH = 6371000, h = (a.heading_deg * Math.PI) / 180;
+  const dn = row.lat_rad * R_EARTH - a.threshold_north_m, de = row.lon_rad * R_EARTH - a.threshold_east_m;
+  const along = dn * Math.cos(h) + de * Math.sin(h), cross = -dn * Math.sin(h) + de * Math.cos(h);
+  const gp = row.alt_msl_m - (a.elevation_m + Math.max(0, a.aim_point_m - along) * Math.tan((a.glide_path_deg * Math.PI) / 180));
+  return { along, cross, gp };
+}
+
 function updateReadout(row) {
-  const t = session?.targets;
+  const a = session?.approach;
+  if (a) {
+    if (row) {
+      const d = approachDeviations(row, a);
+      const ft = Math.round(d.gp * units.M_TO_FT);
+      readout.talt.textContent = Math.abs(ft) < 10 ? "on path" : `${Math.abs(ft)} ft ${ft > 0 ? "high" : "low"}`;
+      readout.thdg.textContent = Math.abs(d.cross) < 2 ? "on centreline" : `${Math.abs(d.cross).toFixed(0)} m ${d.cross > 0 ? "right" : "left"}`;
+      $("r-dist").textContent = d.along < 0 ? `${(-d.along / 1852).toFixed(2)} nm` : "over the runway";
+    } else {
+      readout.talt.textContent = readout.thdg.textContent = $("r-dist").textContent = "–";
+    }
+  }
+  const t = a ? null : session?.targets;
   readout.alt.textContent = row ? `${Math.round(row.alt_msl_m * units.M_TO_FT).toLocaleString("en-US")} ft` : "–";
-  readout.talt.textContent = t ? `${Math.round(t.alt_msl_m * units.M_TO_FT).toLocaleString("en-US")} ft` : "–";
+  if (!a) readout.talt.textContent = t ? `${Math.round(t.alt_msl_m * units.M_TO_FT).toLocaleString("en-US")} ft` : "–";
   readout.hdg.textContent = row ? `${String(Math.round(deg360(row.psi_rad)) % 360).padStart(3, "0")}°` : "–";
-  readout.thdg.textContent = t ? `${String(Math.round(deg360(t.heading_rad)) % 360).padStart(3, "0")}°` : "–";
+  if (!a) readout.thdg.textContent = t ? `${String(Math.round(deg360(t.heading_rad)) % 360).padStart(3, "0")}°` : "–";
   readout.kias.textContent = row ? `${(row.cas_mps * units.MPS_TO_KT).toFixed(0)} kt` : "–";
   readout.aoa.textContent = row ? `${(row.alpha_rad * units.DEG).toFixed(1)}°` : "–";
   readout.g.textContent = row ? `${(-row.az_mps2 / units.G).toFixed(2)} g` : "–";

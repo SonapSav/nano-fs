@@ -139,3 +139,19 @@ def test_live_stream_reports_the_landing():
     rows = [row for _, row in source.frames()]
     assert source.end_reason == "landed" and source.landing["landed"]
     assert source.landing["touchdown"]["along_m"] > 0 and rows[-1]["alt_agl_m"] < 2.0
+
+
+def test_approach_geometry_reaches_the_viewer_live_and_in_replays(tmp_path):
+    """The stream's hello carries the runway and glide path, for live flights and replays."""
+    from flightsim.datalog import write_log
+    from flightsim.stream.sources import LiveSource, ReplaySource
+
+    cfg = load_env_config(CONFIG, {"episode_s": 2.0})
+    live = LiveSource(cfg, None, 0, policy=type("P", (), {"name": "x", "reset": lambda s, i: None, "__call__": lambda s, o, i: np.zeros(4, np.float32)})())
+    assert live.approach["threshold_east_m"] == -500.0 and live.approach["glide_path_deg"] == pytest.approx(3.0)
+    assert live.approach["aim_point_m"] == 250.0 and live.approach["elevation_m"] == pytest.approx(0.0, abs=1e-9)
+    list(live.frames())
+    path = write_log(tmp_path / "a.parquet", live._env.episode_result(), live._env.provenance())
+    assert ReplaySource(path).approach == live.approach
+    cruise = load_env_config(ROOT / "configs" / "envs" / "altitude_heading_hold.yaml", {"episode_s": 1.0})
+    assert LiveSource(cruise, None, 0, policy=live._policy).approach is None
