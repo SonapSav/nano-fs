@@ -142,3 +142,80 @@ def phugoid_response(
         s = core.step(trim)
         t[i], cas[i] = s.t_s - t0, s.cas_mps
     return oscillation_from_response(t, cas, trim_cas_mps), t, cas
+
+
+@dataclass(frozen=True)
+class LeanCruise:
+    """Steady level cruise at a leaned mixture."""
+
+    mixture: float
+    throttle: float
+    engine_rpm: float
+    fuel_flow_kgps: float
+
+
+def _engine_after_leaning(aircraft: str, loading: Loading, ic: InitialConditions, start_mixture: float,
+                          mixtures: np.ndarray, settle_s: float, dt_s: float) -> tuple[np.ndarray, np.ndarray]:  # fmt: skip
+    """Trim at start_mixture, then hold that throttle and set each mixture: RPM and EGT
+    after settle_s (the pilot's view while leaning; RPM settles in about 2 s)."""
+    rpm, egt = [], []
+    for m in mixtures:
+        core = JSBSimCore(aircraft, dt_s)
+        core.reset(ic, loading, Controls(mixture=start_mixture))
+        u = replace(core.trim(), mixture=float(m))
+        for _ in range(round(settle_s / dt_s)):
+            s = core.step(u)
+        rpm.append(s.engine_rpm)
+        egt.append(core.engine().egt_k)
+    return np.array(rpm), np.array(egt)
+
+
+def lean_cruise(
+    aircraft: str,
+    loading: Loading,
+    alt_msl_m: float,
+    tas_mps: float,
+    *,
+    method: str = "rpm",
+    rpm_drop: float = 37.5,
+    egt_rich_k: float = 50.0 * 5.0 / 9.0,
+    settle_s: float = 3.0,
+    dt_s: float = 1 / 120,
+) -> LeanCruise:
+    """Lean the mixture as the POH describes, then trim level at tas_mps and read the
+    fuel flow. Methods (C172P POH Section 4):
+      "rpm": lean until RPM peaks, then further until it drops 25-50 RPM (rpm_drop is the
+             middle); the POH ties this to its Section 5 fuel figures.
+      "egt": 50 F rich of peak EGT (Figure 4-4, "recommended lean").
+    Leaning changes power, so re-trimming at the speed moves the throttle; repeat until
+    the mixture settles."""
+    if method not in ("rpm", "egt"):
+        raise ValueError(f"unknown leaning method {method!r}")
+    ic = InitialConditions(alt_msl_m=alt_msl_m, tas_mps=tas_mps, heading_rad=0.0)
+    grid = np.round(np.arange(1.0, 0.499, -0.01), 2)
+    mixture = 1.0
+    for _ in range(6):
+        rpm, egt = _engine_after_leaning(aircraft, loading, ic, mixture, grid, settle_s, dt_s)
+        if method == "rpm":
+            i = int(np.argmax(rpm))
+            target = rpm[i] - rpm_drop
+            below = np.nonzero(rpm[i:] <= target)[0]
+            if not len(below):
+                raise RuntimeError("RPM never dropped below its peak by rpm_drop")
+            j = i + int(below[0])
+            new = float(np.interp(target, [rpm[j], rpm[j - 1]], [grid[j], grid[j - 1]]))
+        else:
+            i = int(np.argmax(egt))
+            target = egt[i] - egt_rich_k
+            above = np.nonzero(egt[: i + 1] >= target)[0]
+            k = int(above[0])
+            new = float(grid[0]) if k == 0 else float(np.interp(target, [egt[k - 1], egt[k]], [grid[k - 1], grid[k]]))
+        done = abs(new - mixture) < 0.003
+        mixture = new
+        if done:
+            break
+    core = JSBSimCore(aircraft, dt_s)
+    core.reset(ic, loading, Controls(mixture=mixture))
+    u = core.trim()
+    s = core.step(u)
+    return LeanCruise(mixture=mixture, throttle=u.throttle, engine_rpm=s.engine_rpm, fuel_flow_kgps=core.engine().fuel_flow_kgps)

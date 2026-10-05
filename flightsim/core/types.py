@@ -92,6 +92,14 @@ class State:
 
 
 @dataclass(frozen=True)
+class EngineStatus:
+    """Engine diagnostics outside the logged state (not part of the log schema)."""
+
+    fuel_flow_kgps: float
+    egt_k: float  # exhaust gas temperature
+
+
+@dataclass(frozen=True)
 class MassProperties:
     mass_kg: float
     # Centre of gravity in the aircraft's structural frame: x aft, y right, z up, from the

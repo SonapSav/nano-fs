@@ -8,6 +8,7 @@ Published values used for validation. Every number in a validation test must cit
   - 1985 Model 172P, copyright 1984, Original Issue. Civil Air Patrol copy: https://tx435.cap.gov/media/cms/C172PPOHwoSupplements_0A69C5AA130B9.pdf (has handwritten amendments in Section 2).
   - 1981 Model 172P. LSV Rhein copy (D-EKRM): https://www.lsvr.de/de/wp-content/uploads/2019/10/POH-Cessna-172-P-D-EKRM.pdf (clean Section 2; used for CG limits).
   - Both retrieved 2026-10-04, scanned with OCR text. Not stored in this repo.
+  - Figure numbers below follow the 1985 edition. The 1981 edition has no Figure 5-2, so its Cruise Performance table is Figure 5-7 (same values).
 - **Relevance:** JSBSim's `c172p` model. The model file itself states it is built from public data and "guesses", validated only to "fly right", so expect approximate agreement.
 
 ### Figure 5-8, Cruise Performance (excerpt)
@@ -20,6 +21,12 @@ Conditions: 2400 lb, recommended lean mixture, standard temperature. Speeds incl
 | 4000 | 2300 | 59 | 102 | 6.6 |
 | 6000 | 2200 | 52 | 95 | 5.9 |
 | 6000 | 2300 | 57 | 101 | 6.4 |
+
+### Mixture leaning and fuel density (used for the fuel-flow checks)
+
+- **Section 4, Cruise:** "To achieve the recommended lean mixture fuel consumption figures shown in Section 5, the mixture should be leaned until engine RPM peaks and then leaned further until it drops 25-50 RPM."
+- **Figure 4-4, EGT Table:** Recommended lean (Pilot's Operating Handbook and Power Computer) = 50 F rich of peak EGT; best economy = peak EGT.
+- **Section 6, sample loading:** "Usable Fuel (At 6 Lbs./Gal.)". The JSBSim c172p tanks use 6.6 lb/gal (JSBSim's default fuel), so the model's own `fuel-flow-rate-gph` reads about 9% low against POH gallons; checks convert fuel mass at 6 lb/gal.
 
 ### Figure 5-3, Stall Speeds (wings level, power off, 2400 lb)
 
@@ -76,4 +83,6 @@ JSBSim 1.3.1, trimmed at the POH KTAS, 2390 lb (model tank capacity is 185 lb ea
 | 6000 | 95 | 2200 / 52 / 5.9 | 2223 / 51.7 / 6.95 |
 | 6000 | 101 | 2300 / 57 / 6.4 | 2293 / 55.7 / 7.43 |
 
-Findings: RPM within about 20 and power within about 1.5 percentage points. Fuel flow is high at 6000 ft because the POH assumes leaned mixture; fuel-flow comparisons must lean first. The model agrees better with the fairing-equipped speeds than with speeds 2 kt lower. The formal checks are in `configs/validation/c172p.yaml`; results in `docs/VALIDATION.md`.
+Findings: RPM within about 20 and power within about 1.5 percentage points. Fuel flow is high at 6000 ft because the POH assumes leaned mixture; fuel-flow comparisons must lean first. (The GPH column above is the model's own figure at 6.6 lb/gal; at the POH's 6 lb/gal the full-rich flows are about 10% higher still. Leaned fuel flow is now a formal check, see below and `docs/VALIDATION.md`.)
+
+Leaned (2026-10-05, POH procedures above, re-trimmed at the POH speed): 6.19 / 6.69 / 6.11 / 6.53 GPH with the RPM method and 6.07 / 6.56 / 6.00 / 6.41 GPH with the EGT method, against 6.1 / 6.6 / 5.9 / 6.4 in Figure 5-8. In the model the two methods lean to quite different mixtures (peak RPM near mixture 0.9, peak EGT near 0.65-0.7; in a real engine they are close), but after re-trimming the fuel flows differ by only about 2%. The model agrees better with the fairing-equipped speeds than with speeds 2 kt lower. The formal checks are in `configs/validation/c172p.yaml`; results in `docs/VALIDATION.md`.

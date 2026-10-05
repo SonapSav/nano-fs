@@ -14,7 +14,7 @@ from pathlib import Path
 import jsbsim
 import numpy as np
 
-from flightsim.core.types import Controls, LinearModel, MassProperties, State
+from flightsim.core.types import Controls, EngineStatus, LinearModel, MassProperties, State
 
 FT_TO_M = 0.3048
 IN_TO_M = 0.0254
@@ -146,6 +146,9 @@ class JSBSimCore:
         if not fdm.run_ic():
             raise RuntimeError("JSBSim run_ic failed")
         fdm["propulsion/set-running"] = -1  # all engines running
+        # Starting the engine resets the mixture command to full rich (verified 2026-10-05;
+        # other commands are kept), so apply the requested mixture again.
+        fdm[_CONTROL_PROPS["mixture"]] = controls.mixture
         self._step_count = 0
         return self.state()
 
@@ -169,6 +172,14 @@ class JSBSimCore:
     def _apply(self, controls: Controls) -> None:
         for name, prop in _CONTROL_PROPS.items():
             self._fdm[prop] = getattr(controls, name)
+
+    def engine(self) -> EngineStatus:
+        """Fuel flow (mass, so independent of the model's fuel density) and EGT."""
+        f = self._fdm
+        return EngineStatus(
+            fuel_flow_kgps=f["propulsion/engine/fuel-flow-rate-pps"] * LBM_TO_KG,
+            egt_k=(f["propulsion/engine/egt-degF"] - 32.0) * 5.0 / 9.0 + 273.15,
+        )
 
     def mass_properties(self) -> MassProperties:
         f = self._fdm

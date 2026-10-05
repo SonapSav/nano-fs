@@ -181,8 +181,12 @@ owner before work can start.
 - [ ] Spiral mode is stable at mid CG in the model; the AAIB pilot found the real aircraft divergent.
 - [ ] Short-period mode: no independent C172 measurement found in open sources; only
   MIL-F-8785C limits are checked. Look for a source.
-- [ ] Fuel flow not validated: the POH assumes leaned mixture, runs use full rich. Lean
-  before comparing with POH Figure 5-8.
+- [x] Fuel flow validated leaned (2026-10-05): 8 checks (4 cruise points x RPM and EGT
+  leaning methods, POH Section 4) all within 0.2 GPH of Figure 5-8 (tolerance 0.4).
+  Found on the way: engine start in `reset` silently reset the mixture to full rich
+  (fixed; all earlier runs used full rich, so no results change), and the model's
+  tanks use 6.6 lb/gal against the POH's 6 (convert fuel mass). The model's peak RPM
+  and peak EGT mixtures are far apart (unlike a real engine); fine for fuel flow.
 - [ ] The model's empty-aircraft CG is aft of a typical 172P: the forward CG limit at
   2400 lb needs about 40 lb fuel and 860 lb in the front seats.
 

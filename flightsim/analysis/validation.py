@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from flightsim.analysis.maneuvers import KT_TO_MPS, loading_for, phugoid_response, stall_speed, trim_at_cas
+from flightsim.analysis.maneuvers import KT_TO_MPS, lean_cruise, loading_for, phugoid_response, stall_speed, trim_at_cas
 from flightsim.analysis.modes import lateral_modes, longitudinal_modes
 from flightsim.core import InitialConditions, JSBSimCore, Loading
 from flightsim.core.jsbsim_core import FT_TO_M, HP_TO_W, IN_TO_M, LBM_TO_KG
@@ -67,6 +67,12 @@ def _cruise_trim(aircraft: str, loading: Loading, alt_ft: float, ktas: float) ->
     core.trim()
     s = core.state()
     return s.engine_rpm, s.engine_power_w / HP_TO_W / RATED_POWER_HP * 100.0
+
+
+@cache
+def _lean_gph(aircraft: str, loading: Loading, alt_ft: float, ktas: float, method: str, lb_per_gal: float) -> float:
+    r = lean_cruise(aircraft, loading, alt_ft * FT_TO_M, ktas * KT_TO_MPS, method=method)
+    return r.fuel_flow_kgps / LBM_TO_KG * 3600.0 / lb_per_gal
 
 
 @cache
@@ -124,6 +130,17 @@ def plan_checks(cfg: dict) -> list[PlannedCheck]:
 
         add(f"cruise_rpm_{tag}", rpm)
         add(f"cruise_power_{tag}", power)
+
+        for method, how in (("rpm", "leaned 25-50 RPM past peak RPM"), ("egt", "leaned to 50 F rich of peak EGT")):
+            def fuel(p=p, tag=tag, method=method, how=how):
+                tol = cr["tolerance"]["fuel_gph"]
+                loading = _loading(ac, cr["weight_lb"], cr["cg_in"], cr["fuel_lb"])
+                gph = _lean_gph(ac, loading, p["alt_ft"], p["ktas"], method, cr["fuel_lb_per_gal"])
+                return Check(f"cruise_fuel_{method}_{tag}", src[cr["source"]],
+                             f"Cruise fuel flow at {p['alt_ft']} ft, {p['ktas']} KTAS, {how} ({cr['ref']}; Section 4 leaning)",
+                             f"{p['gph']} GPH", gph, "GPH", p["gph"] - tol, p["gph"] + tol)  # fmt: skip
+
+            add(f"cruise_fuel_{method}_{tag}", fuel)
 
     # Stall speeds (POH Figure 5-3)
     st = cfg["stall"]

@@ -52,3 +52,21 @@ def test_elevator_sign_convention(cruise):
     for _ in range(60):
         s = core.step(replace(trim, elevator=0.2))
     assert s.q_radps < 0
+
+
+def test_reset_keeps_the_mixture_command(cruise):
+    """Starting the engine in reset resets JSBSim's mixture to full rich; the core re-applies it."""
+    from flightsim.core import Controls
+
+    core = JSBSimCore(cruise.aircraft, cruise.dt_s)
+    core.reset(cruise.initial_conditions, cruise.loading, Controls(mixture=0.8))
+    assert core.controls().mixture == pytest.approx(0.8)
+    lean = core.trim()
+    assert lean.mixture == pytest.approx(0.8)
+    core.step(lean)
+    lean_flow = core.engine().fuel_flow_kgps
+    rich = JSBSimCore(cruise.aircraft, cruise.dt_s)
+    rich.reset(cruise.initial_conditions, cruise.loading)
+    rich.step(rich.trim())
+    assert 0 < lean_flow < rich.engine().fuel_flow_kgps
+    assert 600 < rich.engine().egt_k < 1200

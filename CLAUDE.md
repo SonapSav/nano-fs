@@ -115,6 +115,7 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - Model tank capacity is 185 lb each; larger loads are silently capped.
 - The linearization's engine RPM row is wrong: almost no self-damping (time constant ~11 min) while the nonlinear model settles in a few seconds. Do not use `engine_rpm` as a state in linear designs (the LQR leaves it out).
 - Steady wind at trim: `ic/vw-north-fps` ignores writes; set `ic/vw-mag-fps` + `ic/vw-dir-deg` (direction the air moves TOWARD) and then the ground velocity `ic/vn-fps`/`ic/ve-fps`/`ic/vd-fps` = air velocity + wind. Setting `ic/vt-fps` with wind gives a slipping, wrong-airspeed start, or a failed trim. `JSBSimCore.reset` handles this; calm resets keep the original path.
+- `propulsion/set-running` resets the mixture command to full rich (other commands are kept); `JSBSimCore.reset` re-applies the requested mixture. The c172p tanks use 6.6 lb/gal fuel, so convert fuel mass (`JSBSimCore.engine()`), not JSBSim's gallon figures, when comparing with the POH (6 lb/gal).
 - `atmosphere/gust-*-fps` survive `run_ic()`; `JSBSimCore.reset` zeroes them. Turbulence is ours (seeded, `flightsim/atmosphere/turbulence.py`), not JSBSim's `turb-type`.
 
 ## How to work with me (Claude Code)
