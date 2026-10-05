@@ -66,3 +66,15 @@ def test_reader_refuses_other_schema_versions(tmp_path, short_run):
     pq.write_table(table.replace_schema_metadata(meta), path)
     with pytest.raises(ValueError, match="schema version 999"):
         read_log(path)
+
+
+def test_float_columns_use_byte_stream_split_and_read_back_exactly(short_run, tmp_path):
+    cfg, result = short_run
+    path = write_log(tmp_path / "run.parquet", result, cfg.provenance)
+    md = pq.read_metadata(path)
+    names = md.schema.names
+    enc = {names[i]: md.row_group(0).column(i).encodings for i in range(md.num_columns)}
+    assert "BYTE_STREAM_SPLIT" in enc["alt_msl_m"] and "BYTE_STREAM_SPLIT" in enc["t_s"]
+    assert "BYTE_STREAM_SPLIT" not in enc["run_id"]
+    table, _ = read_log(path)
+    assert table.column("alt_msl_m").to_pylist() == [s.alt_msl_m for s in result.states]

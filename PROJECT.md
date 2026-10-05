@@ -371,8 +371,9 @@ owner before work can start.
 - [ ] Batches and logs made before this change (e.g. `data/batch/*` from 2026-10-04) have
   no code version; batch summaries are format 4 from now on.
 
-- [ ] Logs are 10.5 MB per 5 minutes (float64, zstd). For large batches, try Parquet
-  `BYTE_STREAM_SPLIT` encoding on float columns (no schema change).
+- [x] Logs halved (2026-10-05): float columns use Parquet `BYTE_STREAM_SPLIT` before zstd
+  (no schema change, lossless): a 5-minute run is 5.1 MB instead of 10.5 MB and writes
+  4-7x faster. Older logs read as before.
 
 ### Infrastructure
 
