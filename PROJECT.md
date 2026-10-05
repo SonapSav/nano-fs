@@ -198,8 +198,37 @@ owner before work can start.
     gained landing columns (format 5). Possible next: land nearer the aim point (aim
     earlier / flare later), a gain-scheduled or LQR approach, seeds 3000-3999 for final
     numbers.
-  - [ ] Later: brakes and rollout, crosswind variant (needs the low-altitude wind model),
-    takeoff, circuit.
+  - [x] **Crosswind landings** (2026-10-06):
+    - Low-altitude wind model (`flightsim/atmosphere/turbulence.py`), MIL-F-8785C 3.7.3:
+      log-profile wind shear (z0 = 0.15 ft, Category C) and Dryden turbulence with
+      height-dependent intensities and scale lengths, aligned with the wind
+      (sigma_w = 0.1 x wind at 20 ft; figure fits from the MathWorks Dryden documentation).
+      Tested: shear profile, parameters, gust statistics, seeding.
+    - `configs/envs/approach_landing_crosswind.yaml` (`manual_approach_crosswind.yaml`
+      for the viewer): wind at 20 ft 0-20 kt from any direction, redrawn while the
+      crosswind exceeds 15 kt (POH maximum demonstrated) or there is any tailwind;
+      turbulence on; 480 s episodes. Starts crabbed so the ground track is on the
+      centreline, descending at ground speed x tan 3 deg.
+    - JSBSim's trim in wind fails for strong headwinds at approach speed: windy starts
+      are trimmed in calm air and the wind added with `JSBSimCore.add_steady_wind`
+      (same core, so the engine keeps its trimmed RPM); all tested starts trim.
+    - New landing failure `side_load`: crab (track - heading) above 5 deg at touchdown
+      (project choice).
+    - Autopilot: integral of the centreline offset; de-crab from 8 m (rudder aligns the
+      nose with the runway, yaw damping) with a wing low into the wind (up to 8 deg,
+      strong aileron gain); stall protection (alpha < 11 deg); stronger nosewheel
+      steering on the rollout. Calm seeds 0-999: still 1000/1000.
+    - Crosswind seeds 0-999 (batch `db512d5f4ccb`): 774/1000 landed; by crosswind at
+      20 ft: 0-3 kt 96%, 3-6 kt 89%, 6-9 kt 75%, 9-12 kt 48%, 12-15 kt 24%. Failures:
+      side load 101 (mostly above 9 kt: the late de-crab cannot remove a 12-17 deg crab
+      in time), nose first 89 (gusts in the flare), off runway 32, hard landing 3,
+      stall 1. Possible next: a sideslip (wing-low) approach from ~100 ft instead of a
+      late de-crab, a gust additive to the approach speed (half the gust factor),
+      touchdown with less flap in strong crosswinds.
+    - Viewer: windsock left of the 09 threshold (points downwind, stands out at 15 kt;
+      tested), wind readout ("129 deg 17 kt, 10 kt crosswind from the right"), "Fly an
+      approach to runway 09 and land (crosswind, gusts)", side-load message.
+  - [ ] Later: brakes and rollout, takeoff, circuit.
 
 ### Second aircraft
 

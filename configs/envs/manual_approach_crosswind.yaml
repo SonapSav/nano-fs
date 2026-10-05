@@ -1,0 +1,4 @@
+# Manual flight: the approach with wind and turbulence, flaps and pitch trim added.
+base: approach_landing_crosswind.yaml
+
+actions: [elevator, aileron, rudder, throttle, flaps, pitch_trim]

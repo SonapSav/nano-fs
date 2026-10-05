@@ -109,6 +109,8 @@ class ApproachConfig:
     settle_s: float  # all wheels down this long: landed
     max_ground_s: float  # after first contact, the episode ends anyway
     reward: dict  # weights and scales, see configs/envs/approach_landing.yaml
+    max_drift_rad: float = math.inf  # crab (track - heading) at touchdown; more is a side load
+    wind: dict | None = None  # low-altitude wind (MIL-F-8785C 3.7.3), see approach_landing_crosswind.yaml
 
 
 @dataclass(frozen=True)
@@ -237,6 +239,8 @@ def _parse_approach(a: dict | None) -> ApproachConfig | None:
         settle_s=float(a["settle_s"]),
         max_ground_s=float(a["max_ground_s"]),
         reward=dict(a["reward"]),
+        max_drift_rad=math.radians(lim["max_drift_deg"]) if "max_drift_deg" in lim else math.inf,
+        wind=dict(a["wind"]) if a.get("wind") else None,
     )
 
 

@@ -96,14 +96,13 @@ class AltitudeHeadingHoldEnv(gym.Env):
         # Adding draws only at the end keeps episodes of calm configs unchanged.
         ic, target_alt, target_heading = self._draw_start(rng)
         self.wind = self._draw_wind(rng)
-        ic = replace(ic, wind_north_mps=self.wind["north_mps"], wind_east_mps=self.wind["east_mps"])
+        # Added to any wind the start already has (the approach task's low-altitude wind).
+        ic = replace(ic, wind_north_mps=ic.wind_north_mps + self.wind["north_mps"], wind_east_mps=ic.wind_east_mps + self.wind["east_mps"])
 
         # A fresh core per episode: a reused JSBSim instance is not bit-reproducible
         # (state survives run_ic), and construction costs only a few milliseconds.
         self._core = JSBSimCore(cfg.aircraft, 1.0 / cfg.sim_rate_hz)
-        self._core.reset(ic, cfg.loading, self._start_controls(), ground_elevation_m=self._ground_m(ic.lat_rad, ic.lon_rad))
-        self.trim = self._core.trim()
-        self.trim_state = self._core.state()
+        self.trim, self.trim_state = self._start_core(ic)
         self.targets = Targets(alt_msl_m=target_alt, heading_rad=target_heading, tas_mps=self.trim_state.tas_mps)
         self._turbulence = None
         if self.wind["turbulence_sigma_mps"] > 0:
@@ -141,6 +140,11 @@ class AltitudeHeadingHoldEnv(gym.Env):
             ic.heading_rad + rng.uniform(-cfg.target_heading_offset_rad, cfg.target_heading_offset_rad)
         ) % (2 * math.pi)
         return ic, target_alt, target_heading
+
+    def _start_core(self, ic: InitialConditions) -> tuple[Controls, State]:
+        """Reset the (fresh) core at the start condition and trim; returns (trim, state)."""
+        self._core.reset(ic, self.cfg.loading, self._start_controls(), ground_elevation_m=self._ground_m(ic.lat_rad, ic.lon_rad))
+        return self._core.trim(), self._core.state()
 
     def _start_controls(self) -> Controls:
         """Commands the episode starts from (and trims around), e.g. flaps for an approach."""

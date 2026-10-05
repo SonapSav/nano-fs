@@ -29,6 +29,7 @@ approach:
   limits:
     max_sink_fpm: 600           # project choice (10 ft/s, a common hard-landing inspection threshold)
     max_bank_deg: 10            # project choice, at touchdown
+    max_drift_deg: 5            # project choice: crab (track - heading) at touchdown, a sideways load on the gear
     lost_vertical_m: 120        # this far off the glide path or centreline: approach lost
     lost_lateral_m: 400
   settle_s: 2

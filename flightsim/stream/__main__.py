@@ -24,6 +24,7 @@ def main() -> None:
     parser.add_argument("--manual-config", default="configs/envs/manual.yaml", help="manual flight, calm air")
     parser.add_argument("--manual-wind-config", default="configs/envs/manual_wind.yaml", help="manual flight, wind and turbulence")
     parser.add_argument("--manual-approach-config", default="configs/envs/manual_approach.yaml", help="manual approach and landing")
+    parser.add_argument("--manual-crosswind-config", default="configs/envs/manual_approach_crosswind.yaml", help="manual approach, wind")
     parser.add_argument("--frame-rate", type=float, default=30.0)
     args = parser.parse_args()
 
@@ -36,6 +37,7 @@ def main() -> None:
             "calm": load_env_config(args.manual_config),
             "windy": load_env_config(args.manual_wind_config),
             "approach": load_env_config(args.manual_approach_config),
+            "approach_crosswind": load_env_config(args.manual_crosswind_config),
         },
         lqr_raw=load_raw(args.lqr),
         approach_env_cfg=load_env_config(args.approach_config),

@@ -63,7 +63,11 @@ The JSBSim c172p structural frame matches this datum to about 3 in: POH sample l
 - **3.7.1.2 Dryden form:** Phi_u = sigma_u^2 (2 L_u / pi) / (1 + (L_u Omega)^2); Phi_v = sigma_v^2 (L_v / pi) (1 + 3 (L_v Omega)^2) / (1 + (L_v Omega)^2)^2; Phi_w likewise with L_w.
 - **3.7.2 Medium/high altitude (above 2000 ft):** turbulence isotropic, sigma_u = sigma_v = sigma_w; **3.7.2.1** scale lengths L_u = L_v = L_w = 1750 ft for the Dryden form (2500 ft for von Karman).
 - **3.7.2.2 / Figure 7:** RMS intensity versus altitude. Read from the plot for the flat region below about 9000 ft: light about 5 ft/s, moderate about 10 ft/s, severe about 21 ft/s (TAS). These are plot readings, not tabulated values.
-- Not used yet: the low-altitude model (3.7.3, below 1000-2000 ft, Category C), wind shear (3.7.3.2), discrete gusts (3.7.1.3).
+- **3.7.3 Low altitude (Category C: approach and landing), used by the approach task with wind:**
+  - 3.7.3.2 wind shear: mean wind u = u20 ln(h/z0) / ln(20/z0), z0 = 0.15 ft for Category C (2.0 ft otherwise); u20 = wind at 20 ft.
+  - 3.7.3.3: tailwinds above 10 kt and crosswinds above the 3.3.7 values at 20 ft need not be considered; vector shear (90 deg over 600 ft, moderate) not modelled.
+  - 3.7.3.4 turbulence: sigma_w = 0.1 u20; scale lengths and sigma_u, sigma_v from figures 10 and 11 (plots). Their standard fits, from the MathWorks "Dryden Wind Turbulence Model (Continuous)" documentation (https://www.mathworks.com/help/aeroblks/drydenwindturbulencemodelcontinuous.html, retrieved 2026-10-05), MIL-F-8785C form, h in ft, 10-1000 ft: L_w = h, L_u = L_v = h / (0.177 + 0.000823 h)^1.2, sigma_u/sigma_w = sigma_v/sigma_w = 1 / (0.177 + 0.000823 h)^0.4; components aligned with the mean wind; linear blend into the medium/high altitude model between 1000 and 2000 ft; typical u20 15 kt light, 30 kt moderate, 45 kt severe.
+- Not used yet: discrete gusts (3.7.1.3, 3.7.3.5), gust angular rates.
 
 ## Searched and not used
 
@@ -86,3 +90,11 @@ JSBSim 1.3.1, trimmed at the POH KTAS, 2390 lb (model tank capacity is 185 lb ea
 Findings: RPM within about 20 and power within about 1.5 percentage points. Fuel flow is high at 6000 ft because the POH assumes leaned mixture; fuel-flow comparisons must lean first. (The GPH column above is the model's own figure at 6.6 lb/gal; at the POH's 6 lb/gal the full-rich flows are about 10% higher still. Leaned fuel flow is now a formal check, see below and `docs/VALIDATION.md`.)
 
 Leaned (2026-10-05, POH procedures above, re-trimmed at the POH speed): 6.19 / 6.69 / 6.11 / 6.53 GPH with the RPM method and 6.07 / 6.56 / 6.00 / 6.41 GPH with the EGT method, against 6.1 / 6.6 / 5.9 / 6.4 in Figure 5-8. In the model the two methods lean to quite different mixtures (peak RPM near mixture 0.9, peak EGT near 0.65-0.7; in a real engine they are close), but after re-trimming the fuel flows differ by only about 2%. The model agrees better with the fairing-equipped speeds than with speeds 2 kt lower. The formal checks are in `configs/validation/c172p.yaml`; results in `docs/VALIDATION.md`.
+
+## C172P POH, landing (used by the approach task)
+
+1985 Model 172P POH, Section 4: normal approach 65-75 KIAS flaps up, 60-70 KIAS flaps down; normal landing "Touchdown -- MAIN WHEELS FIRST"; short field approach 61 KIAS; maximum demonstrated crosswind velocity (takeoff or landing) 15 kt; flaps 0-10 deg below 110 KIAS, 10-30 deg below 85 KIAS. Section 4, Stalls: the stall warning horn sounds 5-10 kt above the stall in all configurations.
+
+## PAPI (precision approach path indicator)
+
+Airport Lighting Company, *PAPI Style B, Type L-880 / L-881 Instruction Manual*, Rev 2.0 (https://www.airportlightingcompany.com/wp-content/uploads/2019/07/PAPI-Manual-Style-B-Rev2.0.pdf, retrieved 2026-10-05), following FAA AC 150/5345-28 and AC 150/5340-30: L-880 (4 box) aiming relative to the glide path, from the unit nearest the runway: +30', +10', -10', -30' (standard installation); the unit nearest the runway has the largest angle; units 20-30 ft (6-9 m) apart centre to centre; inboard unit at least 50 ft (15 m) from the runway edge (30 ft / 10 m allowed for small general aviation runways); visual threshold crossing height for height group 1 (general aviation) 40 ft.

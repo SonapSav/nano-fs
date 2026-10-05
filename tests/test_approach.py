@@ -203,3 +203,62 @@ def test_approach_autopilot_lands_and_the_viewer_can_watch_it(tmp_path):
     hello, end = asyncio.run(main())
     assert hello["pilot"] == "approach" and hello["approach"]["threshold_east_m"] == -500.0
     assert end["reason"] == "landed" and end["landing"]["landed"]
+
+
+# --- Crosswind ------------------------------------------------------------------------------
+
+CROSSWIND = ROOT / "configs" / "envs" / "approach_landing_crosswind.yaml"
+
+
+def test_wind_draws_respect_the_crosswind_and_tailwind_limits():
+    env = make_env(load_env_config(CROSSWIND))
+    for seed in range(60):
+        env.reset(seed=seed)
+        w = env.approach_wind
+        assert 0 <= w["u20_mps"] <= 20 * KT + 1e-9
+        assert abs(w["crosswind_mps"]) <= 15 * KT + 1e-9 and w["headwind_mps"] >= -1e-9  # POH 15 kt; no tailwind
+    assert make_env(load_env_config(CONFIG)).reset(seed=0)[1]["state"] is not None  # calm config: no wind
+    calm = make_env(load_env_config(CONFIG))
+    calm.reset(seed=0)
+    assert calm.approach_wind is None
+
+
+def test_strong_headwind_starts_trimmed_and_crabbed_on_track():
+    """Seed 1119 has a ~19 kt headwind at 20 ft (~35 kt at the start height), where JSBSim's
+    trim in wind fails: the start is trimmed in calm air and the wind added."""
+    env = make_env(load_env_config(CROSSWIND, {"approach.wind.turbulence": False}))  # steadiness, so no gusts
+    _, info = env.reset(seed=1119)
+    s = info["state"]
+    assert env.approach_wind["headwind_mps"] > 15 * KT
+    states = [env.step(controls_to_action(info["trim"], env.action_names))[4]["state"] for _ in range(40)]  # 2 s
+    assert max(abs(x.tas_mps - s.tas_mps) for x in states) < 0.5  # steady relative to the air
+    ground_speed = math.hypot(s.v_north_mps, s.v_east_mps)
+    assert -s.v_down_mps == pytest.approx(-ground_speed * math.tan(math.radians(3)), rel=0.05)  # 3 deg over the ground
+
+
+def _fly_autopilot(seed, **flare):
+    from flightsim.config import load_raw
+    from flightsim.control.approach import approach_gains_from_raw
+    from flightsim.envs.evaluate import run_episode
+    from flightsim.envs.policies import ApproachPolicy
+
+    raw = load_raw(ROOT / "configs" / "approach_autopilot.yaml")
+    raw["flare"].update(flare)
+    cfg = load_env_config(CROSSWIND)
+    env = make_env(cfg)
+    run_episode(env, ApproachPolicy(approach_gains_from_raw(raw), cfg.control_rate_hz), seed)
+    return env
+
+
+def test_approach_autopilot_lands_in_a_crosswind():
+    env = _fly_autopilot(1009)  # ~10 kt crosswind from the right at 20 ft, with turbulence
+    w, summary = env.approach_wind, env.landing_summary()
+    assert abs(w["crosswind_mps"]) > 8 * KT
+    assert summary["landed"] and abs(summary["touchdown"]["drift_deg"]) < 5
+
+
+def test_landing_still_crabbed_is_a_side_load():
+    """The same crosswind landing without the de-crab touches down crabbed: a side load."""
+    env = _fly_autopilot(1009, decrab_height_m=0.0)
+    assert env.landing_summary()["failure"] == "side_load"
+    assert abs(env.landing_summary()["touchdown"]["drift_deg"]) > 5

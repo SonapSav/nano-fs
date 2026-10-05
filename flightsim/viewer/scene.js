@@ -6,7 +6,7 @@
 // covers, the flat-earth approximation is far below anything visible.
 
 import * as THREE from "three";
-import { Papi, addAirfield, addGroundFallback, addRunwayLights, addSky } from "./scenery.js";
+import { Papi, Windsock, addAirfield, addGroundFallback, addRunwayLights, addSky } from "./scenery.js";
 import { Terrain, WATER_LEVEL_M, height as terrainHeight } from "./terrain.js";
 import { buildC172 } from "./aircraft.js";
 
@@ -67,6 +67,7 @@ export class FlightScene {
     addAirfield(this.scene);
     addRunwayLights(this.scene);
     this.papi = new Papi(this.scene);
+    this.windsock = new Windsock(this.scene);
     this.terrain = new Terrain(this.scene);
 
     this.model = buildC172();
@@ -139,6 +140,8 @@ export class FlightScene {
   // the aim point back 5 nm along the extended centreline.
   setApproach(a) {
     this.approach = a;
+    const w = a?.wind;
+    this.windsock.setWind(w ? w.from_deg : 0, w ? w.u20_mps * 1.943844 : 0);
     this.glidePath.visible = Boolean(a);
     this.glidePath.clear();
     if (!a) return;

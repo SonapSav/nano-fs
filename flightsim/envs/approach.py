@@ -22,10 +22,12 @@ metres right of the centreline; the glide path meets the runway at the aim point
 """
 
 import math
+from dataclasses import replace
 
 import gymnasium as gym
 import numpy as np
 
+from flightsim.atmosphere.turbulence import LowAltitudeTurbulence, to_ned, wind_at_height_mps
 from flightsim.control.heading_hold import wrap_angle_rad
 from flightsim.core import Controls, InitialConditions, State
 from flightsim.envs.altitude_heading import AltitudeHeadingHoldEnv, load_factor
@@ -123,21 +125,78 @@ class ApproachLandingEnv(AltitudeHeadingHoldEnv):
         north = a.threshold_north_m + back * self._along[0] + lateral * self._right[0]
         east = a.threshold_east_m + back * self._along[1] + lateral * self._right[1]
         alt = self.runway_elevation_m + a.start_distance_m * self._tan_gp + vertical
+        tas = kias * KT_TO_MPS / math.sqrt(isa_density_ratio(alt))  # the model has no position error: IAS = CAS
+        # Wind (drawn last, and only when configured, so calm episodes keep their draws).
+        self.approach_wind = self._draw_approach_wind(rng)
+        w = self.approach_wind
+        wind_n = wind_e = 0.0
+        if w is not None:
+            # The mean wind at the start height; the shear below it is applied as a gust.
+            w["start_mps"] = wind_at_height_mps(w["u20_mps"], alt - self.runway_elevation_m)
+            wind_n, wind_e = w["start_mps"] * w["to_north"], w["start_mps"] * w["to_east"]
+            # Crab into the wind so the ground track is the drawn heading.
+            track = heading
+            across = -wind_n * math.sin(track) + wind_e * math.cos(track)
+            heading = wrap_angle_rad(track + math.asin(max(-0.9, min(0.9, -across / tas))))
+            # The glide path is fixed to the ground: descend at ground speed x tan(3 deg),
+            # not airspeed x sin(3 deg) (into a strong headwind the latter cannot be trimmed).
+            along_wind = wind_n * math.cos(track) + wind_e * math.sin(track)
+            ground_speed = tas * math.cos(wrap_angle_rad(heading - track)) + along_wind
+            flight_path = -math.asin(min(0.2, ground_speed * self._tan_gp / tas))
+        else:
+            flight_path = -a.glide_path_rad
         ic = InitialConditions(
             alt_msl_m=alt,
-            tas_mps=kias * KT_TO_MPS / math.sqrt(isa_density_ratio(alt)),  # the model has no position error: IAS = CAS
+            tas_mps=tas,
             heading_rad=heading % (2 * math.pi),
-            flight_path_rad=-a.glide_path_rad,
+            flight_path_rad=flight_path,
             lat_rad=north / R_EARTH_M,
             lon_rad=east / R_EARTH_M,
+            wind_north_mps=wind_n,
+            wind_east_mps=wind_e,
         )
         self.start_offsets = {"lateral_m": lateral, "vertical_m": vertical, "kias": kias, "heading_deg": math.degrees(heading)}
         return ic, self.runway_elevation_m, a.runway_heading_rad % (2 * math.pi)
 
+    def _draw_approach_wind(self, rng: np.random.Generator) -> dict | None:
+        """Wind at 20 ft and its direction: uniform speed and direction, redrawn while the
+        crosswind or tailwind component exceeds its limit (MIL-F-8785C 3.7.3.3 allows
+        leaving those out)."""
+        cfg = self.cfg.approach.wind
+        if cfg is None:
+            return None
+        lo, hi = (v * KT_TO_MPS for v in cfg["u20_kt"])
+        for _ in range(1000):
+            u20 = rng.uniform(lo, hi)
+            rel = rng.uniform(-math.pi, math.pi)  # wind FROM, relative to the runway heading
+            head, cross = u20 * math.cos(rel), u20 * math.sin(rel)
+            if abs(cross) <= cfg["max_crosswind_kt"] * KT_TO_MPS and -head <= cfg["max_tailwind_kt"] * KT_TO_MPS:
+                break
+        from_rad = (self.cfg.approach.runway_heading_rad + rel) % (2 * math.pi)
+        return {
+            "u20_mps": u20, "from_deg": math.degrees(from_rad), "headwind_mps": head, "crosswind_mps": cross,
+            "to_north": -math.cos(from_rad), "to_east": -math.sin(from_rad),
+            "turbulence": bool(cfg.get("turbulence", False)), "turbulence_seed": int(rng.integers(2**63)),
+        }  # fmt: skip
+
     def _start_controls(self) -> Controls:
         return Controls(flaps=self.cfg.approach.start_flaps)
 
+    def _start_core(self, ic: InitialConditions) -> tuple[Controls, State]:
+        if self.approach_wind is None:
+            return super()._start_core(ic)
+        # Trim in calm air with the same air-relative start, then add the steady wind:
+        # JSBSim's trim in wind fails for strong headwinds at approach speeds.
+        trim, _ = super()._start_core(replace(ic, wind_north_mps=0.0, wind_east_mps=0.0))
+        return trim, self._core.add_steady_wind(ic.wind_north_mps, ic.wind_east_mps)
+
     def _on_reset(self) -> None:
+        w = self.approach_wind
+        self._low_turbulence = None
+        if w is not None and w["turbulence"] and w["u20_mps"] > 0:
+            self._low_turbulence = LowAltitudeTurbulence(
+                w["u20_mps"], self.trim_state.tas_mps, 1.0 / self.cfg.sim_rate_hz, np.random.default_rng(w["turbulence_seed"])
+            )
         self.touchdown: dict | None = None  # the first ground contact, judged
         self.failure: str | None = None
         self.bounces = 0
@@ -148,6 +207,17 @@ class ApproachLandingEnv(AltitudeHeadingHoldEnv):
 
     def _sim_step(self, u: Controls) -> State:
         prev = self._state
+        w = self.approach_wind
+        if w is not None:
+            # Shear (the mean wind at this height minus the start wind) plus turbulence
+            # aligned with the wind, both as gusts on top of the steady start wind.
+            height = max(0.0, prev.alt_agl_m)
+            delta = wind_at_height_mps(w["u20_mps"], height) - w["start_mps"]
+            gn, ge, gd = delta * w["to_north"], delta * w["to_east"], 0.0
+            if self._low_turbulence is not None:
+                tn, te, td = to_ned(*self._low_turbulence.step(height), math.atan2(w["to_east"], w["to_north"]))
+                gn, ge, gd = gn + tn, ge + te, td
+            self._core.set_gust_ned_mps(gn, ge, gd)
         s = super()._sim_step(u)
         self._track_ground(prev, s)
         return s
@@ -174,6 +244,8 @@ class ApproachLandingEnv(AltitudeHeadingHoldEnv):
                     "t_s": s.t_s, "along_m": along, "cross_m": cross, "sink_mps": sink, "cas_mps": s.cas_mps,
                     "bank_deg": math.degrees(s.phi_rad), "pitch_deg": math.degrees(s.theta_rad),
                     "nose_first": contacts["NOSE"] and not (contacts["LEFT_MAIN"] or contacts["RIGHT_MAIN"]),
+                    # Crab at touchdown: ground track minus heading (sideways load on the gear).
+                    "drift_deg": math.degrees(wrap_angle_rad(math.atan2(s.v_east_mps, s.v_north_mps) - s.psi_rad)),
                     "in_zone": a.touchdown_zone_m[0] <= along <= a.touchdown_zone_m[1],
                 }  # fmt: skip
                 if along < 0.0:
@@ -186,6 +258,8 @@ class ApproachLandingEnv(AltitudeHeadingHoldEnv):
                     self._fail("nose_first")
                 elif abs(s.phi_rad) > a.max_bank_rad:
                     self._fail("wing_low")
+                elif abs(math.radians(self.touchdown["drift_deg"])) > a.max_drift_rad:
+                    self._fail("side_load")
             elif not on_runway:
                 self._fail("off_runway")
             if self._airborne_after_touch_s >= BOUNCE_S:
@@ -280,6 +354,21 @@ class ApproachLandingEnv(AltitudeHeadingHoldEnv):
             truncated = True
         info["landing"] = self.landing_summary()
         return obs, reward, terminated, truncated, info
+
+    def approach_info(self) -> dict:
+        """Runway, glide path and this episode's wind (null when calm), for displays."""
+        w = self.approach_wind
+        wind = None if w is None else {k: w[k] for k in ("u20_mps", "from_deg", "headwind_mps", "crosswind_mps", "turbulence")}
+        return {**self._geometry, "wind": wind}
+
+    def conditions(self) -> dict:
+        c = super().conditions()
+        w = self.approach_wind
+        if w is not None:
+            c.update(wind_speed_mps=w["u20_mps"], wind_from_deg=w["from_deg"],
+                     turbulence="low_altitude" if w["turbulence"] else "none",
+                     turbulence_sigma_mps=0.1 * w["u20_mps"] if w["turbulence"] else 0.0)  # fmt: skip
+        return c
 
     def _info(self) -> dict:
         info = super()._info()

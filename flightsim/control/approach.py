@@ -44,6 +44,7 @@ class ApproachGains:
     ki_speed: float  # throttle per (m/s * s)
     # Lateral
     intercept_m: float  # the track aims at the centreline this far ahead
+    ki_cross: float  # 1/s: integral of the centreline offset (removes the standing offset in a crosswind)
     k_track: float  # rad bank per rad track error
     max_bank_rad: float
     k_bank: float  # aileron per rad bank error
@@ -61,6 +62,13 @@ class ApproachGains:
     throttle_cut_s: float  # throttle ramps to idle over this time in the flare
     rollout_pitch_rad: float
     k_steer: float  # rudder per rad heading error on the ground (negative: rudder + = nose left)
+    # Crosswind: de-crab (align the nose with the runway) and wing low (bank into the wind)
+    decrab_height_m: float  # main wheels above the ground when the de-crab starts
+    k_align: float  # rudder per rad heading error from the runway (negative: rudder + = nose left)
+    k_yaw_damp: float  # rudder per rad/s yaw rate
+    max_wing_low_rad: float  # bank limit while de-crabbed (to stop the drift), and on the ground
+    max_alpha_rad: float  # stall protection: the pitch command keeps alpha below this
+    k_bank_decrab: float  # aileron per rad bank error while de-crabbed (the sideslip rolls the wing away from the wind)
 
 
 def approach_gains_from_raw(raw: dict) -> ApproachGains:
@@ -78,6 +86,7 @@ def approach_gains_from_raw(raw: dict) -> ApproachGains:
         k_speed=float(v["k_speed"]),
         ki_speed=float(v["ki_speed"]),
         intercept_m=float(lat["intercept_m"]),
+        ki_cross=float(lat.get("ki_cross", 0.0)),
         k_track=float(lat["k_track"]),
         max_bank_rad=rad(lat["max_bank_deg"]),
         k_bank=float(lat["k_bank"]),
@@ -94,6 +103,12 @@ def approach_gains_from_raw(raw: dict) -> ApproachGains:
         throttle_cut_s=float(fl["throttle_cut_s"]),
         rollout_pitch_rad=rad(fl["rollout_pitch_deg"]),
         k_steer=float(fl["k_steer"]),
+        decrab_height_m=float(fl["decrab_height_m"]),
+        k_align=float(fl["k_align"]),
+        k_yaw_damp=float(fl["k_yaw_damp"]),
+        max_wing_low_rad=rad(fl["max_wing_low_deg"]),
+        max_alpha_rad=rad(raw.get("max_alpha_deg", 90.0)),
+        k_bank_decrab=float(fl.get("k_bank_decrab", lat["k_bank"])),
     )
 
 
@@ -120,6 +135,7 @@ class ApproachAutopilot:
         self._flare_s = 0.0
         self._flare_theta = -math.inf  # the flare's pitch command never decreases
         self._i_pitch = 0.0
+        self._i_cross = 0.0
 
     def runway_coords(self, s: State) -> tuple[float, float]:
         g = self.geo
@@ -137,19 +153,30 @@ class ApproachAutopilot:
         climb = -s.v_down_mps
         ground_speed = math.hypot(s.v_north_mps, s.v_east_mps)
         track = math.atan2(s.v_east_mps, s.v_north_mps)
-        track_cmd = self._rwy + math.atan2(-cross, g.intercept_m)  # aim at the centreline ahead
+        if self.phase == "approach":
+            self._i_cross = clamp(self._i_cross + cross * dt, -100.0 / max(g.ki_cross, 1e-9), 100.0 / max(g.ki_cross, 1e-9))
+        track_cmd = self._rwy + math.atan2(-(cross + g.ki_cross * self._i_cross), g.intercept_m)  # aim at the centreline ahead
 
         if self.phase == "rollout":
-            # Nose gently up, wings level, nosewheel steering onto the centreline.
+            # Nose gently up, ailerons into the drift, nosewheel steering onto the centreline.
             elevator = trim.elevator + g.k_pitch * (s.theta_rad - g.rollout_pitch_rad) + g.k_pitch_rate * s.q_radps
-            aileron = trim.aileron + g.k_bank * (0.0 - s.phi_rad) - g.k_roll_rate * s.p_radps
-            rudder = trim.rudder + g.k_steer * wrap_angle_rad(track_cmd - s.psi_rad)
+            bank_cmd = clamp(g.k_track * wrap_angle_rad(track_cmd - track), -g.max_wing_low_rad, g.max_wing_low_rad)
+            aileron = trim.aileron + g.k_bank_decrab * (bank_cmd - s.phi_rad) - g.k_roll_rate * s.p_radps
+            rudder = trim.rudder + g.k_steer * wrap_angle_rad(track_cmd - s.psi_rad) + g.k_yaw_damp * s.r_radps
             return replace(trim, elevator=clamp(elevator, -1, 1), aileron=clamp(aileron, -1, 1), rudder=clamp(rudder, -1, 1), throttle=0.0)
 
-        # Lateral: track onto the centreline (wings level in the flare).
-        max_bank = g.max_bank_rad if self.phase == "approach" else math.radians(3.0)
+        # Lateral: the track onto the centreline. Close to the ground the rudder lines the
+        # nose up with the runway (de-crab) and the bank into the wind stops the drift.
+        decrab = wheels_m < g.decrab_height_m
+        if decrab:
+            max_bank = g.max_wing_low_rad
+            rudder = trim.rudder + g.k_align * wrap_angle_rad(self._rwy - s.psi_rad) + g.k_yaw_damp * s.r_radps
+        else:
+            max_bank = g.max_bank_rad if self.phase == "approach" else math.radians(3.0)
+            rudder = trim.rudder
         bank_cmd = clamp(g.k_track * wrap_angle_rad(track_cmd - track), -max_bank, max_bank)
-        aileron = trim.aileron + g.k_bank * (bank_cmd - s.phi_rad) - g.k_roll_rate * s.p_radps
+        k_bank = g.k_bank_decrab if decrab else g.k_bank
+        aileron = trim.aileron + k_bank * (bank_cmd - s.phi_rad) - g.k_roll_rate * s.p_radps
 
         if self.phase == "approach":
             gp_dev = s.alt_msl_m - (self.geo["elevation_m"] + max(0.0, self.geo["aim_point_m"] - along) * self._tan_gp)
@@ -173,6 +200,11 @@ class ApproachAutopilot:
             theta_cmd = clamp(self.theta_ref + g.k_vs * vs_err + g.ki_vs * self._i_vs, self.theta_ref - g.max_pitch_offset_rad, pitch_hi)
         else:
             theta_cmd = self._flare_theta
+        # Stall protection (gusts and the wind shear near the ground cost airspeed): no more
+        # nose-up than keeps the angle of attack below the limit.
+        theta_cmd = min(theta_cmd, s.theta_rad + g.max_alpha_rad - s.alpha_rad)
+        if self.phase == "flare":
+            self._flare_theta = min(self._flare_theta, theta_cmd)
         # Elevator + is nose down: pitch above the command pushes.
         if self.phase == "approach":
             elevator = trim.elevator + g.k_pitch * (s.theta_rad - theta_cmd) + g.k_pitch_rate * s.q_radps
@@ -180,4 +212,4 @@ class ApproachAutopilot:
             err = s.theta_rad - theta_cmd
             self._i_pitch = clamp(self._i_pitch + err * dt, -0.5 / max(g.ki_pitch_flare, 1e-9), 0.5 / max(g.ki_pitch_flare, 1e-9))
             elevator = trim.elevator + g.k_pitch_flare * err + g.ki_pitch_flare * self._i_pitch + g.k_pitch_rate * s.q_radps
-        return replace(trim, elevator=clamp(elevator, -1, 1), aileron=clamp(aileron, -1, 1), throttle=throttle)
+        return replace(trim, elevator=clamp(elevator, -1, 1), aileron=clamp(aileron, -1, 1), rudder=clamp(rudder, -1, 1), throttle=throttle)

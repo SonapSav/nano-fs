@@ -22,7 +22,7 @@ Client -> server messages:
   {"type": "list"}
   {"type": "play", "source": "replay", "path": "<relative to the data dir>", "speed": 1.0, "start_s"?: 0.0}
   {"type": "play", "source": "live", "autopilot": "pid" | "lqr" | "approach" (default "pid"), "seed": 0, "speed": 1.0}
-  {"type": "play", "source": "manual", "conditions": "calm" | "windy" | "approach", "seed": 0, "record": true}
+  {"type": "play", "source": "manual", "conditions": "calm" | "windy" | "approach" | "approach_crosswind", "seed": 0, "record": true}
       (speed is capped at 1)
   {"type": "input", "elevator", "aileron", "rudder", "throttle", "flaps"?, "pitch_trim"?}
       Manual flights only. Stick and pedals in [-1, 1] relative to trim (elevator +

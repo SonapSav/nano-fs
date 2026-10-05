@@ -1,0 +1,13 @@
+# Approach and landing with wind: the approach task plus a random low-altitude wind per
+# seed (MIL-F-8785C 3.7.3, Category C: mean wind with log-profile shear below the start
+# height, and Dryden turbulence with sigma_w = 0.1 x the wind at 20 ft, aligned with the
+# wind). The aircraft starts crabbed so its ground track is on the centreline.
+base: approach_landing.yaml
+episode_s: 480                  # into a strong headwind 3 nm takes over 5 min
+
+approach:
+  wind:
+    u20_kt: [0, 20]             # wind at 20 ft, uniform
+    max_crosswind_kt: 15        # C172P POH maximum demonstrated crosswind (Section 4)
+    max_tailwind_kt: 0          # project choice: no tailwind landings
+    turbulence: true

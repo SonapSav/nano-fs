@@ -26,8 +26,9 @@ const LIVE_AUTOPILOT = { [LIVE]: "pid", [LIVE_LQR]: "lqr", [LIVE_APPROACH]: "app
 const MANUAL = "manual"; // calm air
 const MANUAL_WIND = "manual_wind";
 const MANUAL_APPROACH = "manual_approach";
-const isManual = (v) => v === MANUAL || v === MANUAL_WIND || v === MANUAL_APPROACH;
-const MANUAL_CONDITIONS = { [MANUAL]: "calm", [MANUAL_WIND]: "windy", [MANUAL_APPROACH]: "approach" };
+const MANUAL_CROSSWIND = "manual_crosswind";
+const isManual = (v) => v === MANUAL || v === MANUAL_WIND || v === MANUAL_APPROACH || v === MANUAL_CROSSWIND;
+const MANUAL_CONDITIONS = { [MANUAL]: "calm", [MANUAL_WIND]: "windy", [MANUAL_APPROACH]: "approach", [MANUAL_CROSSWIND]: "approach_crosswind" };
 // Why an approach ended (envs/approach.py failure reasons), for the message line.
 const LANDING_FAILURES = {
   undershoot: "touched down short of the runway",
@@ -35,6 +36,7 @@ const LANDING_FAILURES = {
   hard_landing: "hard landing (over 600 ft/min at touchdown)",
   nose_first: "touched down nose wheel first (flare: raise the nose so the main wheels touch first)",
   wing_low: "touched down with too much bank",
+  side_load: "touched down still crabbed (line the nose up with the runway using rudder just before touchdown)",
   tail_strike: "tail strike (nose too high)",
   wingtip_strike: "wingtip struck the ground",
   nose_strike: "propeller/nose struck the ground",
@@ -91,6 +93,7 @@ function populateSources(logs = allLogs) {
   els.source.add(new Option("Fly it yourself (calm air)", MANUAL));
   els.source.add(new Option("Fly it yourself (wind and turbulence)", MANUAL_WIND));
   els.source.add(new Option("Fly an approach to runway 09 and land (calm)", MANUAL_APPROACH));
+  els.source.add(new Option("Fly an approach to runway 09 and land (crosswind, gusts)", MANUAL_CROSSWIND));
   els.source.add(new Option("Watch the PID autopilot", LIVE));
   els.source.add(new Option("Watch the LQR autopilot", LIVE_LQR));
   els.source.add(new Option("Watch the approach autopilot land on runway 09", LIVE_APPROACH));
@@ -178,7 +181,9 @@ function handle(msg) {
       const pilotName = { pid: "PID", lqr: "LQR", approach: "Approach" }[msg.pilot ?? "pid"] ?? msg.pilot;
       els.run.textContent = `${msg.source === "live" ? `${pilotName} autopilot` : { manual: "You are flying", replay: "Replay" }[msg.source]} ${msg.run_id}`;
       say(msg.source === "manual"
-        ? (els.source.value === MANUAL_APPROACH ? "Follow the glide path to runway 09 (ahead), flare and land main wheels first." : "Fly to the magenta altitude and heading bugs.")
+        ? ([MANUAL_APPROACH, MANUAL_CROSSWIND].includes(els.source.value)
+          ? "Follow the glide path to runway 09 (ahead), flare and land main wheels first." + (msg.approach?.wind ? " Crosswind: crab on the approach, then line up with rudder and hold a wing low into the wind." : "")
+          : "Fly to the magenta altitude and heading bugs.")
         : "");
       setPlaying(true);
       break;
@@ -411,6 +416,13 @@ function showApproachRows(on) {
   $("l-talt").textContent = on ? "Glide path" : "Altitude target";
   $("l-thdg").textContent = on ? "Centreline" : "Heading target";
   $("l-dist").hidden = $("r-dist").hidden = !on;
+  const w = on ? session?.approach?.wind : null;
+  $("l-wind").hidden = $("r-wind").hidden = !w;
+  if (w) {
+    const kt = (v) => Math.round(Math.abs(v) * 1.943844);
+    const cross = kt(w.crosswind_mps) ? `, ${kt(w.crosswind_mps)} kt crosswind from the ${w.crosswind_mps > 0 ? "right" : "left"}` : "";
+    $("r-wind").textContent = `${String(Math.round(w.from_deg) % 360).padStart(3, "0")}° ${kt(w.u20_mps)} kt${cross}`;
+  }
 }
 
 function approachDeviations(row, a) {

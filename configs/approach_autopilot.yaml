@@ -1,6 +1,7 @@
 # Approach autopilot gains (flightsim/control/approach.py) for the approach and landing
 # task. Tuned on c172p, flaps 30, 65 KIAS, 20 Hz, on tuning seeds 1000-1099.
 target_kias: 65              # POH 60-70 KIAS with flaps down
+max_alpha_deg: 11            # stall protection (model CLmax at 16 deg; the task ends at 14)
 vertical:
   k_glide_path: 0.15         # m/s more descent per m above the glide path
   max_vs_correction_mps: 1.5
@@ -13,6 +14,7 @@ vertical:
   ki_speed: 0.02
 lateral:
   intercept_m: 300           # aim the track at the centreline this far ahead
+  ki_cross: 0.05             # 1/s integral of the centreline offset (crosswind)
   k_track: 1.5               # rad bank per rad track error
   max_bank_deg: 15
   k_bank: 1.5
@@ -29,4 +31,10 @@ flare:
   ki_pitch: 3.0
   throttle_cut_s: 0.5        # close the throttle at the start of the flare
   rollout_pitch_deg: 2
-  k_steer: -1.0              # rudder per rad heading error (rudder + = nose left)
+  k_steer: -4.0              # rudder per rad heading error on the rollout (rudder + = nose left)
+  # Crosswind: de-crab with rudder and hold the centreline with a wing low
+  decrab_height_m: 8.0       # ~26 ft wheel height
+  k_align: -6.0              # rudder per rad heading error from the runway (rudder + = nose left)
+  k_yaw_damp: 2.0            # rudder per rad/s yaw rate
+  max_wing_low_deg: 8
+  k_bank_decrab: 8.0         # aileron per rad bank error while de-crabbed (sideslip rolls the wing away from the wind)

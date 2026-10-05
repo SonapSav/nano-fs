@@ -181,3 +181,44 @@ export class Papi {
     }
   }
 }
+
+// --- Windsock ----------------------------------------------------------------------------
+
+// Left of runway 09's threshold. The sock points downwind and rises with the wind: it hangs
+// limp in calm air and stands straight out at 15 kt (a common windsock design point).
+export class Windsock {
+  constructor(scene) {
+    const { x, z, lengthM, widthM } = AIRFIELD;
+    this.group = new THREE.Group();
+    this.group.position.set(x - lengthM / 2 + 70, 0, z - widthM / 2 - 30);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 6, 8), new THREE.MeshLambertMaterial({ color: 0xd8d8d8 }));
+    pole.position.y = 3;
+    this.pivot = new THREE.Group(); // at the top of the pole; the sock extends along its +x
+    this.pivot.position.y = 6;
+    const stripes = 5, len = 3.6, segment = len / stripes;
+    for (let i = 0; i < stripes; i++) {
+      const r0 = 0.45 - (0.3 * i) / stripes, r1 = 0.45 - (0.3 * (i + 1)) / stripes;
+      const ring = new THREE.Mesh(
+        new THREE.CylinderGeometry(r1, r0, segment, 16, 1, true),
+        new THREE.MeshLambertMaterial({ color: i % 2 ? 0xffffff : 0xff6a1a, side: THREE.DoubleSide }),
+      );
+      ring.rotation.z = -Math.PI / 2; // cylinder axis y -> +x
+      ring.position.x = segment * (i + 0.5);
+      this.pivot.add(ring);
+    }
+    this.group.add(pole, this.pivot);
+    scene.add(this.group);
+    this.setWind(0, 0);
+  }
+
+  // fromDeg: the direction the wind comes from (true); speedKt at 20 ft.
+  setWind(fromDeg, speedKt) {
+    const to = ((fromDeg + 180) * Math.PI) / 180; // downwind, clockwise from north
+    this.pivot.rotation.set(0, 0, 0);
+    // World: x east, z south. Heading `to` from north: direction (sin, 0, -cos); the sock's +x
+    // turns to it by a rotation about +y of (pi/2 - to).
+    this.pivot.rotation.y = Math.PI / 2 - to;
+    const lift = Math.min(1, speedKt / 15);
+    this.pivot.rotation.z = -(Math.PI / 2) * (1 - lift) * 0.92; // droop toward the pole when calm
+  }
+}

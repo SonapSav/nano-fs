@@ -41,11 +41,19 @@ class Source:
         raise NotImplementedError
 
 
-def _logged_approach(meta: dict) -> dict | None:
-    """Approach geometry from a log's config (None for other tasks or unreadable configs)."""
+def _logged_approach(meta: dict, seed: int | None) -> dict | None:
+    """Approach geometry and wind from a log's config and seed (None for other tasks or
+    unreadable configs). The wind is drawn per seed, so the episode is reset to get it."""
     try:
         raw = json.loads(meta.get("flightsim.config_json", "null"))
-        return approach_geometry(env_config_from_raw(raw)) if raw and "approach" in raw else None
+        if not raw or "approach" not in raw:
+            return None
+        cfg = env_config_from_raw(raw)
+        if seed is None:
+            return {**approach_geometry(cfg), "wind": None}
+        env = make_env(cfg)
+        env.reset(seed=seed)
+        return env.approach_info()
     except (ValueError, KeyError, TypeError):
         return None
 
@@ -59,7 +67,7 @@ class ReplaySource(Source):
         duration = self._times[-1] if self._rows else 0.0
         rate = (len(self._rows) - 1) / duration if duration > 0 else 0.0
         super().__init__("replay", meta["flightsim.run_id"], meta["flightsim.aircraft"], round(rate, 6), duration, None, meta)
-        self.approach = _logged_approach(meta)
+        self.approach = _logged_approach(meta, self._rows[0]["seed"] if self._rows else None)
 
     def seek(self, t_s: float) -> None:
         """Continue from the first row at or after t_s (clamped to the log), also while
@@ -90,7 +98,7 @@ class LiveSource(Source):
         run_id = make_run_id(env_cfg.config_hash, seed)
         super().__init__(source, run_id, env_cfg.aircraft, env_cfg.sim_rate_hz, env_cfg.episode_s, targets)
         self.pilot_name = "human" if source == "manual" else self._policy.name
-        self.approach = approach_geometry(env_cfg)
+        self.approach = self._env.approach_info() if hasattr(self._env, "approach_info") else None
         self._config_hash = env_cfg.config_hash
 
     def frames(self) -> Iterator[tuple[float, dict]]:

@@ -186,6 +186,34 @@ class JSBSimCore:
         self._step_count = 0
         return self.state()
 
+    def add_steady_wind(self, wind_north_mps: float, wind_east_mps: float) -> State:
+        """After `trim` in calm air: restart in a steady wind with the same air-relative state
+        (position, attitude, controls; ground velocity = air velocity + wind). The engine
+        keeps its trimmed state. A uniform steady wind does not change the flight relative
+        to the air, so this is still trimmed, without JSBSim's trim in wind (which fails in
+        strong winds at approach speeds; see CLAUDE.md)."""
+        fdm, calm = self._fdm, self.state()
+        fdm["ic/h-sl-ft"] = calm.alt_msl_m / FT_TO_M
+        fdm["ic/lat-geod-rad"] = calm.lat_rad
+        fdm["ic/long-gc-rad"] = calm.lon_rad
+        fdm["ic/vw-mag-fps"] = math.hypot(wind_north_mps, wind_east_mps) / FT_TO_M
+        fdm["ic/vw-dir-deg"] = math.degrees(math.atan2(wind_east_mps, wind_north_mps))
+        fdm["ic/phi-rad"] = calm.phi_rad
+        fdm["ic/theta-rad"] = calm.theta_rad
+        fdm["ic/psi-true-rad"] = calm.psi_rad
+        fdm["ic/vn-fps"] = (calm.v_north_mps + wind_north_mps) / FT_TO_M
+        fdm["ic/ve-fps"] = (calm.v_east_mps + wind_east_mps) / FT_TO_M
+        fdm["ic/vd-fps"] = calm.v_down_mps / FT_TO_M
+        fdm["ic/p-rad_sec"] = calm.p_radps
+        fdm["ic/q-rad_sec"] = calm.q_radps
+        fdm["ic/r-rad_sec"] = calm.r_radps
+        controls = self.controls()
+        if not fdm.run_ic():
+            raise RuntimeError("JSBSim run_ic failed")
+        self._apply(controls)
+        self._step_count = 0
+        return self.state()
+
     def trim(self) -> Controls:
         """Trim for steady flight at the current initial conditions; returns the trim controls.
 
