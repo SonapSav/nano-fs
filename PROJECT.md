@@ -373,6 +373,19 @@ owner before work can start.
 - [x] Viewer network exposure (decided 2026-10-04): keep the Docker viewer published on
   all host interfaces, reachable from the local network.
 
+- [x] **Aircraft model** (2026-10-05): the box model is replaced by a C172P built in code
+  (`flightsim/viewer/aircraft.js`, no external assets): lofted fuselage with painted
+  stripe and windows, NACA-section wing (constant-chord inner, tapered outer panels,
+  dihedral), struts, swept fin with dorsal fillet, tail, gear with fairings, spinner,
+  nav lights. Dimensions from the POH and JSBSim (length, span, height tested within
+  0.15 m); shapes in between approximate. Elevator, ailerons, rudder and flaps move to
+  their logged positions (signs tested); the propeller shows as a disc when turning.
+  Default chase distance 22 m (was 32), zoom in to 8 m.
+- [ ] Photo-real aircraft (option B, discussed 2026-10-05): e.g. FlightGear's detailed
+  c172p (GPL-2.0, AC3D format, needs conversion to glTF and a licence decision for this
+  repo, which has no licence yet) or a CC-BY/CC0 model. **Needs decision:** project
+  licence first.
+
 ### Data and logging
 
 - [x] **Code provenance** (decided and done 2026-10-04): logs (`flightsim.code_version`

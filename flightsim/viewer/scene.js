@@ -8,6 +8,7 @@
 import * as THREE from "three";
 import { addAirfield, addGroundFallback, addSky } from "./scenery.js";
 import { Terrain } from "./terrain.js";
+import { buildC172 } from "./aircraft.js";
 
 const R_EARTH = 6371000;
 const TRAIL_POINTS = 4000;
@@ -24,35 +25,7 @@ const BODY_FROM_CAMERA = new THREE.Matrix4().makeBasis(
   new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), new THREE.Vector3(-1, 0, 0),
 );
 
-function buildAircraft() {
-  // Built in body axes (x forward, y right, z down), metres, C172-like proportions.
-  const g = new THREE.Group();
-  const white = new THREE.MeshLambertMaterial({ color: 0xf4f4f0 });
-  const stripe = new THREE.MeshLambertMaterial({ color: 0x8a1f2b });
-  const dark = new THREE.MeshLambertMaterial({ color: 0x2b2f33 });
-  const glass = new THREE.MeshLambertMaterial({ color: 0x5f7f99 });
-  const box = (sx, sy, sz, mat, x, y, z) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
-    m.position.set(x, y, z);
-    g.add(m);
-    return m;
-  };
-  box(4.2, 1.1, 1.3, white, 0.6, 0, 0); // cabin and engine
-  box(3.6, 0.6, 0.7, white, -3.0, 0, -0.15); // tail cone
-  box(1.6, 1.12, 0.5, glass, 0.9, 0, -0.55); // windows
-  box(7.6, 0.08, 0.14, stripe, -0.9, 0, 0.1).position.y = 0.56; // side stripe
-  box(7.6, 0.08, 0.14, stripe, -0.9, 0, 0.1).position.y = -0.56;
-  box(1.5, 10.9, 0.14, white, 0.5, 0, -0.75); // high wing
-  box(0.25, 0.08, 1.2, dark, 0.7, 1.4, -0.1).rotation.x = 0.35; // struts
-  box(0.25, 0.08, 1.2, dark, 0.7, -1.4, -0.1).rotation.x = -0.35;
-  box(0.9, 3.4, 0.08, white, -4.6, 0, -0.2); // horizontal tail
-  box(1.1, 0.08, 1.5, white, -4.7, 0, -0.95); // fin
-  box(0.06, 1.9, 0.12, dark, 2.75, 0, 0.05); // propeller
-  box(0.6, 0.4, 0.4, dark, 0.9, 0.9, 0.95); // main gear
-  box(0.6, 0.4, 0.4, dark, 0.9, -0.9, 0.95);
-  box(0.5, 0.3, 0.35, dark, 2.2, 0, 0.9); // nose gear
-  return g;
-}
+const CHASE_DISTANCE_M = 22; // default chase camera distance (the aircraft is 8.2 m long, 10.9 m span)
 
 export class FlightScene {
   constructor(container) {
@@ -70,7 +43,8 @@ export class FlightScene {
     addAirfield(this.scene);
     this.terrain = new Terrain(this.scene);
 
-    this.aircraft = buildAircraft();
+    this.model = buildC172();
+    this.aircraft = this.model.group;
     this.aircraft.matrixAutoUpdate = false;
     this.scene.add(this.aircraft);
     this.view = "chase";
@@ -93,7 +67,7 @@ export class FlightScene {
     this.scene.add(this.targetLine);
 
     this.camera = new THREE.PerspectiveCamera(60, 1, 0.5, 120000);
-    this.orbit = { azimuth: 0, elevation: 0.18, distance: 32 };
+    this.orbit = { azimuth: 0, elevation: 0.18, distance: CHASE_DISTANCE_M };
     this._bindPointer();
     this.reset();
     new ResizeObserver(() => this.resize()).observe(container);
@@ -102,6 +76,8 @@ export class FlightScene {
 
   reset() {
     this.origin = { lat: 0, lon: 0 }; // fixed, see the header
+    this.lastT = null;
+    this.model.update({}); // surfaces neutral, propeller still
     this.trailCount = 0;
     this.trailGeo.setDrawRange(0, 0);
     this.targets = null;
@@ -137,6 +113,10 @@ export class FlightScene {
     const zb = nedToWorld(cf * st * cp + sf * sp, cf * st * sp - sf * cp, cf * ct);
     this.aircraft.matrix.makeBasis(xb, yb, zb).setPosition(this.position);
     this.heading = row.psi_rad;
+    // Control surfaces and propeller; dt from the frame times (0 after a jump, e.g. a seek).
+    const dt = this.lastT === null || row.t_s < this.lastT || row.t_s - this.lastT > 1 ? 0 : row.t_s - this.lastT;
+    this.lastT = row.t_s;
+    this.model.update(row, dt);
 
     const pos = this.trailGeo.attributes.position;
     if (this.trailCount === TRAIL_POINTS) {
@@ -233,7 +213,7 @@ export class FlightScene {
     el.addEventListener("wheel", (e) => {
       e.preventDefault();
       if (this.view === "cockpit") return;
-      this.orbit.distance = Math.max(12, Math.min(3000, this.orbit.distance * Math.exp(e.deltaY * 0.001)));
+      this.orbit.distance = Math.max(8, Math.min(3000, this.orbit.distance * Math.exp(e.deltaY * 0.001)));
     }, { passive: false });
   }
 }
