@@ -398,7 +398,10 @@ export function buildC172({ registration = REGISTRATION } = {}) {
   const fin = [{ le: [205, 0, 37], chord: 72 }, { le: [226, 0, 62], chord: 51 }, { le: [246, 0, 87], chord: 31 }];
   const finOpts = { t: 0.09, m: 0, normal: [0, 1, 0] };
   group.add(new THREE.Mesh(surface(fin, { ...finOpts, f1: 0.62 }), white));
-  group.add(new THREE.Mesh(surface([{ le: [150, 0, 44], chord: 64 }, { le: [196, 0, 50], chord: 20 }, { le: [210, 0, 53], chord: 4 }], { ...finOpts, t: 0.08 }), white));
+  // Dorsal fillet: rooted inside the tail cone (whose top slopes down from z 50 to 41 over
+  // x 145-205), its leading edge leaves the fuselage top near x 170 and runs into the fin's
+  // leading edge; the trailing part overlaps the fin root, so there is no gap anywhere.
+  group.add(new THREE.Mesh(surface([{ le: [140, 0, 38], chord: 78 }, { le: [172, 0, 46], chord: 41 }, { le: [210, 0, 52], chord: 10 }], { ...finOpts, t: 0.08 }), white));
   pivots.rudder = hinged(fin, 0.62, finOpts, white, new THREE.Vector3(0, 0, 1)); // +z body = down: + rotation moves the trailing edge left
   group.add(pivots.rudder);
   // Flashing red beacon on top of the fin; white position light at the tail facing aft.
