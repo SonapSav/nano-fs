@@ -190,7 +190,7 @@ owner before work can start.
     centreline (crab-ready). Flare from ~3.5 m wheel height: throttle closed in 0.5 s,
     sink command = wheel height / 2 s, pitch command only rises (at most 3 deg/s, so no
     balloon), stronger pitch loop with integral. Rollout: nose 2 deg up, nosewheel
-    steering. Tuned on seeds 1000-1099. Seeds 0-999 (batch `see data/batch`): 1000/1000 landed,
+    steering. Tuned on seeds 1000-1099. Seeds 0-999 (batch `d8335e12fa17`): 1000/1000 landed,
     touchdown 360-376 m past the threshold (zone 100-400; floats ~120 m past the aim
     point), 0.2-2.2 m off the centreline, 39-58 ft/min, 53-54 KCAS, pitch 4.2-4.9 deg,
     no bounces; glide path RMS 1.3 m; return mean -20 (median +27). Slower approaches
