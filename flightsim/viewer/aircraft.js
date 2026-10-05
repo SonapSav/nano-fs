@@ -249,8 +249,8 @@ function lamp(position, outward, colour, radiusIn, glowM) {
     new THREE.SphereGeometry(radiusIn * IN, 20, 10, 0, 2 * Math.PI, 0, Math.PI / 2), // dome along +y
     new THREE.MeshBasicMaterial({ color: colour }),
   );
-  const bezel = new THREE.Mesh(new THREE.CylinderGeometry(radiusIn * 1.25 * IN, radiusIn * 1.25 * IN, 0.4 * IN, 20), new THREE.MeshLambertMaterial({ color: 0x3a3d40 }));
-  bezel.position.y = -0.2 * IN;
+  const bezel = new THREE.Mesh(new THREE.CylinderGeometry(radiusIn * 1.15 * IN, radiusIn * 1.15 * IN, 0.25 * IN, 20), new THREE.MeshLambertMaterial({ color: 0x3a3d40 }));
+  bezel.position.y = -0.12 * IN;
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow(), color: colour, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
   halo.scale.setScalar(glowM);
   halo.position.y = radiusIn * 0.5 * IN;
@@ -370,9 +370,9 @@ export function buildC172({ registration = REGISTRATION } = {}) {
     group.add(beam([58, yy(18), 5], [58, yy(41), -7], 4, 1.2, grey));
     group.add(wheel([58.2, yy(43), -8], 7.5, 5, tyre));
     group.add(ellipsoid([60, yy(43), -6], 16, 5, 8.5, white));
-    // Navigation lights at the front of the wingtips, facing outward and a little forward:
-    // red left, green right.
-    group.add(lamp(toBody(32, yy(214), wingZ(214)), new THREE.Vector3(0.35, side, 0), side > 0 ? 0x2bff5a : 0xff2a2a, 2.2, 0.55));
+    // Navigation lights on the wingtips at their thickest point (about 30% chord; the tip
+    // is ~5 in thick), facing outward and a little forward: red left, green right.
+    group.add(lamp(toBody(43, yy(214), wingZ(214) + 0.7), new THREE.Vector3(0.35, side, 0), side > 0 ? 0x2bff5a : 0xff2a2a, 1.0, 0.35));
   }
 
   // Horizontal tail with elevator (symmetric section).
@@ -392,9 +392,10 @@ export function buildC172({ registration = REGISTRATION } = {}) {
   pivots.rudder = hinged(fin, 0.62, finOpts, white, new THREE.Vector3(0, 0, 1)); // +z body = down: + rotation moves the trailing edge left
   group.add(pivots.rudder);
   // Flashing red beacon on top of the fin; white position light at the tail facing aft.
-  const beacon = lamp(toBody(258, 0, 87.3), new THREE.Vector3(0, 0, -1), 0xff3a2a, 2.0, 1.0);
+  // (The fin tip is ~2.8 in thick and the tail cone ends ~3 in wide: lenses fit inside.)
+  const beacon = lamp(toBody(255, 0, 87.1), new THREE.Vector3(0, 0, -1), 0xff3a2a, 1.0, 0.6);
   group.add(beacon);
-  group.add(lamp(toBody(272.6, 0, 33), new THREE.Vector3(-1, 0, 0), 0xffffff, 1.6, 0.45));
+  group.add(lamp(toBody(272.3, 0, 33), new THREE.Vector3(-1, 0, 0), 0xffffff, 0.8, 0.3));
 
   // Nose gear: strut, wheel and fairing.
   group.add(beam([-4, 0, 10], [-6.8, 0, -13], 3, 3, grey));

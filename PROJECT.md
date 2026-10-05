@@ -412,7 +412,8 @@ owner before work can start.
   was not judged by ear. Possible refinements: recorded samples (licence needed), tyre
   and runway sounds with takeoff/landing.
 - [x] Lights (2026-10-05): half-sphere lenses on bezels with a soft glow: red left and
-  green right at the front of the wingtips, white position light at the tail, red beacon
+  green right on the wingtips at their thickest point (sized to fit inside the tip, fin
+  and tail cone), white position light at the tail, red beacon
   on the fin flashing 45 times a minute (timed by the flight clock, so replays match).
 - [ ] Photo-real aircraft (option B, discussed 2026-10-05): e.g. FlightGear's detailed
   c172p (GPL-2.0, AC3D format, needs conversion to glTF and a licence decision for this
