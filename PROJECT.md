@@ -337,7 +337,12 @@ owner before work can start.
   a quality setting for weaker GPUs. Terrain height in the physics (needed for
   takeoff/landing away from the 0 m airfield) is part of the takeoff/landing item.
 
-- [ ] Seeking in replays (only play, pause, stop and speed today).
+- [x] Seeking in replays (2026-10-05): click or drag the progress bar (also while paused
+  or after the replay ended), or arrow keys on it (5 s; up/down 30 s; Home/End).
+  Protocol: `seek` message and `start_s` on replay play. Fixed on the way: a second
+  play on the same connection streamed unpaced (saved demos checked, not affected).
+- [ ] Replays show no altitude/heading targets (the replay source sends none); the
+  targets could be recomputed from the logged config and seed.
 - [ ] Filter or group batch logs in the flight list (thousands of entries with `--logs`).
 - [x] Font vendored (2026-10-05): Barlow Condensed 400/500/600, latin subset, SIL OFL 1.1
   (`flightsim/viewer/vendor/fonts/`). The viewer loads nothing from the internet (tested).

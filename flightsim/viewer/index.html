@@ -48,8 +48,12 @@
   :focus-visible { outline: 2px solid var(--bug); outline-offset: 2px; }
   #source { max-width: 22em; }
   #progress { flex: 1 1 200px; display: flex; align-items: center; gap: 10px; min-width: 180px; }
-  #progress-track { flex: 1; height: 4px; background: #5b6167; border-radius: 2px; overflow: hidden; }
+  #progress-track { flex: 1; padding: 8px 0; touch-action: none; } /* padding: a larger target for seeking */
+  #progress-bar { height: 4px; background: #5b6167; border-radius: 2px; overflow: hidden; }
   #progress-fill { height: 100%; width: 0; background: var(--marking); }
+  #progress-track.seekable { cursor: pointer; }
+  #progress-track.seekable #progress-bar { height: 6px; border-radius: 3px; }
+  #progress-track.seekable:hover #progress-fill { background: #fff; }
   #clock { font-variant-numeric: tabular-nums; color: var(--dim); white-space: nowrap; }
 
   /* 3D view */
@@ -139,7 +143,7 @@
     </select>
     <button id="view-toggle" type="button" aria-pressed="false">Cockpit view</button>
     <button id="stick-open" type="button">Stick settings</button>
-    <div id="progress"><div id="progress-track"><div id="progress-fill"></div></div><span id="clock">0:00</span></div>
+    <div id="progress"><div id="progress-track" aria-label="Replay position" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><div id="progress-bar"><div id="progress-fill"></div></div></div><span id="clock">0:00</span></div>
   </div>
 
   <main id="view">

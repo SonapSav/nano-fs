@@ -34,6 +34,8 @@ let latest = null; // latest frame row
 let paused = false;
 let dirty = true;
 let inputTimer = null;
+let lastReplay = null; // path of the replay last played, to restart it from a seek after it ended
+let pendingSeek = null; // time of the last seek, until its frame arrives
 
 // Optional URL parameters: ?source=live|live_lqr|manual|manual_wind|<log path>&seed=3&speed=5&autoplay=1
 const params = new URLSearchParams(location.search);
@@ -138,6 +140,8 @@ function handle(msg) {
     case "hello":
       session = msg;
       latest = null;
+      pendingSeek = null;
+      updateSeekable();
       scene.reset();
       scene.setTargets(msg.targets);
       els.run.textContent = `${msg.source === "live" ? `${(msg.pilot ?? "pid").toUpperCase()} autopilot` : { manual: "You are flying", replay: "Replay" }[msg.source]} ${msg.run_id}`;
@@ -145,6 +149,11 @@ function handle(msg) {
       setPlaying(true);
       break;
     case "frame":
+      // After a seek, start the trail at the new position (frames sent before the seek may still arrive).
+      if (latest && (msg.row.t_s < latest.t_s || (pendingSeek !== null && Math.abs(msg.row.t_s - pendingSeek) < 0.05))) {
+        scene.clearTrail();
+        if (msg.row.t_s >= latest.t_s) pendingSeek = null;
+      }
       if (session?.source === "manual" && latest === null) {
         // Start from the trimmed throttle so the aircraft keeps flying level.
         pilot.reset(msg.row.cmd_throttle_norm ?? 0.7, msg.row.cmd_flaps_norm ?? 0, msg.row.cmd_pitch_trim_norm ?? 0);
@@ -176,9 +185,82 @@ function play() {
   const v = els.source.value;
   if (isManual(v)) send({ type: "play", source: "manual", conditions: v === MANUAL ? "calm" : "windy", seed, record: els.record.checked });
   else if (isLive(v)) send({ type: "play", source: "live", autopilot: v === LIVE_LQR ? "lqr" : "pid", seed, speed });
-  else send({ type: "play", source: "replay", path: v, speed });
+  else {
+    lastReplay = v;
+    send({ type: "play", source: "replay", path: v, speed });
+  }
   document.activeElement?.blur(); // so the arrow keys fly instead of changing the menu
 }
+
+// Seeking (replays only): click or drag the progress bar, or use the arrow keys on it.
+const track = $("progress-track");
+const canSeek = () => session?.source === "replay" && session.duration_s > 0;
+
+function updateSeekable() {
+  const on = canSeek();
+  track.classList.toggle("seekable", on);
+  if (on) {
+    track.setAttribute("role", "slider");
+    track.tabIndex = 0;
+    track.setAttribute("aria-valuemax", String(Math.round(session.duration_s)));
+  } else {
+    track.removeAttribute("role");
+    track.removeAttribute("tabindex");
+  }
+}
+
+function showPosition(t) {
+  els.fill.style.width = `${Math.min(100, (t / session.duration_s) * 100)}%`;
+  els.clock.textContent = `${fmtTime(t)} / ${fmtTime(session.duration_s)}`;
+  track.setAttribute("aria-valuenow", String(Math.round(t)));
+  track.setAttribute("aria-valuetext", fmtTime(t));
+}
+
+function seekTo(t) {
+  if (!canSeek()) return;
+  t = Math.max(0, Math.min(session.duration_s, t));
+  pendingSeek = t;
+  if (!els.stop.disabled) send({ type: "seek", t_s: t });
+  else if (lastReplay) send({ type: "play", source: "replay", path: lastReplay, speed: Number(els.speed.value), start_s: t });
+  showPosition(t);
+}
+
+const trackTime = (e) => {
+  const r = track.getBoundingClientRect();
+  return ((e.clientX - r.left) / r.width) * session.duration_s;
+};
+let dragging = false;
+let lastSeekSent = 0;
+track.addEventListener("pointerdown", (e) => {
+  if (!canSeek()) return;
+  dragging = true;
+  track.setPointerCapture(e.pointerId);
+  seekTo(trackTime(e));
+  lastSeekSent = performance.now();
+});
+track.addEventListener("pointermove", (e) => {
+  if (!dragging) return;
+  const t = Math.max(0, Math.min(session.duration_s, trackTime(e)));
+  if (performance.now() - lastSeekSent > 100 && !els.stop.disabled) {
+    seekTo(t); // at most 10 seeks per second while dragging
+    lastSeekSent = performance.now();
+  } else {
+    showPosition(t);
+  }
+});
+track.addEventListener("pointerup", (e) => {
+  if (!dragging) return;
+  dragging = false;
+  seekTo(trackTime(e));
+});
+track.addEventListener("keydown", (e) => {
+  if (!canSeek()) return;
+  const now = latest?.t_s ?? 0;
+  const t = { ArrowLeft: now - 5, ArrowRight: now + 5, ArrowDown: now - 30, ArrowUp: now + 30, Home: 0, End: session.duration_s }[e.key];
+  if (t === undefined) return;
+  e.preventDefault();
+  seekTo(t);
+});
 
 function togglePause() {
   if (els.pause.disabled) return;
@@ -257,10 +339,7 @@ function frame() {
   if (dirty) {
     drawAll(gauges, latest, session?.targets);
     updateReadout(latest);
-    if (latest && session?.duration_s) {
-      els.fill.style.width = `${Math.min(100, (latest.t_s / session.duration_s) * 100)}%`;
-      els.clock.textContent = `${fmtTime(latest.t_s)} / ${fmtTime(session.duration_s)}`;
-    }
+    if (latest && session?.duration_s && !dragging) showPosition(latest.t_s);
     dirty = false;
   }
   scene.render();

@@ -115,6 +115,11 @@ export class FlightScene {
       .setPosition(this.position);
   }
 
+  clearTrail() {
+    this.trailCount = 0;
+    this.trailGeo.setDrawRange(0, 0);
+  }
+
   setTargets(targets) {
     this.targets = targets;
   }
