@@ -92,6 +92,7 @@ flightsim/          # installable package (uv_build backend)
   viewer/           # static Three.js app (no build step); three.js 0.186.1 + Sky addon + font vendored in viewer/vendor
                     #   terrain.js / scenery.js: procedural, seeded, visual-only scenery (airfield at 0 m = physics ground)
                     #   aircraft.js: C172P model built in code; control surfaces follow the logged positions
+                    #   sound.js: synthesized engine, wind, stall horn, flap motor (Web Audio, driven by frames)
   analysis/         # mode identification, validation maneuvers, validation checks
   atmosphere/       # Dryden turbulence (MIL-F-8785C)
   batch.py          # parallel seeded episode batches

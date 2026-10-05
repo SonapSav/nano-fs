@@ -7,6 +7,7 @@ import { drawAll, units } from "./gauges.js";
 import { HANDLED_KEYS, PilotInput } from "./input.js";
 import { AXES, CONTROLS, DEFAULTS, MAX_CALIBRATION_SPREAD, MAX_CENTRE, controlValue, defaultProfile, detectAxis, saveSettings } from "./stick.js";
 import { groupLogs } from "./flightlist.js";
+import { FlightSound } from "./sound.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -24,7 +25,7 @@ const MANUAL = "manual"; // calm air
 const MANUAL_WIND = "manual_wind";
 const isManual = (v) => v === MANUAL || v === MANUAL_WIND;
 const INPUT_SEND_HZ = 30;
-const VIEW_HINT = "Drag to look around, scroll to zoom, space to pause, C for cockpit view";
+const VIEW_HINT = "Drag to look around, scroll to zoom, space to pause, C for cockpit view, M for sound";
 const FLY_HINT = "Arrows pitch and roll; Z/X rudder; W/S throttle; F/V flaps; T/G trim; Shift full deflection. Gamepad: LB/RB flaps, D-pad trim";
 
 const scene = new FlightScene($("view"));
@@ -177,10 +178,12 @@ function handle(msg) {
       }
       latest = msg.row;
       scene.update(latest);
+      if (!paused) sound.update(latest, { view: scene.view, distanceM: scene.orbit.distance });
       dirty = true;
       break;
     case "end":
       setPlaying(false);
+      sound.silence();
       if (msg.reason === "finished") say("Flight finished. Press Play to go again.");
       else if (msg.reason.startsWith("terminated:")) say(`The flight ended early: ${msg.reason.slice(11).replace("_", " ")} limit exceeded.`);
       break;
@@ -195,6 +198,7 @@ function handle(msg) {
 }
 
 function play() {
+  sound.unlock(); // a click: browsers allow audio from here on
   const speed = Number(els.speed.value);
   const seed = Number(els.seed.value) || 0;
   const v = els.source.value;
@@ -277,9 +281,48 @@ track.addEventListener("keydown", (e) => {
   seekTo(t);
 });
 
+// Sound: engine, wind, stall horn and flap motor (sound.js); on/off and volume remembered.
+const sound = new FlightSound();
+try {
+  const saved = JSON.parse(localStorage.getItem("flightsim.sound"));
+  if (saved && typeof saved.enabled === "boolean" && Number.isFinite(saved.volume)) {
+    sound.setEnabled(saved.enabled);
+    sound.setVolume(saved.volume);
+  }
+} catch {
+  // storage unavailable: defaults (on, 60%)
+}
+function saveSound() {
+  try {
+    localStorage.setItem("flightsim.sound", JSON.stringify({ enabled: sound.enabled, volume: sound.volume }));
+  } catch {
+    // not persisted
+  }
+}
+function showSound() {
+  $("sound-toggle").textContent = sound.enabled ? "Sound on" : "Sound off";
+  $("sound-toggle").setAttribute("aria-pressed", String(sound.enabled));
+  $("sound-volume").value = sound.volume;
+}
+function toggleSound() {
+  sound.unlock();
+  sound.setEnabled(!sound.enabled);
+  showSound();
+  saveSound();
+}
+$("sound-toggle").addEventListener("click", toggleSound);
+$("sound-volume").addEventListener("input", (e) => {
+  sound.unlock();
+  sound.setVolume(Number(e.target.value));
+  saveSound();
+});
+document.addEventListener("pointerdown", () => sound.unlock(), { once: true });
+showSound();
+
 function togglePause() {
   if (els.pause.disabled) return;
   paused = !paused;
+  if (paused) sound.silence();
   send({ type: paused ? "pause" : "resume" });
   els.pause.textContent = paused ? "Resume" : "Pause";
 }
@@ -312,6 +355,10 @@ try {
 
 document.addEventListener("keydown", (e) => {
   const inForm = ["INPUT", "SELECT", "BUTTON"].includes(document.activeElement?.tagName);
+  if (e.code === "KeyM" && !inForm && !e.repeat) {
+    toggleSound();
+    return;
+  }
   if (e.code === "KeyC" && !inForm && !e.repeat) {
     setView(scene.view === "cockpit" ? "chase" : "cockpit");
     return;

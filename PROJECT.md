@@ -399,6 +399,18 @@ owner before work can start.
   0.15 m); shapes in between approximate. Elevator, ailerons, rudder and flaps move to
   their logged positions (signs tested); the propeller shows as a disc when turning.
   Default chase distance 22 m (was 32), zoom in to 8 m.
+- [x] **Registration and sound** (2026-10-05). SX-123 painted on both sides of the rear
+  fuselage (about 12 in, the ICAO Annex 7 minimum; `REGISTRATION` in aircraft.js), reading
+  left to right from either side. Sound (`flightsim/viewer/sound.js`, Web Audio, no
+  files): engine tone at the firing frequency rpm/30 (O-320, 4 cylinders) with
+  combustion noise, brighter with power; wind rising with airspeed; flap motor while
+  flaps move; stall horn at 7.6 deg angle of attack, the only single threshold that meets
+  the POH's 5-10 kt above the stall for flaps up and 30 deg at both CG limits in the model
+  (tested against the flight model). Cockpit view muffled, chase view fades with distance.
+  Sound on/off button, volume, M key; remembered per browser. Checked in headless
+  Chromium by spectrum (engine peak at rpm/30, silence when off or paused); how it sounds
+  was not judged by ear. Possible refinements: recorded samples (licence needed), tyre
+  and runway sounds with takeoff/landing.
 - [ ] Photo-real aircraft (option B, discussed 2026-10-05): e.g. FlightGear's detailed
   c172p (GPL-2.0, AC3D format, needs conversion to glTF and a licence decision for this
   repo, which has no licence yet) or a CC-BY/CC0 model. **Needs decision:** project

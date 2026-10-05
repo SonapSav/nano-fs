@@ -48,6 +48,7 @@
   :focus-visible { outline: 2px solid var(--bug); outline-offset: 2px; }
   #source { max-width: 22em; }
   #source-filter { width: 11em; }
+  #sound-volume { width: 5em; accent-color: var(--marking); padding: 0; border: 0; min-height: 0; }
   #progress { flex: 1 1 200px; display: flex; align-items: center; gap: 10px; min-width: 180px; }
   #progress-track { flex: 1; padding: 8px 0; touch-action: none; } /* padding: a larger target for seeking */
   #progress-bar { height: 4px; background: #5b6167; border-radius: 2px; overflow: hidden; }
@@ -151,6 +152,8 @@
       <option value="5">5×</option><option value="10">10×</option><option value="30">30×</option>
     </select>
     <button id="view-toggle" type="button" aria-pressed="false">Cockpit view</button>
+    <button id="sound-toggle" type="button" aria-pressed="true">Sound on</button>
+    <input id="sound-volume" type="range" min="0" max="1" step="0.05" aria-label="Sound volume">
     <button id="stick-open" type="button">Stick settings</button>
     <div id="progress"><div id="progress-track" aria-label="Replay position" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><div id="progress-bar"><div id="progress-fill"></div></div></div><span id="clock">0:00</span></div>
   </div>
