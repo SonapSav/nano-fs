@@ -20,7 +20,8 @@ const { buildC172 } = await import("./aircraft.js");
 const m = buildC172();
 m.update({});
 m.group.updateMatrixWorld(true);
-const box = new THREE.Box3().setFromObject(m.group);
+const box = new THREE.Box3(); // structure only: light glows (sprites) are not part of the airframe
+m.group.traverse((o) => { if (o.isMesh) box.expandByObject(o, true); });
 // Most aft point of a control surface (its trailing edge), in body axes.
 const te = (pivot) => {
   pivot.updateMatrixWorld(true);

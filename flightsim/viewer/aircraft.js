@@ -19,6 +19,8 @@ const IN = 0.0254;
 const CG = { x: 40.9, z: 36.6 }; // structural position of the body origin (matches EYE_BODY in scene.js)
 const PROP_AXIS_Z = 29.25; // nose tyre bottom (-19.5) + 11.25 in clearance + 37.5 in radius
 const DIHEDRAL = Math.tan((1.73 * Math.PI) / 180);
+const BEACON_PERIOD_S = 60 / 45;
+const BEACON_FLASH_S = 0.15;
 
 export const toBody = (x, y, z) => new THREE.Vector3((CG.x - x) * IN, y * IN, (CG.z - z) * IN);
 
@@ -220,6 +222,43 @@ function hinged(sections, frac, opts, material, axisSign) {
   return pivot;
 }
 
+// Soft round glow for lights (computed, no canvas, so the model also builds outside a browser).
+let glowTexture = null;
+function glow() {
+  if (!glowTexture) {
+    const n = 64, data = new Uint8Array(n * n * 4);
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) {
+        const r = Math.hypot(i - n / 2 + 0.5, j - n / 2 + 0.5) / (n / 2);
+        const a = Math.max(0, 1 - r) ** 2.2;
+        data.set([255, 255, 255, Math.round(255 * a)], (j * n + i) * 4);
+      }
+    }
+    glowTexture = new THREE.DataTexture(data, n, n);
+    glowTexture.needsUpdate = true;
+  }
+  return glowTexture;
+}
+
+// A light: a half-sphere lens on a dark bezel, facing `outward` (body axes), with a glow.
+function lamp(position, outward, colour, radiusIn, glowM) {
+  const g = new THREE.Group();
+  g.position.copy(position);
+  g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), outward.clone().normalize());
+  const lens = new THREE.Mesh(
+    new THREE.SphereGeometry(radiusIn * IN, 20, 10, 0, 2 * Math.PI, 0, Math.PI / 2), // dome along +y
+    new THREE.MeshBasicMaterial({ color: colour }),
+  );
+  const bezel = new THREE.Mesh(new THREE.CylinderGeometry(radiusIn * 1.25 * IN, radiusIn * 1.25 * IN, 0.4 * IN, 20), new THREE.MeshLambertMaterial({ color: 0x3a3d40 }));
+  bezel.position.y = -0.2 * IN;
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow(), color: colour, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
+  halo.scale.setScalar(glowM);
+  halo.position.y = radiusIn * 0.5 * IN;
+  g.add(lens, bezel, halo);
+  g.userData = { lens, halo };
+  return g;
+}
+
 function beam(a, b, width, thick, material) {
   // A strut or leg from structural point a to b; flat side faces sideways.
   const pa = toBody(...a), pb = toBody(...b);
@@ -331,10 +370,9 @@ export function buildC172({ registration = REGISTRATION } = {}) {
     group.add(beam([58, yy(18), 5], [58, yy(41), -7], 4, 1.2, grey));
     group.add(wheel([58.2, yy(43), -8], 7.5, 5, tyre));
     group.add(ellipsoid([60, yy(43), -6], 16, 5, 8.5, white));
-    // Navigation lights: red left, green right.
-    const light = new THREE.Mesh(new THREE.SphereGeometry(1.4 * IN, 8, 6), new THREE.MeshBasicMaterial({ color: side > 0 ? 0x22dd44 : 0xff2a2a }));
-    light.position.copy(toBody(30, yy(214.5), wingZ(214)));
-    group.add(light);
+    // Navigation lights at the front of the wingtips, facing outward and a little forward:
+    // red left, green right.
+    group.add(lamp(toBody(32, yy(214), wingZ(214)), new THREE.Vector3(0.35, side, 0), side > 0 ? 0x2bff5a : 0xff2a2a, 2.2, 0.55));
   }
 
   // Horizontal tail with elevator (symmetric section).
@@ -353,9 +391,10 @@ export function buildC172({ registration = REGISTRATION } = {}) {
   group.add(new THREE.Mesh(surface([{ le: [150, 0, 44], chord: 64 }, { le: [196, 0, 50], chord: 20 }, { le: [210, 0, 53], chord: 4 }], { ...finOpts, t: 0.08 }), white));
   pivots.rudder = hinged(fin, 0.62, finOpts, white, new THREE.Vector3(0, 0, 1)); // +z body = down: + rotation moves the trailing edge left
   group.add(pivots.rudder);
-  const beacon = new THREE.Mesh(new THREE.SphereGeometry(1.6 * IN, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff3a2a }));
-  beacon.position.copy(toBody(254, 0, 88.5));
+  // Flashing red beacon on top of the fin; white position light at the tail facing aft.
+  const beacon = lamp(toBody(258, 0, 87.3), new THREE.Vector3(0, 0, -1), 0xff3a2a, 2.0, 1.0);
   group.add(beacon);
+  group.add(lamp(toBody(272.6, 0, 33), new THREE.Vector3(-1, 0, 0), 0xffffff, 1.6, 0.45));
 
   // Nose gear: strut, wheel and fairing.
   group.add(beam([-4, 0, 10], [-6.8, 0, -13], 3, 3, grey));
@@ -376,6 +415,11 @@ export function buildC172({ registration = REGISTRATION } = {}) {
       set(pivots.flapL, row.flap_pos_rad ?? 0);
       set(pivots.flapR, row.flap_pos_rad ?? 0);
       set(pivots.rudder, row.rudder_pos_rad ?? 0);
+      // Beacon: a short flash about 45 times a minute, timed by the flight clock (so a
+      // replay flashes the same way).
+      const on = ((row.t_s ?? 0) % BEACON_PERIOD_S) < BEACON_FLASH_S;
+      beacon.userData.halo.visible = on;
+      beacon.userData.lens.material.color.setHex(on ? 0xff3a2a : 0x5a1410);
       const rpm = row.engine_rpm ?? 0;
       const spinning = rpm > 400; // a blur disc above idle-ish speeds; separate blades below
       disc.visible = spinning;
