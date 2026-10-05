@@ -31,7 +31,6 @@ from flightsim.provenance import code_version
 from flightsim.envs import AltitudeHeadingHoldEnv
 from flightsim.envs.config import env_config_from_raw
 from flightsim.envs.evaluate import run_episode
-from flightsim.control.lqr import GainSchedule
 from flightsim.envs.policies import LQRPolicy, PIDPolicy, TrimHoldPolicy
 
 POLICIES = ("pid", "lqr", "rl", "trim_hold")
@@ -70,8 +69,7 @@ def make_policy(policy: str, policy_raw: dict | None, cfg):
     if policy == "pid":
         return PIDPolicy(autopilot_gains_from_raw(policy_raw), cfg.control_rate_hz)
     if policy == "lqr":
-        schedule = GainSchedule.cached(cfg.aircraft, cfg.loading, policy_raw, 1.0 / cfg.control_rate_hz)
-        return LQRPolicy(schedule, cfg.control_rate_hz)
+        return LQRPolicy.designed(cfg, policy_raw)
     if policy == "rl":
         from flightsim.rl.policy import load_policy, model_identity  # torch only when needed
 

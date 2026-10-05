@@ -28,6 +28,7 @@ class Source:
     targets: dict | None
     meta: dict = field(default_factory=dict)
     end_reason: str = "finished"
+    pilot_name: str | None = None  # who flies a live flight: "pid", "lqr" or "human"
 
     def frames(self) -> Iterator[tuple[float, dict]]:
         raise NotImplementedError
@@ -49,7 +50,7 @@ class ReplaySource(Source):
 
 class LiveSource(Source):
     """Flies one episode of the altitude/heading task with a policy (the PID autopilot
-    unless given another, e.g. a human pilot)."""
+    unless given another, e.g. the LQR autopilot or a human pilot)."""
 
     max_speed = math.inf
 
@@ -63,6 +64,7 @@ class LiveSource(Source):
         targets = {"alt_msl_m": t.alt_msl_m, "heading_rad": t.heading_rad, "tas_mps": t.tas_mps}
         run_id = make_run_id(env_cfg.config_hash, seed)
         super().__init__(source, run_id, env_cfg.aircraft, env_cfg.sim_rate_hz, env_cfg.episode_s, targets)
+        self.pilot_name = "human" if source == "manual" else self._policy.name
         self._config_hash = env_cfg.config_hash
 
     def frames(self) -> Iterator[tuple[float, dict]]:

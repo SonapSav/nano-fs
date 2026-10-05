@@ -7,7 +7,7 @@ Commands are null when no command follows the state (end of a log).
 Server -> client messages (JSON):
   {"type": "hello", "protocol": 1, "source": "live" | "manual" | "replay", "run_id", "aircraft",
    "sim_rate_hz", "frame_rate_hz", "duration_s" (null if unknown), "targets" (or null),
-   "meta" (log metadata, replay only)}
+   "meta" (log metadata, replay only), "pilot" ("pid" | "lqr" | "human"; null for replay)}
   {"type": "frame", "row": {<log column>: value, ...}}
   {"type": "end", "reason": "finished" | "stopped" | "terminated:<why>"}
   {"type": "logs", "logs": [{"path", "run_id", "aircraft", "rows"}, ...]}
@@ -17,7 +17,7 @@ Server -> client messages (JSON):
 Client -> server messages:
   {"type": "list"}
   {"type": "play", "source": "replay", "path": "<relative to the data dir>", "speed": 1.0}
-  {"type": "play", "source": "live", "seed": 0, "speed": 1.0}
+  {"type": "play", "source": "live", "autopilot": "pid" | "lqr" (default "pid"), "seed": 0, "speed": 1.0}
   {"type": "play", "source": "manual", "conditions": "calm" | "windy", "seed": 0, "record": true}
       (speed is capped at 1)
   {"type": "input", "elevator", "aileron", "rudder", "throttle", "flaps"?, "pitch_trim"?}

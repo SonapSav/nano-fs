@@ -211,10 +211,10 @@ owner before work can start.
   after the retune 4.8 vs 5.5.
 - [ ] LQR episodes run at ~680x real time vs ~900x for the PID (per-step gain
   interpolation in numpy); optimize only if batches get too slow.
-- [ ] Watch the LQR autopilot in the viewer (the live source flies the PID only).
-
-### Task and reward
-
+- [x] Watch the LQR autopilot in the viewer (2026-10-05): "Watch the LQR autopilot" in
+  the flight menu (`?source=live_lqr`). Live play messages take `autopilot: pid | lqr`;
+  hello reports the `pilot`. The server loads (or designs, ~15 s) the gain schedule at
+  startup (`--lqr configs/lqr.yaml`).
 - [x] **Comfort task** (decided and done 2026-10-04, option C):
   `configs/envs/altitude_heading_hold_comfort.yaml` extends the windy task. Soft comfort
   penalties beyond 25 deg bank, |n - 1| > 0.3 g and 3 m/s climb/descent; episodes end at

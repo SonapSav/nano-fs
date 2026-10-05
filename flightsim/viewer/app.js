@@ -16,7 +16,9 @@ const els = {
 const gauges = { asi: $("asi"), ai: $("ai"), alt: $("alt"), tc: $("tc"), hi: $("hi"), vsi: $("vsi"), tach: $("tach"), controls: $("controls") };
 const readout = { alt: $("r-alt"), talt: $("r-talt"), hdg: $("r-hdg"), thdg: $("r-thdg"), kias: $("r-kias"), aoa: $("r-aoa"), g: $("r-g"), flaps: $("r-flaps"), trim: $("r-trim") };
 
-const LIVE = "live";
+const LIVE = "live"; // PID autopilot
+const LIVE_LQR = "live_lqr";
+const isLive = (v) => v === LIVE || v === LIVE_LQR;
 const MANUAL = "manual"; // calm air
 const MANUAL_WIND = "manual_wind";
 const isManual = (v) => v === MANUAL || v === MANUAL_WIND;
@@ -33,7 +35,7 @@ let paused = false;
 let dirty = true;
 let inputTimer = null;
 
-// Optional URL parameters: ?source=live|manual|<log path>&seed=3&speed=5&autoplay=1
+// Optional URL parameters: ?source=live|live_lqr|manual|manual_wind|<log path>&seed=3&speed=5&autoplay=1
 const params = new URLSearchParams(location.search);
 let autoplay = params.get("autoplay") === "1";
 if (params.has("seed")) els.seed.value = params.get("seed");
@@ -64,6 +66,7 @@ function populateSources(logs) {
   els.source.add(new Option("Fly it yourself (calm air)", MANUAL));
   els.source.add(new Option("Fly it yourself (wind and turbulence)", MANUAL_WIND));
   els.source.add(new Option("Watch the PID autopilot", LIVE));
+  els.source.add(new Option("Watch the LQR autopilot", LIVE_LQR));
   for (const [label, filter] of [["Your demonstrations", (l) => l.path.startsWith("demos/")], ["Recorded flights", (l) => !l.path.startsWith("demos/")]]) {
     const items = logs.filter(filter);
     if (!items.length) continue;
@@ -78,7 +81,7 @@ function populateSources(logs) {
 
 function updateSourceOptions() {
   const v = els.source.value;
-  els.seed.hidden = els.seedLabel.hidden = v !== LIVE && !isManual(v);
+  els.seed.hidden = els.seedLabel.hidden = !isLive(v) && !isManual(v);
   els.record.hidden = els.recordLabel.hidden = !isManual(v);
   els.speed.disabled = isManual(v); // manual flights run in real time
 }
@@ -137,7 +140,7 @@ function handle(msg) {
       latest = null;
       scene.reset();
       scene.setTargets(msg.targets);
-      els.run.textContent = `${{ live: "Autopilot", manual: "You are flying", replay: "Replay" }[msg.source]} ${msg.run_id}`;
+      els.run.textContent = `${msg.source === "live" ? `${(msg.pilot ?? "pid").toUpperCase()} autopilot` : { manual: "You are flying", replay: "Replay" }[msg.source]} ${msg.run_id}`;
       say(msg.source === "manual" ? "Fly to the magenta altitude and heading bugs." : "");
       setPlaying(true);
       break;
@@ -172,7 +175,7 @@ function play() {
   const seed = Number(els.seed.value) || 0;
   const v = els.source.value;
   if (isManual(v)) send({ type: "play", source: "manual", conditions: v === MANUAL ? "calm" : "windy", seed, record: els.record.checked });
-  else if (v === LIVE) send({ type: "play", source: LIVE, seed, speed });
+  else if (isLive(v)) send({ type: "play", source: "live", autopilot: v === LIVE_LQR ? "lqr" : "pid", seed, speed });
   else send({ type: "play", source: "replay", path: v, speed });
   document.activeElement?.blur(); // so the arrow keys fly instead of changing the menu
 }

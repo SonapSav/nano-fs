@@ -4,6 +4,7 @@ import argparse
 import asyncio
 from pathlib import Path
 
+from flightsim.config import load_raw
 from flightsim.control.autopilot import load_autopilot_gains
 from flightsim.envs import load_env_config
 from flightsim.stream.server import ServerConfig, run_server
@@ -16,6 +17,7 @@ def main() -> None:
     parser.add_argument("--data-dir", default="data", help="logs available for replay")
     parser.add_argument("--env-config", default="configs/envs/altitude_heading_hold.yaml")
     parser.add_argument("--autopilot", default="configs/autopilot.yaml")
+    parser.add_argument("--lqr", default="configs/lqr.yaml", help="LQR autopilot config")
     parser.add_argument("--manual-config", default="configs/envs/manual.yaml", help="manual flight, calm air")
     parser.add_argument("--manual-wind-config", default="configs/envs/manual_wind.yaml", help="manual flight, wind and turbulence")
     parser.add_argument("--frame-rate", type=float, default=30.0)
@@ -27,7 +29,12 @@ def main() -> None:
         gains=load_autopilot_gains(args.autopilot),
         frame_rate_hz=args.frame_rate,
         manual_env_cfgs={"calm": load_env_config(args.manual_config), "windy": load_env_config(args.manual_wind_config)},
+        lqr_raw=load_raw(args.lqr),
     )
+    # Design the LQR gain schedule now (or load it from data/cache/lqr), so the first
+    # "watch the LQR" flight starts at once; designing takes ~15 s.
+    print("LQR gain schedule: loading or designing...", flush=True)
+    cfg.autopilot("lqr")
     print(f"viewer: http://{'localhost' if args.host in ('0.0.0.0', '127.0.0.1') else args.host}:{args.port}/")
     try:
         asyncio.run(run_server(cfg, args.host, args.port))

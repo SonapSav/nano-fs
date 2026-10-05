@@ -20,6 +20,7 @@ from websockets.http11 import Request, Response
 
 from flightsim.control.autopilot import AutopilotGains
 from flightsim.envs import EnvConfig
+from flightsim.envs.policies import LQRPolicy, PIDPolicy
 from flightsim.stream.protocol import PROTOCOL_VERSION, encode
 from flightsim.stream.sources import LiveSource, ManualSource, ReplaySource, Source, list_logs
 
@@ -35,6 +36,14 @@ class ServerConfig:
     frame_rate_hz: float = 30.0
     # Manual-flight tasks by conditions name ("calm", "windy"); default: the autopilot task.
     manual_env_cfgs: dict[str, EnvConfig] | None = None
+    lqr_raw: dict | None = None  # LQR config; None = only the PID can be watched
+
+    def autopilot(self, name: str):
+        if name == "pid":
+            return PIDPolicy(self.gains, self.env_cfg.control_rate_hz)
+        if name == "lqr" and self.lqr_raw is not None:
+            return LQRPolicy.designed(self.env_cfg, self.lqr_raw)
+        raise ValueError(f"unknown autopilot {name!r}; choose from {['pid', 'lqr'] if self.lqr_raw else ['pid']}")
 
 
 def _static_response(path: str) -> Response:
@@ -67,7 +76,8 @@ class Session:
                 raise ValueError(f"no such log: {msg['path']}")
             return ReplaySource(path)
         if msg.get("source") == "live":
-            return LiveSource(self.cfg.env_cfg, self.cfg.gains, int(msg.get("seed", 0)))
+            policy = self.cfg.autopilot(str(msg.get("autopilot", "pid")))
+            return LiveSource(self.cfg.env_cfg, None, int(msg.get("seed", 0)), policy=policy)
         if msg.get("source") == "manual":
             tasks = self.cfg.manual_env_cfgs or {"calm": self.cfg.env_cfg}
             conditions = str(msg.get("conditions", next(iter(tasks))))
@@ -143,6 +153,7 @@ class Session:
             "type": "hello", "protocol": PROTOCOL_VERSION, "source": source.source, "run_id": source.run_id,
             "aircraft": source.aircraft, "sim_rate_hz": source.sim_rate_hz, "frame_rate_hz": self.cfg.frame_rate_hz,
             "duration_s": source.duration_s, "targets": source.targets, "meta": source.meta,
+            "pilot": source.pilot_name,
         }))  # fmt: skip
         frame_dt = 1.0 / self.cfg.frame_rate_hz
         next_t = None

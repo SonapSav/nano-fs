@@ -57,9 +57,9 @@ def test_encode_nulls_non_finite_values():
     assert msg["row"] == {"a": None, "b": 1.5, "c": None}
 
 
-def _with_server(data_dir, env_cfg, gains, body):
+def _with_server(data_dir, env_cfg, gains, body, **extra):
     async def main():
-        cfg = ServerConfig(data_dir, env_cfg, gains)
+        cfg = ServerConfig(data_dir, env_cfg, gains, **extra)
         ready = asyncio.get_running_loop().create_future()
         server = asyncio.create_task(run_server(cfg, "127.0.0.1", 0, ready.set_result))
         port = await asyncio.wait_for(ready, 5)
@@ -186,3 +186,31 @@ def test_viewer_is_served_with_vendored_three(logged_episode, env_cfg, gains):
     assert sky_type == "text/javascript" and b"class Sky extends Mesh" in sky
     assert js_type == "text/javascript" and b"from './three.core.js'" in js
     assert b"REVISION = '186'" in core
+
+
+def test_server_streams_the_lqr_autopilot(env_cfg, gains, tmp_path):
+    """The LQR flies the same episode live as in a batch run; the hello says who flies."""
+    from flightsim.config import load_raw
+    from flightsim.envs.policies import LQRPolicy
+
+    lqr_raw = load_raw(ROOT / "configs" / "lqr.yaml")
+    env = AltitudeHeadingHoldEnv(env_cfg, record=True)
+    run_episode(env, LQRPolicy.designed(env_cfg, lqr_raw), seed=3)
+    states, _ = env.recorded
+
+    async def body(port):
+        async with connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            await ws.send(json.dumps({"type": "play", "source": "live", "autopilot": "lqr", "seed": 3, "speed": 64}))
+            lqr = await _collect(ws)
+            await ws.send(json.dumps({"type": "play", "source": "live", "seed": 3, "speed": 64}))
+            pid = await _collect(ws)
+            await ws.send(json.dumps({"type": "play", "source": "live", "autopilot": "rl", "seed": 3}))
+            error = json.loads(await ws.recv())
+            return lqr, pid, error
+
+    (hello, frames, end), (pid_hello, pid_frames, _), error = _with_server(tmp_path, env_cfg, gains, body, lqr_raw=lqr_raw)
+    assert hello["source"] == "live" and hello["pilot"] == "lqr" and pid_hello["pilot"] == "pid"
+    assert end["reason"] == "finished"
+    assert frames[-1]["alt_msl_m"] == states[-1].alt_msl_m  # same flight as the batch path
+    assert frames[-1]["alt_msl_m"] != pid_frames[-1]["alt_msl_m"]
+    assert error["type"] == "error" and "unknown autopilot 'rl'" in error["message"]

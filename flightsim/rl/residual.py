@@ -12,13 +12,11 @@ The same composition runs in training (ResidualEnv) and evaluation (ResidualPoli
 import gymnasium as gym
 import numpy as np
 
-from flightsim.control.lqr import GainSchedule
 from flightsim.envs.policies import LQRPolicy
 
 
 def make_lqr_policy(env_cfg, lqr_raw: dict) -> LQRPolicy:
-    schedule = GainSchedule.cached(env_cfg.aircraft, env_cfg.loading, lqr_raw, 1.0 / env_cfg.control_rate_hz)
-    return LQRPolicy(schedule, env_cfg.control_rate_hz)
+    return LQRPolicy.designed(env_cfg, lqr_raw)
 
 
 def augment(obs: np.ndarray, base_action: np.ndarray) -> np.ndarray:

@@ -57,6 +57,12 @@ class LQRPolicy:
         self.schedule = schedule
         self.dt_s = 1.0 / control_rate_hz
 
+    @classmethod
+    def designed(cls, env_cfg, lqr_raw: dict) -> "LQRPolicy":
+        """For a task: the schedule designed for its aircraft, loading and decision rate (cached on disk)."""
+        schedule = GainSchedule.cached(env_cfg.aircraft, env_cfg.loading, lqr_raw, 1.0 / env_cfg.control_rate_hz)
+        return cls(schedule, env_cfg.control_rate_hz)
+
     def reset(self, info: dict) -> None:
         self._autopilot = LQRAutopilot(self.schedule, info["trim"], info["trim_state"], info["targets"], self.dt_s)
         self._names = info["action_names"]
