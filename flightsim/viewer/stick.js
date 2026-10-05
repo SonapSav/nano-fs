@@ -12,6 +12,11 @@ export const DEFAULTS = {
   centre: [0, 0, 0], // measured rest position of axes 0-2 (left X, left Y, right X), see calibration
 };
 const STORAGE_KEY = "flightsim.stick.v2";
+// Largest accepted rest offset. Gamepad stick drift is typically below 0.2 (an Xbox pad
+// measured 0.17-0.19 here); a larger "centre" means a stick was touched while calibrating.
+export const MAX_CENTRE = 0.3;
+// Largest movement of a stick during the calibration second (hands off: noise only).
+export const MAX_CALIBRATION_SPREAD = 0.05;
 
 export function shape(x, { sensitivity, expo }) {
   return sensitivity * ((1 - expo) * x + expo * x * x * x);
@@ -21,7 +26,7 @@ function valid(s) {
   return (
     AXES.every((a) => s?.[a] && [s[a].sensitivity, s[a].expo].every((v) => Number.isFinite(v) && v >= 0 && v <= 1)) &&
     Number.isFinite(s.deadzone) && s.deadzone >= 0 && s.deadzone < 0.5 &&
-    Array.isArray(s.centre) && s.centre.length === 3 && s.centre.every((c) => Number.isFinite(c) && Math.abs(c) < 0.5)
+    Array.isArray(s.centre) && s.centre.length === 3 && s.centre.every((c) => Number.isFinite(c) && Math.abs(c) < MAX_CENTRE)
   );
 }
 
@@ -41,6 +46,9 @@ export function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (s && !("centre" in s)) s.centre = [...DEFAULTS.centre]; // saved before calibration existed
+    // A centre beyond MAX_CENTRE came from a stick held while calibrating (accepted up to
+    // 0.5 before 2026-10-05): drop it, keep the other settings.
+    if (s && Array.isArray(s.centre) && s.centre.some((c) => !(Math.abs(c) < MAX_CENTRE))) s.centre = [...DEFAULTS.centre];
     if (valid(s)) return s;
   } catch {
     // storage unavailable or corrupt: fall back to defaults

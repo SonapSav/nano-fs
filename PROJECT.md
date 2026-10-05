@@ -309,6 +309,15 @@ owner before work can start.
   owner's recorded flight `f8f0461a3c20-s0-m5b803fa0`: the aileron was never centred
   (median -0.048 left) and rudder constantly -0.056, matching Xbox stick rest positions
   of about -0.17 (left stick X) and +0.19 (right stick X), beyond the 0.08 dead zone.
+- [x] Calibration hardened (2026-10-05), after a left roll "with centre stick" in flight
+  `f8f0461a3c20-s0-mb3f4ea73`: a steady -0.27 aileron from the first decision for 2.75 s,
+  consistent with a centre stored while a stick was touched (accepted up to 0.5).
+  Calibration now rejects a stick that moves more than 0.05 during the measuring second
+  or rests beyond 0.3 (normal drift is below 0.2); stored centres beyond 0.3 are
+  dropped on load. A flight start warns if a stick reads outside the dead zone. Fixed: the
+  Stick settings readout and calibration wrote stick values into the control input
+  (they now only read the gamepad). Also noted: the C172 does not level its own wings,
+  so after a roll input the bank stays until rolled level.
 - [ ] **Joystick support for the Thrustmaster T.Flight HOTAS X** (owner plans to buy it,
   2026-10-04). Browsers report it without the standard layout, so it is ignored today.
   Plan: per-device axis mapping (pitch, roll, rudder = twist grip, throttle = lever;

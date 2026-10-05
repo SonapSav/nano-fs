@@ -5,7 +5,7 @@
 import { FlightScene } from "./scene.js";
 import { drawAll, units } from "./gauges.js";
 import { HANDLED_KEYS, PilotInput } from "./input.js";
-import { AXES, DEFAULTS, centred, saveSettings } from "./stick.js";
+import { AXES, DEFAULTS, MAX_CALIBRATION_SPREAD, MAX_CENTRE, centred, saveSettings } from "./stick.js";
 import { groupLogs } from "./flightlist.js";
 
 const $ = (id) => document.getElementById(id);
@@ -169,6 +169,11 @@ function handle(msg) {
         pilot.reset(msg.row.cmd_throttle_norm ?? 0.7, msg.row.cmd_flaps_norm ?? 0, msg.row.cmd_pitch_trim_norm ?? 0);
         startInput(); // resets the hint, so set the flying hint after it
         els.hint.textContent = FLY_HINT;
+        const off = pilot.offCentre();
+        if (off.length) {
+          const list = off.map((a) => `${a.axis} ${a.value >= 0 ? "+" : ""}${a.value.toFixed(2)}`).join(", ");
+          say(`Fly to the magenta altitude and heading bugs. Note: the gamepad reads ${list} at the start; if your hands are off the sticks, recalibrate in Stick settings.`);
+        }
       }
       latest = msg.row;
       scene.update(latest);
@@ -406,7 +411,7 @@ $("stick-deadzone").addEventListener("input", (e) => {
 // Live raw stick positions while the dialog is open, so stick drift is visible.
 let liveTimer = null;
 function updateLive() {
-  pilot.update(0); // refresh rawAxes without advancing anything time-based
+  pilot.readPad(); // raw axes only; the control input is not touched
   const axes = pilot.rawAxes;
   const el = $("stick-live");
   if (!axes) {
@@ -442,20 +447,27 @@ $("stick-calibrate").addEventListener("click", () => {
     return;
   }
   button.disabled = true;
-  const sums = [0, 0, 0];
+  const sums = [0, 0, 0], lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   let n = 0;
   $("stick-calibrate-status").textContent = "Measuring, keep your hands off the sticks…";
   const timer = setInterval(() => {
-    pilot.update(0);
+    pilot.readPad();
     if (pilot.rawAxes) {
-      for (let i = 0; i < 3; i++) sums[i] += pilot.rawAxes[i] ?? 0;
+      for (let i = 0; i < 3; i++) {
+        const v = pilot.rawAxes[i] ?? 0;
+        sums[i] += v;
+        lo[i] = Math.min(lo[i], v);
+        hi[i] = Math.max(hi[i], v);
+      }
       n++;
     }
     if (n >= 20) {
       clearInterval(timer);
       const centre = sums.map((s) => s / n);
-      if (centre.some((c) => Math.abs(c) >= 0.5)) {
-        $("stick-calibrate-status").textContent = "A stick was held far from centre; let go and try again.";
+      if (hi.some((h, i) => h - lo[i] > MAX_CALIBRATION_SPREAD)) {
+        $("stick-calibrate-status").textContent = "A stick moved while measuring; take your hands off the sticks and try again.";
+      } else if (centre.some((c) => Math.abs(c) >= MAX_CENTRE)) {
+        $("stick-calibrate-status").textContent = "A stick rests too far from centre for drift; let go of it and try again.";
       } else {
         pilot.stick.centre = centre;
         saveSettings(pilot.stick);

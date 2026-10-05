@@ -67,11 +67,27 @@ export class PilotInput {
     this.down.clear();
   }
 
-  // Advance by dt seconds and return the current input.
-  update(dt) {
+  // Read the gamepad (its name and raw axes) without changing the control input; the
+  // Stick settings readout and calibration use this.
+  readPad() {
     const pad = [...(navigator.getGamepads?.() ?? [])].find((g) => g && g.connected && g.mapping === "standard");
     this.gamepadName = pad ? pad.id : null;
-    this.rawAxes = pad ? [...pad.axes] : null; // for the live readout in Stick settings
+    this.rawAxes = pad ? [...pad.axes] : null;
+    return pad;
+  }
+
+  // Sticks (roll, pitch, rudder) that read outside the dead zone after calibration:
+  // [{axis, value}] for those that do. With hands off, this is uncorrected drift.
+  offCentre() {
+    if (!this.readPad()) return [];
+    return ["roll", "pitch", "rudder"]
+      .map((axis, i) => ({ axis, value: centred(this.rawAxes[i] ?? 0, this.stick.centre[i]) }))
+      .filter((a) => Math.abs(a.value) >= this.stick.deadzone);
+  }
+
+  // Advance by dt seconds and return the current input.
+  update(dt) {
+    const pad = this.readPad();
     const k = 1 - Math.exp(-dt / KEY_TIME_CONSTANT_S);
     const full = this.shift ? 1 : KEY_DEFLECTION;
     for (const [axis, keys] of Object.entries(AXIS_KEYS)) {
