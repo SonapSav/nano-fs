@@ -20,7 +20,7 @@ def test_schema_covers_exactly_the_core_state_and_controls():
 
 
 @pytest.fixture
-def short_run(cruise):
+def short_run():
     cfg = shortened(5.0)
     return cfg, run(cfg)
 
@@ -50,7 +50,7 @@ def test_logged_config_reproduces_the_hash(tmp_path, short_run):
     assert config_hash(json.loads(meta[S.META_CONFIG_JSON])) == cfg.config_hash
 
 
-def test_same_config_gives_byte_identical_logs(tmp_path, cruise):
+def test_same_config_gives_byte_identical_logs(tmp_path):
     cfg = shortened(5.0)
     a = write_log(tmp_path / "a.parquet", run(cfg), cfg.provenance)
     b = write_log(tmp_path / "b.parquet", run(cfg), cfg.provenance)

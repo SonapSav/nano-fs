@@ -271,9 +271,10 @@ owner before work can start.
 
 ### Manual control and environment actions
 
-- [ ] **Needs decision:** pitch trim, flaps, mixture and brakes are held at trim; adding
-  any changes the environment's action space. Pitch trim would make long manual flights
-  easier; flaps and brakes matter for takeoff and landing.
+- [x] Flaps and pitch trim joined the manual tasks' action set on 2026-10-04 (see
+  "Manual flight hardware"); autopilot and RL tasks keep four controls.
+- [ ] Mixture and brakes are still held at trim; brakes (and probably mixture) belong
+  to the takeoff/landing item.
 
 ### Manual flight hardware
 
@@ -363,8 +364,8 @@ owner before work can start.
 
 - [ ] Docker image is 1.99 GB since torch was added (CPU-only build). A separate
   slim image without torch for sim/viewer-only use is possible if size matters.
-- [ ] The viewer container still runs the image from step 6; restart it
-  (`docker compose up -d viewer`) to pick up later changes (none affect the viewer).
+- [x] The viewer container is rebuilt and restarted with each viewer change
+  (`docker compose up -d --build viewer`); it was stale only after step 6.
 
 - [ ] Move to the GPU PC (NVIDIA GTX 1660 6 GB) when GPU training is needed. Needs the
   NVIDIA Container Toolkit and a separate GPU image. Check its core layout first: here,
@@ -375,4 +376,4 @@ owner before work can start.
 - [x] Deleted the step 5 test demonstration `data/demos/74899ee1d8e6-s1-m512eaf16.parquet`
   (2026-10-04). `74899ee1d8e6-s0-mf3b6bfa2.parquet` was not created by Claude:
   presumably the owner's flight, kept.
-- [ ] Some tests still take a now-unused `cruise` fixture argument; tidy up.
+- [x] Tests no longer take the unused `cruise` fixture argument (2026-10-05).

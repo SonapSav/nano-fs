@@ -9,14 +9,14 @@ from conftest import shortened
 M_TO_FT = 1 / 0.3048
 
 
-def test_same_config_gives_identical_runs(cruise):
+def test_same_config_gives_identical_runs():
     cfg = shortened(20.0)
     a, b = run(cfg), run(cfg)
     assert a.states == b.states
     assert a.controls == b.controls
 
 
-def test_trimmed_cruise_holds_altitude_speed_heading(cruise):
+def test_trimmed_cruise_holds_altitude_speed_heading():
     cfg = shortened(60.0)
     states = run(cfg).states
     s0 = states[0]
@@ -26,7 +26,7 @@ def test_trimmed_cruise_holds_altitude_speed_heading(cruise):
         assert abs(math.degrees(wrap_angle_rad(s.psi_rad - s0.psi_rad))) < 0.5
 
 
-def test_heading_hold_captures_new_heading(cruise):
+def test_heading_hold_captures_new_heading():
     target = math.radians(120)
     cfg = shortened(40.0, target_heading_deg=120)
     states = run(cfg).states
