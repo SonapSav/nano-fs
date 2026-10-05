@@ -1,5 +1,10 @@
 x-flightsim: &flightsim
-  build: .
+  build:
+    context: .
+    args:                       # set by scripts/docker.py; empty with plain docker compose
+      GIT_COMMIT: ${FLIGHTSIM_GIT_COMMIT:-}
+      GIT_DIRTY: ${FLIGHTSIM_GIT_DIRTY:-}
+      GIT_DIFF_SHA256: ${FLIGHTSIM_GIT_DIFF_SHA256:-}
   image: flightsim:dev
   # Run as the host user so logs written to ./data are not root-owned.
   user: "${UID:-1000}:${GID:-1000}"

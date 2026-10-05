@@ -21,7 +21,7 @@ AUTOPILOT = ROOT / "configs" / "autopilot.yaml"
 
 def test_code_version_fields():
     v = provenance.code_version()
-    assert set(v) == {"source_sha256", "git_commit", "git_dirty", "git_diff_sha256"}
+    assert set(v) == {"source_sha256", "git_commit", "git_dirty", "git_diff_sha256", "git_source"}
     assert len(v["source_sha256"]) == 64
 
 
@@ -38,11 +38,40 @@ def test_source_hash_tracks_any_python_change(tmp_path):
 
 def test_git_fields_are_none_without_a_repository(monkeypatch):
     monkeypatch.setattr(provenance, "_git", lambda *a: None)
+    monkeypatch.delenv("FLIGHTSIM_GIT_COMMIT", raising=False)
     provenance.code_version.cache_clear()
     try:
         v = provenance.code_version()
         assert v["git_commit"] is None and v["git_dirty"] is None and v["git_diff_sha256"] is None
+        assert v["git_source"] is None
         assert v["source_sha256"] == provenance.source_sha256()
+    finally:
+        provenance.code_version.cache_clear()
+
+
+def test_build_time_git_fields_are_used_without_a_repository(monkeypatch):
+    """Docker images built through scripts/docker.py carry the commit they were built from."""
+    monkeypatch.setattr(provenance, "_git", lambda *a: None)
+    monkeypatch.setenv("FLIGHTSIM_GIT_COMMIT", "a" * 40)
+    monkeypatch.setenv("FLIGHTSIM_GIT_DIRTY", "1")
+    monkeypatch.setenv("FLIGHTSIM_GIT_DIFF_SHA256", "b" * 64)
+    provenance.code_version.cache_clear()
+    try:
+        v = provenance.code_version()
+        assert v == {"source_sha256": provenance.source_sha256(), "git_commit": "a" * 40, "git_dirty": True,
+                     "git_diff_sha256": "b" * 64, "git_source": "build"}  # fmt: skip
+    finally:
+        provenance.code_version.cache_clear()
+
+
+def test_repository_wins_over_build_time_fields(monkeypatch):
+    monkeypatch.setenv("FLIGHTSIM_GIT_COMMIT", "a" * 40)
+    provenance.code_version.cache_clear()
+    try:
+        v = provenance.code_version()
+        if v["git_source"] is None:
+            pytest.skip("no git repository (e.g. inside Docker)")
+        assert v["git_source"] == "repository" and v["git_commit"] != "a" * 40
     finally:
         provenance.code_version.cache_clear()
 

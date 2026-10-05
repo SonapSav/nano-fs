@@ -352,8 +352,9 @@ owner before work can start.
   metadata) and batch manifests record the flightsim source hash plus git commit, dirty
   flag and diff hash. Batch ids now change with any code change (source hash) but not
   with git state alone. The LQR gain cache is also keyed on the source hash.
-- [ ] Docker runs record the source hash but no git commit (`.git` is not in the image).
-  If needed: pass the commit in at build time, or mount `.git` read-only and install git.
+- [x] Docker runs record the git commit (2026-10-05): `scripts/docker.py` passes the
+  commit, dirty flag and diff hash as build arguments; `code_version()` uses them when
+  there is no repository (`git_source: build`, vs `repository` locally).
 - [ ] Batches and logs made before this change (e.g. `data/batch/*` from 2026-10-04) have
   no code version; batch summaries are format 4 from now on.
 

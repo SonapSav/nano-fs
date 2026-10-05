@@ -23,4 +23,13 @@ COPY . .
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked
 
+# The git version the image was built from (scripts/docker.py passes it; empty otherwise).
+# Last, so a new commit does not invalidate the dependency layers.
+ARG GIT_COMMIT=""
+ARG GIT_DIRTY=""
+ARG GIT_DIFF_SHA256=""
+ENV FLIGHTSIM_GIT_COMMIT=$GIT_COMMIT \
+    FLIGHTSIM_GIT_DIRTY=$GIT_DIRTY \
+    FLIGHTSIM_GIT_DIFF_SHA256=$GIT_DIFF_SHA256
+
 CMD ["python", "-c", "import sys, jsbsim; print(sys.version.split()[0], 'jsbsim', jsbsim.__version__)"]
