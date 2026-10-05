@@ -196,7 +196,10 @@ class Session:
             last_row = None
         if last_row is not None:  # always deliver the final state
             await self.ws.send(encode({"type": "frame", "row": last_row}))
-        await self.ws.send(encode({"type": "end", "reason": source.end_reason}))
+        end = {"type": "end", "reason": source.end_reason}
+        if source.landing is not None:
+            end["landing"] = source.landing
+        await self.ws.send(encode(end))
 
 
 def make_handler(cfg: ServerConfig):

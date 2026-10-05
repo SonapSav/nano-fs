@@ -26,7 +26,7 @@ from pathlib import Path
 import numpy as np
 
 from flightsim.config import canonical_json, load_raw
-from flightsim.envs import AltitudeHeadingHoldEnv
+from flightsim.envs import make_env
 from flightsim.envs.config import env_config_from_raw
 from flightsim.envs.evaluate import run_episode
 from flightsim.provenance import code_version
@@ -52,7 +52,7 @@ def _make_env(env_raw: dict, reward_scale: float, residual: dict | None = None):
         from stable_baselines3.common.monitor import Monitor
 
         cfg = env_config_from_raw(env_raw)
-        env = AltitudeHeadingHoldEnv(cfg)
+        env = make_env(cfg)
         if residual is not None:
             from flightsim.rl.residual import ResidualEnv, make_lqr_policy
 
@@ -74,7 +74,7 @@ def _save(model, vec_normalize, directory: Path, residual: dict | None = None) -
 
 
 def evaluate(policy, env_raw: dict, seeds: range) -> dict:
-    env = AltitudeHeadingHoldEnv(env_config_from_raw(env_raw))
+    env = make_env(env_config_from_raw(env_raw))
     ms = [run_episode(env, policy, s) for s in seeds]
     returns = np.array([m.episode_return for m in ms])
     return {

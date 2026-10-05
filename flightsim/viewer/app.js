@@ -23,7 +23,21 @@ const LIVE_LQR = "live_lqr";
 const isLive = (v) => v === LIVE || v === LIVE_LQR;
 const MANUAL = "manual"; // calm air
 const MANUAL_WIND = "manual_wind";
-const isManual = (v) => v === MANUAL || v === MANUAL_WIND;
+const MANUAL_APPROACH = "manual_approach";
+const isManual = (v) => v === MANUAL || v === MANUAL_WIND || v === MANUAL_APPROACH;
+const MANUAL_CONDITIONS = { [MANUAL]: "calm", [MANUAL_WIND]: "windy", [MANUAL_APPROACH]: "approach" };
+// Why an approach ended (envs/approach.py failure reasons), for the message line.
+const LANDING_FAILURES = {
+  undershoot: "touched down short of the runway",
+  off_runway: "left the runway",
+  hard_landing: "hard landing (over 600 ft/min at touchdown)",
+  nose_first: "touched down nose wheel first (flare: raise the nose so the main wheels touch first)",
+  wing_low: "touched down with too much bank",
+  tail_strike: "tail strike (nose too high)",
+  wingtip_strike: "wingtip struck the ground",
+  nose_strike: "propeller/nose struck the ground",
+  lost_approach: "too far off the glide path or centreline",
+};
 const INPUT_SEND_HZ = 30;
 const VIEW_HINT = "Drag to look around, scroll to zoom, space to pause, C for cockpit view, M for sound";
 const FLY_HINT = "Arrows pitch and roll; Z/X rudder; W/S throttle; F/V flaps; T/G trim; Shift full deflection. Gamepad: LB/RB flaps, D-pad trim";
@@ -74,6 +88,7 @@ function populateSources(logs = allLogs) {
   els.source.replaceChildren();
   els.source.add(new Option("Fly it yourself (calm air)", MANUAL));
   els.source.add(new Option("Fly it yourself (wind and turbulence)", MANUAL_WIND));
+  els.source.add(new Option("Fly an approach to runway 09 and land (calm)", MANUAL_APPROACH));
   els.source.add(new Option("Watch the PID autopilot", LIVE));
   els.source.add(new Option("Watch the LQR autopilot", LIVE_LQR));
   sourceFilter.hidden = logs.length < FILTER_FROM && !sourceFilter.value;
@@ -156,7 +171,9 @@ function handle(msg) {
       scene.reset();
       scene.setTargets(msg.targets);
       els.run.textContent = `${msg.source === "live" ? `${(msg.pilot ?? "pid").toUpperCase()} autopilot` : { manual: "You are flying", replay: "Replay" }[msg.source]} ${msg.run_id}`;
-      say(msg.source === "manual" ? "Fly to the magenta altitude and heading bugs." : "");
+      say(msg.source === "manual"
+        ? (els.source.value === MANUAL_APPROACH ? "Follow the glide path to runway 09 (ahead), flare and land main wheels first." : "Fly to the magenta altitude and heading bugs.")
+        : "");
       setPlaying(true);
       break;
     case "frame":
@@ -173,7 +190,7 @@ function handle(msg) {
         const off = pilot.offCentre();
         if (off.length) {
           const list = off.map((a) => `${a.axis} ${a.value >= 0 ? "+" : ""}${a.value.toFixed(2)}`).join(", ");
-          say(`Fly to the magenta altitude and heading bugs. Note: the gamepad reads ${list} at the start; if your hands are off the sticks, recalibrate in Stick settings.`);
+          say(`${els.message.textContent} Note: the gamepad reads ${list} at the start; if your hands are off the sticks, recalibrate in Stick settings.`);
         }
       }
       latest = msg.row;
@@ -184,8 +201,16 @@ function handle(msg) {
     case "end":
       setPlaying(false);
       sound.silence();
-      if (msg.reason === "finished") say("Flight finished. Press Play to go again.");
-      else if (msg.reason.startsWith("terminated:")) say(`The flight ended early: ${msg.reason.slice(11).replace("_", " ")} limit exceeded.`);
+      if (msg.reason === "landed") {
+        const td = msg.landing.touchdown;
+        const zone = td.in_zone ? "in the touchdown zone" : `${Math.round(td.along_m)} m past the threshold (zone 100-400 m)`;
+        say(`Landed ${zone}, ${Math.round(td.sink_mps * 196.85)} ft/min, ${Math.round(td.cas_mps * 1.94384)} kt, ` +
+          `${Math.abs(td.cross_m).toFixed(1)} m ${td.cross_m >= 0 ? "right" : "left"} of the centreline${msg.landing.bounces ? `, ${msg.landing.bounces} bounce(s)` : ""}. Press Play to go again.`);
+      } else if (msg.reason === "finished") say("Flight finished. Press Play to go again.");
+      else if (msg.reason.startsWith("terminated:")) {
+        const why = msg.reason.slice(11);
+        say(LANDING_FAILURES[why] ? `The flight ended: ${LANDING_FAILURES[why]}.` : `The flight ended early: ${why.replace("_", " ")} limit exceeded.`);
+      }
       break;
     case "saved":
       say(`Saved your flight as a demonstration: data/${msg.path}`);
@@ -202,7 +227,7 @@ function play() {
   const speed = Number(els.speed.value);
   const seed = Number(els.seed.value) || 0;
   const v = els.source.value;
-  if (isManual(v)) send({ type: "play", source: "manual", conditions: v === MANUAL ? "calm" : "windy", seed, record: els.record.checked });
+  if (isManual(v)) send({ type: "play", source: "manual", conditions: MANUAL_CONDITIONS[v], seed, record: els.record.checked });
   else if (isLive(v)) send({ type: "play", source: "live", autopilot: v === LIVE_LQR ? "lqr" : "pid", seed, speed });
   else {
     lastReplay = v;

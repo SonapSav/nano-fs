@@ -6,6 +6,7 @@ nothing about wall-clock time: each `step` advances exactly one fixed `dt_s`.
 """
 
 import hashlib
+from functools import cache
 import math
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -100,6 +101,34 @@ def aircraft_hash(aircraft: str) -> str:
     return h.hexdigest()
 
 
+@cache
+def _contact_points(aircraft: str) -> tuple[tuple[str, str, tuple[float, float, float]], ...]:
+    """(name, type, structural location in inches) of each ground contact point, in JSBSim's
+    unit order, from the aircraft file."""
+    root = Path(jsbsim.get_default_root_dir())
+    model = ET.parse(root / "aircraft" / aircraft / f"{aircraft}.xml").getroot()
+    points = []
+    for c in model.iter("contact"):
+        loc = c.find("location")
+        scale = {"IN": 1.0, "FT": 12.0, "M": 1 / 0.0254}[loc.get("unit", "IN").upper()]
+        points.append((c.get("name"), c.get("type"), tuple(float(loc.find(k).text) * scale for k in ("x", "y", "z"))))
+    return tuple(points)
+
+
+def point_height_in(point_in, cg_in, phi_rad: float, theta_rad: float, cg_agl_in: float) -> float:
+    """Height (inches) above the local ground plane of a structural point (x aft, y right,
+    z up, inches) for a CG at cg_agl_in and the given bank and pitch."""
+    bx, by, bz = cg_in[0] - point_in[0], point_in[1] - cg_in[1], cg_in[2] - point_in[2]  # body axes, z down
+    down = -math.sin(theta_rad) * bx + math.sin(phi_rad) * math.cos(theta_rad) * by + math.cos(phi_rad) * math.cos(theta_rad) * bz
+    return cg_agl_in - down
+
+
+def contact_names(aircraft: str) -> tuple[str, ...]:
+    """Names of the aircraft's ground contact points (wheels, skids, wingtips) in JSBSim's
+    unit order (c172p: NOSE, LEFT_MAIN, RIGHT_MAIN, NOSE_SKID, TAIL_SKID, LEFT_TIP, RIGHT_TIP)."""
+    return tuple(name for name, _, _ in _contact_points(aircraft))
+
+
 class JSBSimCore:
     def __init__(self, aircraft: str, dt_s: float):
         _silence_banner()
@@ -167,6 +196,19 @@ class JSBSimCore:
         except jsbsim.TrimFailureError as e:
             raise TrimError(str(e)) from e
         return self.controls()
+
+    def contacts(self) -> dict[str, bool]:
+        """Which contact points touch the ground now, by name (see contact_names). Wheels
+        (BOGEY) report JSBSim's weight-on-wheels; JSBSim exposes nothing for STRUCTURE
+        points (skids, wingtips), so those are found geometrically: the point's height
+        above the local ground plane from the CG height and attitude."""
+        f = self._fdm
+        cg = (f["inertia/cg-x-in"], f["inertia/cg-y-in"], f["inertia/cg-z-in"])
+        phi, theta, agl_in = f["attitude/phi-rad"], f["attitude/theta-rad"], f["position/h-agl-ft"] * 12.0
+        return {
+            name: bool(f[f"gear/unit[{i}]/WOW"]) if kind == "BOGEY" else point_height_in(point, cg, phi, theta, agl_in) <= 0.0
+            for i, (name, kind, point) in enumerate(_contact_points(self.aircraft))
+        }
 
     def set_ground_elevation_m(self, elevation_m: float) -> None:
         """Terrain height under the aircraft from the next step on. JSBSim treats the ground

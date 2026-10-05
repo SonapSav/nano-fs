@@ -155,9 +155,30 @@ owner before work can start.
 - [ ] **Tuned aircraft model** to close the step 2 deviations, as a separate copy of
   `c172p` (see "Aircraft model fidelity"). Decided 2026-10-04: deviations accepted for
   now, tuning is a possible later step.
-- [ ] **Takeoff, approach and landing scenarios.** **Needs decision:** which scenarios
-  matter beyond cruise (open since setup). Depends on the low-altitude wind items below,
-  and probably on flaps and brakes in the action space.
+- [ ] **Takeoff, approach and landing.** Decided 2026-10-05: approach and landing first.
+  - [x] **Approach and landing task** (2026-10-05): `flightsim/envs/approach.py`,
+    `configs/envs/approach_landing.yaml` (autopilot/RL: 4 controls, flaps held at 30 deg)
+    and `manual_approach.yaml` (adds flaps and pitch trim; "Fly an approach to runway 09"
+    in the viewer). Start 3 nm out on runway 09's extended centreline on the 3 deg glide
+    path at 65 KIAS, flaps 30 (POH 60-70 KIAS flaps down), trimmed in the descent;
+    randomized per seed (+/-60 m lateral, +/-15 m vertical, +/-3 kt, +/-3 deg). Ends
+    "landed" once all wheels have been down 2 s (no brakes yet, so no rollout), or on a
+    failure: undershoot, off_runway, hard_landing (> 600 fpm, project choice), nose_first,
+    wing_low (> 10 deg), tail/wingtip/nose strike, lost_approach, stall (alpha), bank.
+    Score: glide path, centreline and speed tracking while airborne, a landing bonus minus
+    touchdown costs (distance from the aim point 250 m past the threshold, sink rate,
+    centreline offset), a failure penalty. `make_env(cfg)` picks the task from the config.
+    The core gained `contacts()` (wheels from JSBSim; skids and wingtips geometrically,
+    as JSBSim exposes nothing for structural contacts). A simple scripted pilot lands
+    every tested seed main wheels first (~310-350 fpm, 49 KCAS) but floats long (460-540 m
+    past the threshold): the baseline autopilot (below) should do better.
+  - [ ] Landing cues in the viewer: PAPI, glide path line, approach lights, shadow,
+    touchdown zone markings; glide path / centreline / distance readouts. The runway is
+    hard to see from 3 nm today.
+  - [ ] Approach autopilot baseline (glide path, centreline, speed, flare) and batch
+    metrics for landings (touchdown point, sink rate, ...).
+  - [ ] Later: brakes and rollout, crosswind variant (needs the low-altitude wind model),
+    takeoff, circuit.
 
 ### Second aircraft
 

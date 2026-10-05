@@ -9,7 +9,8 @@ Server -> client messages (JSON):
    "sim_rate_hz", "frame_rate_hz", "duration_s" (null if unknown), "targets" (or null),
    "meta" (log metadata, replay only), "pilot" ("pid" | "lqr" | "human"; null for replay)}
   {"type": "frame", "row": {<log column>: value, ...}}
-  {"type": "end", "reason": "finished" | "stopped" | "terminated:<why>"}
+  {"type": "end", "reason": "finished" | "landed" | "stopped" | "terminated:<why>", "landing"?: {...}}
+      landing: the approach task's result (touchdown point, sink rate, ...), approach only
   {"type": "logs", "logs": [{"path", "group", "run_id", "aircraft", "rows", "duration_s", "seed",
                              "pilot", "mtime"}, ...]}
       group: "demos", "batch/<id>" or the top directory under the data dir.
@@ -20,7 +21,7 @@ Client -> server messages:
   {"type": "list"}
   {"type": "play", "source": "replay", "path": "<relative to the data dir>", "speed": 1.0, "start_s"?: 0.0}
   {"type": "play", "source": "live", "autopilot": "pid" | "lqr" (default "pid"), "seed": 0, "speed": 1.0}
-  {"type": "play", "source": "manual", "conditions": "calm" | "windy", "seed": 0, "record": true}
+  {"type": "play", "source": "manual", "conditions": "calm" | "windy" | "approach", "seed": 0, "record": true}
       (speed is capped at 1)
   {"type": "input", "elevator", "aileron", "rudder", "throttle", "flaps"?, "pitch_trim"?}
       Manual flights only. Stick and pedals in [-1, 1] relative to trim (elevator +

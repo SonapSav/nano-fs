@@ -76,6 +76,41 @@ class WindConfig:
     scale_length_m: float
 
 
+KT_TO_MPS = 1852.0 / 3600.0
+FPM_TO_MPS = 0.3048 / 60.0
+
+
+@dataclass(frozen=True)
+class ApproachConfig:
+    """Approach and landing task (envs/approach.py). Positions are metres north/east of
+    the airfield (the world origin); along-runway distances are measured from the
+    threshold in the landing direction."""
+
+    threshold_north_m: float
+    threshold_east_m: float
+    runway_heading_rad: float
+    runway_length_m: float
+    runway_width_m: float
+    glide_path_rad: float
+    aim_point_m: float  # past the threshold, where the glide path meets the runway
+    start_distance_m: float  # before the aim point, on the extended centreline
+    start_kias: float
+    start_flaps: float  # normalized, 1 = 30 deg
+    randomize_lateral_m: float
+    randomize_vertical_m: float
+    randomize_kias: float
+    randomize_heading_rad: float
+    target_cas_mps: float
+    touchdown_zone_m: tuple[float, float]  # past the threshold
+    max_sink_mps: float  # at touchdown; harder is a hard landing
+    max_bank_rad: float  # at touchdown
+    lost_vertical_m: float  # this far off the glide path ends the approach
+    lost_lateral_m: float
+    settle_s: float  # all wheels down this long: landed
+    max_ground_s: float  # after first contact, the episode ends anyway
+    reward: dict  # weights and scales, see configs/envs/approach_landing.yaml
+
+
 @dataclass(frozen=True)
 class EnvConfig:
     aircraft: str
@@ -96,6 +131,7 @@ class EnvConfig:
     config_hash: str
     config_json: str
     terrain: str = "flat"  # "flat" (ground at 0 m everywhere) or "procedural" (the viewer's terrain)
+    approach: ApproachConfig | None = None  # set: the approach and landing task
 
     @property
     def sim_steps_per_action(self) -> int:
@@ -167,8 +203,40 @@ def env_config_from_raw(raw: dict) -> EnvConfig:
         wind=_parse_wind(raw.get("wind")),
         actions=_parse_actions(raw.get("actions")),
         terrain=_parse_terrain(raw.get("terrain", "flat")),
+        approach=_parse_approach(raw.get("approach")),
         config_hash=config_hash(raw),
         config_json=canonical_json(raw),
+    )
+
+
+def _parse_approach(a: dict | None) -> ApproachConfig | None:
+    if not a:
+        return None
+    rw, st, rnd, lim = a["runway"], a["start"], a["randomize"], a["limits"]
+    return ApproachConfig(
+        threshold_north_m=float(rw["threshold_north_m"]),
+        threshold_east_m=float(rw["threshold_east_m"]),
+        runway_heading_rad=math.radians(rw["heading_deg"]),
+        runway_length_m=float(rw["length_m"]),
+        runway_width_m=float(rw["width_m"]),
+        glide_path_rad=math.radians(a["glide_path_deg"]),
+        aim_point_m=float(a["aim_point_m"]),
+        start_distance_m=float(st["distance_m"]),
+        start_kias=float(st["kias"]),
+        start_flaps=float(st["flaps"]),
+        randomize_lateral_m=float(rnd["lateral_m"]),
+        randomize_vertical_m=float(rnd["vertical_m"]),
+        randomize_kias=float(rnd["kias"]),
+        randomize_heading_rad=math.radians(rnd["heading_deg"]),
+        target_cas_mps=float(a["target_kias"]) * KT_TO_MPS,
+        touchdown_zone_m=(float(a["touchdown_zone_m"][0]), float(a["touchdown_zone_m"][1])),
+        max_sink_mps=float(lim["max_sink_fpm"]) * FPM_TO_MPS,
+        max_bank_rad=math.radians(lim["max_bank_deg"]),
+        lost_vertical_m=float(lim["lost_vertical_m"]),
+        lost_lateral_m=float(lim["lost_lateral_m"]),
+        settle_s=float(a["settle_s"]),
+        max_ground_s=float(a["max_ground_s"]),
+        reward=dict(a["reward"]),
     )
 
 

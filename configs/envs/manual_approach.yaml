@@ -1,0 +1,5 @@
+# Manual flight: the approach and landing task (calm air) with flaps and pitch trim added
+# to the pilot's controls. Used by the viewer's "Fly an approach" mode.
+base: approach_landing.yaml
+
+actions: [elevator, aileron, rudder, throttle, flaps, pitch_trim]

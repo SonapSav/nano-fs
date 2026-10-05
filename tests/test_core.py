@@ -70,3 +70,24 @@ def test_reset_keeps_the_mixture_command(cruise):
     rich.step(rich.trim())
     assert 0 < lean_flow < rich.engine().fuel_flow_kgps
     assert 600 < rich.engine().egt_k < 1200
+
+
+def test_contacts_parked_and_tail_strike_geometry(cruise):
+    """Parked: only the three wheels touch. The tail skid touches at a nose-up attitude
+    of roughly 10-15 deg from the parked CG height (a geometric check, as JSBSim reports
+    no contact for structural points)."""
+    import math
+
+    from flightsim.core import Controls
+    from flightsim.core.jsbsim_core import _contact_points, point_height_in
+
+    core = JSBSimCore("c172p", cruise.dt_s)
+    core.reset(InitialConditions(1.4, 0.0, 0.0))
+    for _ in range(240):
+        core.step(Controls(throttle=0.0))
+    assert [k for k, v in core.contacts().items() if v] == ["NOSE", "LEFT_MAIN", "RIGHT_MAIN"]
+    tail = next(p for name, _, p in _contact_points("c172p") if name == "TAIL_SKID")
+    f = core._fdm
+    cg, agl = (f["inertia/cg-x-in"], f["inertia/cg-y-in"], f["inertia/cg-z-in"]), f["position/h-agl-ft"] * 12
+    strike = next(d for d in range(0, 30) if point_height_in(tail, cg, 0.0, math.radians(d), agl) <= 0)
+    assert 8 <= strike <= 15

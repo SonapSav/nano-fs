@@ -15,7 +15,7 @@ import pyarrow.parquet as pq
 from flightsim.control.autopilot import AutopilotGains
 from flightsim.control.manual import HumanPolicy
 from flightsim.datalog import make_run_id, read_log, write_log
-from flightsim.envs import AltitudeHeadingHoldEnv, EnvConfig
+from flightsim.envs import EnvConfig, make_env
 from flightsim.envs.policies import PIDPolicy
 from flightsim.stream.protocol import frame_row
 
@@ -30,6 +30,7 @@ class Source:
     targets: dict | None
     meta: dict = field(default_factory=dict)
     end_reason: str = "finished"
+    landing: dict | None = None  # approach task: the landing result, sent with the end message
     pilot_name: str | None = None  # who flies a live flight: "pid", "lqr" or "human"
 
     def frames(self) -> Iterator[tuple[float, dict]]:
@@ -65,7 +66,7 @@ class LiveSource(Source):
     max_speed = math.inf
 
     def __init__(self, env_cfg: EnvConfig, gains: AutopilotGains | None, seed: int, policy=None, source: str = "live"):
-        self._env = AltitudeHeadingHoldEnv(env_cfg, record=True)
+        self._env = make_env(env_cfg, record=True)
         self._policy = policy or PIDPolicy(gains, env_cfg.control_rate_hz)
         self._seed = seed
         self._obs, self._info = self._env.reset(seed=seed)
@@ -87,6 +88,10 @@ class LiveSource(Source):
                 self._obs, _, terminated, truncated, self._info = env.step(action)
                 if terminated:
                     self.end_reason = f"terminated:{self._info['termination_reason']}"
+                if "landing" in self._info:
+                    self.landing = self._info["landing"]
+                    if truncated and self.landing["landed"]:
+                        self.end_reason = "landed"
                 done = terminated or truncated
                 states, controls = env.recorded
             while emitted < len(states) - 1:

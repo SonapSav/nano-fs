@@ -94,27 +94,14 @@ class AltitudeHeadingHoldEnv(gym.Env):
         self.episode_seed = seed
         # Draw order is part of reproducibility: initial condition, targets, then wind.
         # Adding draws only at the end keeps episodes of calm configs unchanged.
-        ic = InitialConditions(
-            alt_msl_m=cfg.nominal.alt_msl_m + rng.uniform(-cfg.randomize_alt_m, cfg.randomize_alt_m),
-            tas_mps=cfg.nominal.tas_mps + rng.uniform(-cfg.randomize_tas_mps, cfg.randomize_tas_mps),
-            heading_rad=wrap_angle_rad(
-                cfg.nominal.heading_rad + rng.uniform(-cfg.randomize_heading_rad, cfg.randomize_heading_rad)
-            )
-            % (2 * math.pi),
-            lat_rad=cfg.nominal.lat_rad,
-            lon_rad=cfg.nominal.lon_rad,
-        )
-        target_alt = ic.alt_msl_m + rng.uniform(-cfg.target_alt_offset_m, cfg.target_alt_offset_m)
-        target_heading = wrap_angle_rad(
-            ic.heading_rad + rng.uniform(-cfg.target_heading_offset_rad, cfg.target_heading_offset_rad)
-        ) % (2 * math.pi)
+        ic, target_alt, target_heading = self._draw_start(rng)
         self.wind = self._draw_wind(rng)
         ic = replace(ic, wind_north_mps=self.wind["north_mps"], wind_east_mps=self.wind["east_mps"])
 
         # A fresh core per episode: a reused JSBSim instance is not bit-reproducible
         # (state survives run_ic), and construction costs only a few milliseconds.
         self._core = JSBSimCore(cfg.aircraft, 1.0 / cfg.sim_rate_hz)
-        self._core.reset(ic, cfg.loading, ground_elevation_m=self._ground_m(ic.lat_rad, ic.lon_rad))
+        self._core.reset(ic, cfg.loading, self._start_controls(), ground_elevation_m=self._ground_m(ic.lat_rad, ic.lon_rad))
         self.trim = self._core.trim()
         self.trim_state = self._core.state()
         self.targets = Targets(alt_msl_m=target_alt, heading_rad=target_heading, tas_mps=self.trim_state.tas_mps)
@@ -131,7 +118,36 @@ class AltitudeHeadingHoldEnv(gym.Env):
         self.last_comfort_terms = {}
         self._decisions = 0
         self._states, self._controls = [self._state], []
+        self._on_reset()
         return self._observation(), self._info()
+
+    # Hooks for tasks built on this one (e.g. envs/approach.py).
+
+    def _draw_start(self, rng: np.random.Generator) -> tuple[InitialConditions, float, float]:
+        """Initial condition, target altitude and target heading for this episode."""
+        cfg = self.cfg
+        ic = InitialConditions(
+            alt_msl_m=cfg.nominal.alt_msl_m + rng.uniform(-cfg.randomize_alt_m, cfg.randomize_alt_m),
+            tas_mps=cfg.nominal.tas_mps + rng.uniform(-cfg.randomize_tas_mps, cfg.randomize_tas_mps),
+            heading_rad=wrap_angle_rad(
+                cfg.nominal.heading_rad + rng.uniform(-cfg.randomize_heading_rad, cfg.randomize_heading_rad)
+            )
+            % (2 * math.pi),
+            lat_rad=cfg.nominal.lat_rad,
+            lon_rad=cfg.nominal.lon_rad,
+        )
+        target_alt = ic.alt_msl_m + rng.uniform(-cfg.target_alt_offset_m, cfg.target_alt_offset_m)
+        target_heading = wrap_angle_rad(
+            ic.heading_rad + rng.uniform(-cfg.target_heading_offset_rad, cfg.target_heading_offset_rad)
+        ) % (2 * math.pi)
+        return ic, target_alt, target_heading
+
+    def _start_controls(self) -> Controls:
+        """Commands the episode starts from (and trims around), e.g. flaps for an approach."""
+        return Controls()
+
+    def _on_reset(self) -> None:
+        """Called at the end of reset, after trim."""
 
     def step(self, action):
         action = np.clip(np.asarray(action, dtype=np.float32), -1.0, 1.0)

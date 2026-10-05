@@ -10,7 +10,7 @@ import numpy as np
 
 from flightsim.control.autopilot import load_autopilot_gains
 from flightsim.datalog import make_run_id, write_log
-from flightsim.envs import AltitudeHeadingHoldEnv, load_env_config
+from flightsim.envs import load_env_config, make_env
 from flightsim.envs.evaluate import run_episode
 from flightsim.config import load_raw
 from flightsim.control.lqr import GainSchedule
@@ -43,7 +43,7 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_env_config(args.env_config)
-    env = AltitudeHeadingHoldEnv(cfg, record=bool(args.log_dir))
+    env = make_env(cfg, record=bool(args.log_dir))
     schedule = GainSchedule.cached(cfg.aircraft, cfg.loading, load_raw(args.lqr), 1.0 / cfg.control_rate_hz)
     policies = [
         TrimHoldPolicy(),

@@ -1,0 +1,59 @@
+# Approach and landing (envs/approach.py): from 3 nm out on runway 09's extended
+# centreline, follow the 3 deg glide path and centreline, and land main wheels first in
+# the touchdown zone. The episode ends once the aircraft has settled on the runway (no
+# brakes yet, so the rollout is not part of the task), or on a failure.
+#
+# Sources: approach speeds from the C172P POH (1985) Section 4, Normal Landing (60-70 KIAS
+# flaps down; touchdown main wheels first). Runway geometry from the viewer's scenery
+# (runway 09/27, 1000 x 30 m, centred on the airfield; 09 threshold 500 m west). Values
+# marked "project choice" are ours, not from a document.
+base: altitude_heading_hold.yaml   # aircraft, rates, loading; its cruise targets are unused here
+terrain: procedural
+episode_s: 300
+
+approach:
+  runway: {threshold_north_m: 0, threshold_east_m: -500, heading_deg: 90, length_m: 1000, width_m: 30}
+  glide_path_deg: 3
+  aim_point_m: 250              # project choice; where a PAPI would sit
+  start:
+    distance_m: 5556            # 3 nm before the aim point, ~955 ft above the runway
+    kias: 65                    # POH 60-70 KIAS with flaps down
+    flaps: 1.0                  # 30 deg: a stabilized approach in landing configuration
+  randomize:                    # uniform +/- per seed
+    lateral_m: 60
+    vertical_m: 15
+    kias: 3
+    heading_deg: 3
+  target_kias: 65
+  touchdown_zone_m: [100, 400]  # project choice: 150 m either side of the aim point
+  limits:
+    max_sink_fpm: 600           # project choice (10 ft/s, a common hard-landing inspection threshold)
+    max_bank_deg: 10            # project choice, at touchdown
+    lost_vertical_m: 120        # this far off the glide path or centreline: approach lost
+    lost_lateral_m: 400
+  settle_s: 2
+  max_ground_s: 10
+  reward:                       # per decision while airborne: -(sum of w * min((error/scale)^2, clip))
+    vertical_scale_m: 10
+    lateral_scale_m: 20
+    speed_scale_kt: 5
+    w_vertical: 1.0
+    w_lateral: 1.0
+    w_speed: 0.3
+    w_action_rate: 0.1
+    clip: 4.0
+    landing_bonus: 500          # a landing without a failure
+    failure_penalty: 2000
+    touchdown:                  # subtracted at a landing: w * (error/scale)^2, capped at w * clip
+      distance_scale_m: 100     # from the aim point
+      w_distance: 50
+      sink_scale_fpm: 300
+      w_sink: 50
+      lateral_scale_m: 5
+      w_lateral: 50
+
+reward:
+  termination_penalty: 0        # the approach task scores failures itself
+termination:
+  max_bank_deg: 45
+  min_alt_agl_m: -100           # unused: the approach task handles ground contact

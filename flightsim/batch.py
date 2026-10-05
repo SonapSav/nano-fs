@@ -28,7 +28,7 @@ from flightsim.control.autopilot import autopilot_gains_from_raw
 from flightsim.core import aircraft_hash
 from flightsim.datalog import SCHEMA_VERSION, make_run_id, write_log
 from flightsim.provenance import code_version
-from flightsim.envs import AltitudeHeadingHoldEnv
+from flightsim.envs import make_env
 from flightsim.envs.config import env_config_from_raw
 from flightsim.envs.evaluate import run_episode
 from flightsim.envs.policies import LQRPolicy, PIDPolicy, TrimHoldPolicy
@@ -87,7 +87,7 @@ _worker: dict = {}
 
 def _init_worker(env_raw: dict, policy: str, policy_raw: dict | None, logs_dir: str | None) -> None:
     cfg = env_config_from_raw(env_raw)
-    _worker["env"] = AltitudeHeadingHoldEnv(cfg, record=logs_dir is not None)
+    _worker["env"] = make_env(cfg, record=logs_dir is not None)
     _worker["policy"] = make_policy(policy, policy_raw, cfg)
     _worker["logs_dir"] = Path(logs_dir) if logs_dir else None
 
