@@ -10,7 +10,9 @@ Server -> client messages (JSON):
    "meta" (log metadata, replay only), "pilot" ("pid" | "lqr" | "human"; null for replay)}
   {"type": "frame", "row": {<log column>: value, ...}}
   {"type": "end", "reason": "finished" | "stopped" | "terminated:<why>"}
-  {"type": "logs", "logs": [{"path", "run_id", "aircraft", "rows"}, ...]}
+  {"type": "logs", "logs": [{"path", "group", "run_id", "aircraft", "rows", "duration_s", "seed",
+                             "pilot", "mtime"}, ...]}
+      group: "demos", "batch/<id>" or the top directory under the data dir.
   {"type": "error", "message"}
   {"type": "saved", "path"}   (a manual flight was written as a demonstration log)
 

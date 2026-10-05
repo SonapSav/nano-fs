@@ -6,6 +6,7 @@ import { FlightScene } from "./scene.js";
 import { drawAll, units } from "./gauges.js";
 import { HANDLED_KEYS, PilotInput } from "./input.js";
 import { AXES, DEFAULTS, centred, saveSettings } from "./stick.js";
+import { groupLogs } from "./flightlist.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -62,22 +63,31 @@ function send(msg) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
 }
 
-function populateSources(logs) {
+const FILTER_FROM = 20; // show the filter box once there are this many recorded flights
+const sourceFilter = $("source-filter");
+let allLogs = [];
+
+function populateSources(logs = allLogs) {
+  allLogs = logs;
   const current = els.source.value;
   els.source.replaceChildren();
   els.source.add(new Option("Fly it yourself (calm air)", MANUAL));
   els.source.add(new Option("Fly it yourself (wind and turbulence)", MANUAL_WIND));
   els.source.add(new Option("Watch the PID autopilot", LIVE));
   els.source.add(new Option("Watch the LQR autopilot", LIVE_LQR));
-  for (const [label, filter] of [["Your demonstrations", (l) => l.path.startsWith("demos/")], ["Recorded flights", (l) => !l.path.startsWith("demos/")]]) {
-    const items = logs.filter(filter);
-    if (!items.length) continue;
+  sourceFilter.hidden = logs.length < FILTER_FROM && !sourceFilter.value;
+  for (const g of groupLogs(logs, sourceFilter.value)) {
     const group = document.createElement("optgroup");
-    group.label = label;
-    for (const log of items) group.append(new Option(`${log.path} (${(log.rows / 120 / 60).toFixed(1)} min)`, log.path));
+    group.label = g.label;
+    for (const o of g.options) group.append(new Option(o.label, o.value));
+    if (g.more) {
+      const more = new Option(`… ${g.more} more: filter by seed to find them`, "");
+      more.disabled = true;
+      group.append(more);
+    }
     els.source.add(group);
   }
-  if ([...els.source.options].some((o) => o.value === current)) els.source.value = current;
+  if ([...els.source.options].some((o) => o.value === current && !o.disabled)) els.source.value = current;
   updateSourceOptions();
 }
 
@@ -274,6 +284,7 @@ els.pause.addEventListener("click", togglePause);
 els.stop.addEventListener("click", () => send({ type: "stop" }));
 els.speed.addEventListener("change", () => send({ type: "speed", value: Number(els.speed.value) }));
 els.source.addEventListener("change", updateSourceOptions);
+sourceFilter.addEventListener("input", () => populateSources());
 els.source.addEventListener("focus", () => send({ type: "list" }));
 // Chase or cockpit view (C key or the button); remembered in this browser.
 function setView(view) {

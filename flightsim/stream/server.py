@@ -93,7 +93,8 @@ class Session:
     async def handle(self, msg: dict) -> None:
         kind = msg.get("type")
         if kind == "list":
-            await self.ws.send(encode({"type": "logs", "logs": list_logs(self.cfg.data_dir)}))
+            logs = await asyncio.to_thread(list_logs, self.cfg.data_dir)  # can take a while for big batches
+            await self.ws.send(encode({"type": "logs", "logs": logs}))
         elif kind == "play":
             await self.stop()
             source = await asyncio.to_thread(self._open, msg)

@@ -47,6 +47,7 @@
   button:disabled { opacity: .45; cursor: default; }
   :focus-visible { outline: 2px solid var(--bug); outline-offset: 2px; }
   #source { max-width: 22em; }
+  #source-filter { width: 11em; }
   #progress { flex: 1 1 200px; display: flex; align-items: center; gap: 10px; min-width: 180px; }
   #progress-track { flex: 1; padding: 8px 0; touch-action: none; } /* padding: a larger target for seeking */
   #progress-bar { height: 4px; background: #5b6167; border-radius: 2px; overflow: hidden; }
@@ -129,6 +130,7 @@
   <div id="bar" role="toolbar" aria-label="Playback">
     <label for="source">Flight</label>
     <select id="source"></select>
+    <input id="source-filter" type="search" placeholder="Filter: seed or text" aria-label="Filter recorded flights" hidden>
     <label for="seed" id="seed-label">Seed</label>
     <input id="seed" type="number" min="0" step="1" value="0">
     <input id="record" type="checkbox" checked>

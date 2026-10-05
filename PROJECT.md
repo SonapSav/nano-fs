@@ -343,7 +343,11 @@ owner before work can start.
   play on the same connection streamed unpaced (saved demos checked, not affected).
 - [ ] Replays show no altitude/heading targets (the replay source sends none); the
   targets could be recomputed from the logged config and seed.
-- [ ] Filter or group batch logs in the flight list (thousands of entries with `--logs`).
+- [x] Flight list grouped and filterable (2026-10-05): "Your flights" (newest first, seed,
+  length, date), other recorded flights, one group per batch (by seed, pilot); 50 per
+  group, a filter box (seed number or text) appears from 20 recorded flights. Log
+  summaries come from Parquet footers (statistics for the duration), cached, and are
+  listed off the event loop: 2,000 batch logs take 0.66 s the first time.
 - [x] Font vendored (2026-10-05): Barlow Condensed 400/500/600, latin subset, SIL OFL 1.1
   (`flightsim/viewer/vendor/fonts/`). The viewer loads nothing from the internet (tested).
 - [ ] Airspeed indicator shows calibrated airspeed as indicated (no position or

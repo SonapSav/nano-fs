@@ -4,6 +4,7 @@ the server decimates and paces them. Sources never see wall-clock time."""
 import bisect
 import hashlib
 import math
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -124,20 +125,61 @@ class ManualSource(LiveSource):
         return write_log(path, self._env.episode_result(), self._env.provenance(run_id=run_id, pilot="human"))
 
 
+_log_info_cache: dict[tuple[str, int, int], dict | None] = {}
+
+
+def _log_info(path: Path) -> dict | None:
+    """Summary of one log file, or None if it is not a flightsim log. Cached by path,
+    modification time and size, so listing thousands of batch logs stays cheap."""
+    st = path.stat()
+    key = (str(path), st.st_mtime_ns, st.st_size)
+    if key not in _log_info_cache:
+        info = None
+        try:
+            md = pq.read_metadata(path)  # footer only: key-value metadata, row counts, statistics
+            meta = {k.decode(): v.decode() for k, v in (md.metadata or {}).items()}
+            if "flightsim.run_id" in meta:
+                seed = re.search(r"-s(\d+)", meta["flightsim.run_id"])
+                info = {
+                    "run_id": meta["flightsim.run_id"],
+                    "aircraft": meta.get("flightsim.aircraft"),
+                    "rows": md.num_rows,
+                    "duration_s": _last_time(path, md),
+                    "seed": int(seed.group(1)) if seed else None,
+                    "pilot": meta.get("flightsim.pilot"),
+                    "mtime": st.st_mtime,
+                }
+        except Exception:
+            info = None  # unreadable: not a flightsim log
+        _log_info_cache[key] = info
+    return _log_info_cache[key]
+
+
+def _last_time(path: Path, md) -> float:
+    """Largest t_s, from the column statistics when present (no data read)."""
+    if md.num_rows == 0:
+        return 0.0
+    col = md.schema.names.index("t_s")
+    stats = [md.row_group(i).column(col).statistics for i in range(md.num_row_groups)]
+    if all(s is not None and s.has_min_max for s in stats):
+        return float(max(s.max for s in stats))
+    return float(pq.read_table(path, columns=["t_s"]).column("t_s")[-1].as_py())
+
+
+def _log_group(rel: str) -> str:
+    """"demos", "batch/<id>" for batch episode logs, else the top directory ("" at the top)."""
+    parts = rel.split("/")
+    if parts[0] == "batch" and len(parts) > 2:
+        return f"batch/{parts[1]}"
+    return parts[0] if len(parts) > 1 else ""
+
+
 def list_logs(data_dir: Path) -> list[dict]:
     logs = []
     for path in sorted(data_dir.rglob("*.parquet")):
-        try:
-            meta = {k.decode(): v.decode() for k, v in (pq.read_schema(path).metadata or {}).items()}
-            n = pq.read_metadata(path).num_rows
-        except Exception:
-            continue  # not a flightsim log
-        if "flightsim.run_id" not in meta:
+        info = _log_info(path)
+        if info is None:
             continue
-        logs.append({
-            "path": path.relative_to(data_dir).as_posix(),
-            "run_id": meta["flightsim.run_id"],
-            "aircraft": meta.get("flightsim.aircraft"),
-            "rows": n,
-        })  # fmt: skip
+        rel = path.relative_to(data_dir).as_posix()
+        logs.append({"path": rel, "group": _log_group(rel), **info})
     return logs
