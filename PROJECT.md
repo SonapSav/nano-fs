@@ -336,10 +336,24 @@ owner before work can start.
   the owner's request, 2026-10-04). A white triangle at the bottom edge of the view points
   up at the aircraft's straight-ahead direction; it follows the nose when the head is
   turned and hides when the nose direction is out of view.
-- [ ] Scenery follow-ups: roads and rivers; forest edges are still per-vertex (jagged
-  up close); trees and houses only in the nearest 3 x 3 tiles; clouds; time of day;
-  a quality setting for weaker GPUs. Terrain height in the physics (needed for
-  takeoff/landing away from the 0 m airfield) is part of the takeoff/landing item.
+- [ ] **Scenery plan** (discussed 2026-10-05; do together with takeoff/landing, in this
+  order, about 2 days for 1-3):
+  1. **Terrain height in the physics.** Visual hills reach ~350 m but the physics ground
+     is flat at 0 m, so low flight passes through hills. Port the seeded height function
+     to Python (bit-identical to terrain.js, tested against it) and feed JSBSim's
+     terrain elevation each step; deterministic, so logs stay reproducible.
+     (Alternative considered: flatten everywhere you can fly low.) ~half a day + tests.
+  2. **Landing cues:** aircraft shadow on the ground (~1 h); PAPI lights for a 3 deg
+     glide path (~2 h; also a reference for an approach autopilot); windsock driven by
+     the wind model (~1 h); runway edge markings, touchdown zone, approach light bar
+     (~1-2 h).
+  3. **Close-up ground detail** (grass/soil texture below ~50 m, ~2-3 h) and a
+     **quality setting** low/medium/high (view distance, tree density, shadows; ~2 h;
+     the dev machine has integrated graphics).
+  Later, as a cruise/navigation package: clouds (~half a day, could follow the
+  conditions); roads, rivers, towns (~1 day); smooth forest edges and trees/houses
+  beyond the nearest 3 x 3 tiles (~half a day); time of day and visibility as config
+  (~2-3 h). Skip: real-world scenery (out of scope), water reflections, detailed buildings.
 
 - [x] Seeking in replays (2026-10-05): click or drag the progress bar (also while paused
   or after the replay ended), or arrow keys on it (5 s; up/down 30 s; Home/End).
