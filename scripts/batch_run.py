@@ -45,6 +45,7 @@ def main() -> None:
     parser.add_argument("--policy", choices=POLICIES, default="pid")
     parser.add_argument("--autopilot", default="configs/autopilot.yaml", help="PID gains (policy pid)")
     parser.add_argument("--lqr", default="configs/lqr.yaml", help="LQR config (policy lqr)")
+    parser.add_argument("--approach-autopilot", default="configs/approach_autopilot.yaml", help="approach autopilot gains (policy approach)")
     parser.add_argument("--rl-model", help="trained model directory, e.g. data/rl/<run_id>/best (policy rl)")
     parser.add_argument("--policy-set", action="append", default=[], metavar="KEY=VALUE",
                         help="override a policy config value; part of the batch id")
@@ -64,7 +65,7 @@ def main() -> None:
 
         policy_raw = model_identity(args.rl_model)
     else:
-        policy_path = {"pid": args.autopilot, "lqr": args.lqr}.get(args.policy)
+        policy_path = {"pid": args.autopilot, "lqr": args.lqr, "approach": args.approach_autopilot}.get(args.policy)
         policy_raw = load_raw(policy_path, parse_overrides(args.policy_set)) if policy_path else None
     seeds = parse_seeds(args.seeds)
 
@@ -87,6 +88,25 @@ def main() -> None:
         print(f"{g['group']:10s}{g['episodes']:9d}{g['terminated']:7d}{g['never_settled']:10d}   "
               f"{fmt(r[0]):>10s}{fmt(r[1]):>10s}{fmt(r[2]):>10s}   {fmt(a[0]):>5s}{fmt(a[1]):>6s}{fmt(a[2]):>6s}   "
               f"{fmt(h[0]):>5s}{fmt(h[1]):>6s}{fmt(h[2]):>6s}")
+    rows = table.to_pylist()
+    if rows and rows[0]["landed"] is not None:  # approach task: the landings
+        landed = [r for r in rows if r["landed"]]
+        fails: dict[str, int] = {}
+        for r in rows:
+            if not r["landed"]:
+                why = r["landing_failure"] or r["termination_reason"] or "timeout"
+                fails[why] = fails.get(why, 0) + 1
+        print(f"\nlandings: {len(landed)}/{len(rows)}" + (f"; failures {fails}" if fails else ""))
+        if landed:
+            def span(key, scale=1.0):
+                v = [r[key] * scale for r in landed]
+                return f"mean {sum(v) / len(v):.1f}, range {min(v):.1f} .. {max(v):.1f}"
+            print(f"  touchdown past threshold m: {span('td_along_m')}")
+            print(f"  centreline offset m:        {span('td_cross_m')}")
+            print(f"  sink rate ft/min:           {span('td_sink_mps', 196.850394)}")
+            print(f"  airspeed KCAS:              {span('td_cas_mps', 1.943844)}")
+            print(f"  pitch deg:                  {span('td_pitch_deg')}")
+            print(f"  bounces: {sum(r['bounces'] for r in landed)}")
 
 
 if __name__ == "__main__":

@@ -92,6 +92,7 @@ class ApproachLandingEnv(AltitudeHeadingHoldEnv):
         self._along = (math.cos(h), math.sin(h))  # (north, east) unit vectors
         self._right = (-math.sin(h), math.cos(h))
         self._tan_gp = math.tan(a.glide_path_rad)
+        self._geometry = approach_geometry(cfg)
 
     # --- Runway geometry -----------------------------------------------------------
 
@@ -279,6 +280,12 @@ class ApproachLandingEnv(AltitudeHeadingHoldEnv):
             truncated = True
         info["landing"] = self.landing_summary()
         return obs, reward, terminated, truncated, info
+
+    def _info(self) -> dict:
+        info = super()._info()
+        info["approach"] = self._geometry  # runway and glide path, for controllers and displays
+        info["touched_down"] = self.touchdown is not None
+        return info
 
     def landing_summary(self) -> dict:
         along, cross = self.runway_coords()

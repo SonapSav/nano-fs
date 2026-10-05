@@ -20,7 +20,9 @@ const readout = { alt: $("r-alt"), talt: $("r-talt"), hdg: $("r-hdg"), thdg: $("
 
 const LIVE = "live"; // PID autopilot
 const LIVE_LQR = "live_lqr";
-const isLive = (v) => v === LIVE || v === LIVE_LQR;
+const LIVE_APPROACH = "live_approach";
+const isLive = (v) => v === LIVE || v === LIVE_LQR || v === LIVE_APPROACH;
+const LIVE_AUTOPILOT = { [LIVE]: "pid", [LIVE_LQR]: "lqr", [LIVE_APPROACH]: "approach" };
 const MANUAL = "manual"; // calm air
 const MANUAL_WIND = "manual_wind";
 const MANUAL_APPROACH = "manual_approach";
@@ -91,6 +93,7 @@ function populateSources(logs = allLogs) {
   els.source.add(new Option("Fly an approach to runway 09 and land (calm)", MANUAL_APPROACH));
   els.source.add(new Option("Watch the PID autopilot", LIVE));
   els.source.add(new Option("Watch the LQR autopilot", LIVE_LQR));
+  els.source.add(new Option("Watch the approach autopilot land on runway 09", LIVE_APPROACH));
   sourceFilter.hidden = logs.length < FILTER_FROM && !sourceFilter.value;
   for (const g of groupLogs(logs, sourceFilter.value)) {
     const group = document.createElement("optgroup");
@@ -172,7 +175,8 @@ function handle(msg) {
       scene.setTargets(msg.targets);
       scene.setApproach(msg.approach ?? null);
       showApproachRows(Boolean(msg.approach));
-      els.run.textContent = `${msg.source === "live" ? `${(msg.pilot ?? "pid").toUpperCase()} autopilot` : { manual: "You are flying", replay: "Replay" }[msg.source]} ${msg.run_id}`;
+      const pilotName = { pid: "PID", lqr: "LQR", approach: "Approach" }[msg.pilot ?? "pid"] ?? msg.pilot;
+      els.run.textContent = `${msg.source === "live" ? `${pilotName} autopilot` : { manual: "You are flying", replay: "Replay" }[msg.source]} ${msg.run_id}`;
       say(msg.source === "manual"
         ? (els.source.value === MANUAL_APPROACH ? "Follow the glide path to runway 09 (ahead), flare and land main wheels first." : "Fly to the magenta altitude and heading bugs.")
         : "");
@@ -230,7 +234,7 @@ function play() {
   const seed = Number(els.seed.value) || 0;
   const v = els.source.value;
   if (isManual(v)) send({ type: "play", source: "manual", conditions: MANUAL_CONDITIONS[v], seed, record: els.record.checked });
-  else if (isLive(v)) send({ type: "play", source: "live", autopilot: v === LIVE_LQR ? "lqr" : "pid", seed, speed });
+  else if (isLive(v)) send({ type: "play", source: "live", autopilot: LIVE_AUTOPILOT[v], seed, speed });
   else {
     lastReplay = v;
     send({ type: "play", source: "replay", path: v, speed });

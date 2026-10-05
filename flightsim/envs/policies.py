@@ -5,6 +5,7 @@ from typing import Protocol
 
 import numpy as np
 
+from flightsim.control.approach import ApproachAutopilot, ApproachGains
 from flightsim.control.autopilot import Autopilot, AutopilotGains
 from flightsim.control.lqr import GainSchedule, LQRAutopilot
 from flightsim.envs.altitude_heading import controls_to_action
@@ -69,3 +70,22 @@ class LQRPolicy:
 
     def __call__(self, obs: np.ndarray, info: dict) -> np.ndarray:
         return controls_to_action(self._autopilot(info["state"]), self._names)
+
+
+class ApproachPolicy:
+    """The approach autopilot (glide path, centreline, flare) for the approach task."""
+
+    name = "approach"
+
+    def __init__(self, gains: ApproachGains, control_rate_hz: float):
+        self.gains = gains
+        self.dt_s = 1.0 / control_rate_hz
+
+    def reset(self, info: dict) -> None:
+        if "approach" not in info:
+            raise ValueError("the approach autopilot needs the approach task")
+        self._autopilot = ApproachAutopilot(self.gains, info["approach"], info["trim"], info["trim_state"], self.dt_s)
+        self._names = info["action_names"]
+
+    def __call__(self, obs: np.ndarray, info: dict) -> np.ndarray:
+        return controls_to_action(self._autopilot(info["state"], info["touched_down"]), self._names)

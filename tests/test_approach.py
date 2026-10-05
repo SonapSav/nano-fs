@@ -155,3 +155,51 @@ def test_approach_geometry_reaches_the_viewer_live_and_in_replays(tmp_path):
     assert ReplaySource(path).approach == live.approach
     cruise = load_env_config(ROOT / "configs" / "envs" / "altitude_heading_hold.yaml", {"episode_s": 1.0})
     assert LiveSource(cruise, None, 0, policy=live._policy).approach is None
+
+
+def test_approach_autopilot_lands_and_the_viewer_can_watch_it(tmp_path):
+    """The approach autopilot lands main wheels first in the touchdown zone, and the
+    stream server plays it (autopilot "approach") to a "landed" end."""
+    import asyncio
+    import json
+
+    from websockets.asyncio.client import connect
+
+    from flightsim.control.approach import load_approach_gains
+    from flightsim.control.autopilot import load_autopilot_gains
+    from flightsim.envs.evaluate import run_episode
+    from flightsim.envs.policies import ApproachPolicy
+    from flightsim.stream.server import ServerConfig, run_server
+
+    gains = load_approach_gains(ROOT / "configs" / "approach_autopilot.yaml")
+    cfg = load_env_config(CONFIG)
+    for seed in (0, 7):
+        env = make_env(cfg)
+        m = run_episode(env, ApproachPolicy(gains, cfg.control_rate_hz), seed)
+        summary = env.landing_summary()
+        td = summary["touchdown"]
+        assert summary["landed"] and m.termination_reason is None
+        assert 100 <= td["along_m"] <= 400 and td["sink_mps"] < 2.0 and td["pitch_deg"] > 3.0 and abs(td["cross_m"]) < 3
+
+    cruise = load_env_config(ROOT / "configs" / "envs" / "altitude_heading_hold.yaml", {"episode_s": 2.0})
+
+    async def main():
+        ready = asyncio.get_running_loop().create_future()
+        server_cfg = ServerConfig(tmp_path, cruise, load_autopilot_gains(ROOT / "configs" / "autopilot.yaml"), approach_env_cfg=cfg, approach_gains=gains)
+        server = asyncio.create_task(run_server(server_cfg, "127.0.0.1", 0, ready.set_result))
+        port = await ready
+        try:
+            async with connect(f"ws://127.0.0.1:{port}/ws", max_size=None) as ws:
+                await ws.send(json.dumps({"type": "play", "source": "live", "autopilot": "approach", "seed": 0, "speed": 64}))
+                hello = json.loads(await ws.recv())
+                while (msg := json.loads(await asyncio.wait_for(ws.recv(), 30)))["type"] != "end":
+                    pass
+                return hello, msg
+        finally:
+            server.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await server
+
+    hello, end = asyncio.run(main())
+    assert hello["pilot"] == "approach" and hello["approach"]["threshold_east_m"] == -500.0
+    assert end["reason"] == "landed" and end["landing"]["landed"]

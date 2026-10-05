@@ -1,0 +1,183 @@
+"""Approach autopilot: glide path and centreline tracking, autothrottle, flare and rollout.
+
+Phases (latched in order):
+  approach  vertical: descent-rate command = glide path rate (3 deg x ground speed) plus
+            a correction for being high or low -> pitch -> elevator; throttle holds the
+            target airspeed. Lateral: the ground track is steered onto the centreline
+            (track, not heading, so a crosswind gives a crab instead of a drift) -> bank
+            -> aileron.
+  flare     below `flare_height_m` (main wheels above the ground): throttle to idle, wings
+            level, descent rate commanded proportional to wheel height (an exponential
+            flare, sink = height / tau), so the aircraft rounds out and touches down main
+            wheels first.
+  rollout   after touchdown: nose held up gently, wings level, rudder (nosewheel) keeps
+            the centreline.
+
+All from the full `State` plus the runway geometry the approach task provides
+(`envs.approach.approach_geometry`). `dt_s` is the controller's update period.
+"""
+
+import math
+from dataclasses import dataclass, replace
+from pathlib import Path
+
+from flightsim.config import load_raw
+from flightsim.control.heading_hold import wrap_angle_rad
+from flightsim.core import Controls, State
+from flightsim.world.terrain import R_EARTH_M
+
+KT_TO_MPS = 1852.0 / 3600.0
+
+
+@dataclass(frozen=True)
+class ApproachGains:
+    target_kias: float
+    # Vertical
+    k_glide_path: float  # (m/s descent) per m above the glide path
+    max_vs_correction_mps: float
+    k_vs: float  # rad pitch per m/s descent-rate error
+    ki_vs: float  # rad pitch per (m/s * s)
+    max_pitch_offset_rad: float  # pitch command limit about the trimmed descent attitude
+    k_pitch: float  # elevator per rad pitch error
+    k_pitch_rate: float  # elevator per rad/s pitch rate
+    k_speed: float  # throttle per m/s airspeed error
+    ki_speed: float  # throttle per (m/s * s)
+    # Lateral
+    intercept_m: float  # the track aims at the centreline this far ahead
+    k_track: float  # rad bank per rad track error
+    max_bank_rad: float
+    k_bank: float  # aileron per rad bank error
+    k_roll_rate: float  # aileron per rad/s roll rate
+    # Flare and rollout
+    wheel_height_m: float  # main wheels below the CG (CG height when parked)
+    flare_height_m: float  # main wheels above the ground when the flare starts
+    flare_tau_s: float  # flare: sink rate = wheel height / tau ...
+    flare_min_sink_mps: float  # ... but at least this (touch down instead of floating)
+    flare_max_pitch_rad: float
+    k_flare: float  # rad pitch per m/s sink-rate error in the flare (pitch only ever rises)
+    flare_pitch_rate_rad_s: float  # the flare pitch command rises at most this fast
+    k_pitch_flare: float  # elevator per rad pitch error in the flare (slow, high-alpha flight)
+    ki_pitch_flare: float  # elevator per (rad * s)
+    throttle_cut_s: float  # throttle ramps to idle over this time in the flare
+    rollout_pitch_rad: float
+    k_steer: float  # rudder per rad heading error on the ground (negative: rudder + = nose left)
+
+
+def approach_gains_from_raw(raw: dict) -> ApproachGains:
+    v, lat, fl = raw["vertical"], raw["lateral"], raw["flare"]
+    rad = math.radians
+    return ApproachGains(
+        target_kias=float(raw["target_kias"]),
+        k_glide_path=float(v["k_glide_path"]),
+        max_vs_correction_mps=float(v["max_vs_correction_mps"]),
+        k_vs=float(v["k_vs"]),
+        ki_vs=float(v["ki_vs"]),
+        max_pitch_offset_rad=rad(v["max_pitch_offset_deg"]),
+        k_pitch=float(v["k_pitch"]),
+        k_pitch_rate=float(v["k_pitch_rate"]),
+        k_speed=float(v["k_speed"]),
+        ki_speed=float(v["ki_speed"]),
+        intercept_m=float(lat["intercept_m"]),
+        k_track=float(lat["k_track"]),
+        max_bank_rad=rad(lat["max_bank_deg"]),
+        k_bank=float(lat["k_bank"]),
+        k_roll_rate=float(lat["k_roll_rate"]),
+        wheel_height_m=float(fl["wheel_height_m"]),
+        flare_height_m=float(fl["flare_height_m"]),
+        flare_tau_s=float(fl["tau_s"]),
+        flare_min_sink_mps=float(fl["min_sink_mps"]),
+        flare_max_pitch_rad=rad(fl["max_pitch_deg"]),
+        k_flare=float(fl["k_flare"]),
+        flare_pitch_rate_rad_s=rad(fl["pitch_rate_deg_s"]),
+        k_pitch_flare=float(fl["k_pitch"]),
+        ki_pitch_flare=float(fl["ki_pitch"]),
+        throttle_cut_s=float(fl["throttle_cut_s"]),
+        rollout_pitch_rad=rad(fl["rollout_pitch_deg"]),
+        k_steer=float(fl["k_steer"]),
+    )
+
+
+def load_approach_gains(path: str | Path) -> ApproachGains:
+    return approach_gains_from_raw(load_raw(path))
+
+
+def clamp(v: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, v))
+
+
+class ApproachAutopilot:
+    def __init__(self, gains: ApproachGains, geometry: dict, trim: Controls, trim_state: State, dt_s: float):
+        self.g, self.geo, self.trim, self.dt_s = gains, geometry, trim, dt_s
+        self.theta_ref = trim_state.theta_rad  # trimmed descent attitude
+        h = math.radians(geometry["heading_deg"])
+        self._rwy = h
+        self._along = (math.cos(h), math.sin(h))
+        self._right = (-math.sin(h), math.cos(h))
+        self._tan_gp = math.tan(math.radians(geometry["glide_path_deg"]))
+        self.phase = "approach"
+        self._i_vs = 0.0
+        self._i_speed = 0.0
+        self._flare_s = 0.0
+        self._flare_theta = -math.inf  # the flare's pitch command never decreases
+        self._i_pitch = 0.0
+
+    def runway_coords(self, s: State) -> tuple[float, float]:
+        g = self.geo
+        dn, de = s.lat_rad * R_EARTH_M - g["threshold_north_m"], s.lon_rad * R_EARTH_M - g["threshold_east_m"]
+        return dn * self._along[0] + de * self._along[1], dn * self._right[0] + de * self._right[1]
+
+    def __call__(self, s: State, touched_down: bool) -> Controls:
+        g, trim, dt = self.g, self.trim, self.dt_s
+        along, cross = self.runway_coords(s)
+        wheels_m = s.alt_agl_m - g.wheel_height_m
+        if touched_down:
+            self.phase = "rollout"
+        elif self.phase == "approach" and wheels_m < g.flare_height_m:
+            self.phase = "flare"
+        climb = -s.v_down_mps
+        ground_speed = math.hypot(s.v_north_mps, s.v_east_mps)
+        track = math.atan2(s.v_east_mps, s.v_north_mps)
+        track_cmd = self._rwy + math.atan2(-cross, g.intercept_m)  # aim at the centreline ahead
+
+        if self.phase == "rollout":
+            # Nose gently up, wings level, nosewheel steering onto the centreline.
+            elevator = trim.elevator + g.k_pitch * (s.theta_rad - g.rollout_pitch_rad) + g.k_pitch_rate * s.q_radps
+            aileron = trim.aileron + g.k_bank * (0.0 - s.phi_rad) - g.k_roll_rate * s.p_radps
+            rudder = trim.rudder + g.k_steer * wrap_angle_rad(track_cmd - s.psi_rad)
+            return replace(trim, elevator=clamp(elevator, -1, 1), aileron=clamp(aileron, -1, 1), rudder=clamp(rudder, -1, 1), throttle=0.0)
+
+        # Lateral: track onto the centreline (wings level in the flare).
+        max_bank = g.max_bank_rad if self.phase == "approach" else math.radians(3.0)
+        bank_cmd = clamp(g.k_track * wrap_angle_rad(track_cmd - track), -max_bank, max_bank)
+        aileron = trim.aileron + g.k_bank * (bank_cmd - s.phi_rad) - g.k_roll_rate * s.p_radps
+
+        if self.phase == "approach":
+            gp_dev = s.alt_msl_m - (self.geo["elevation_m"] + max(0.0, self.geo["aim_point_m"] - along) * self._tan_gp)
+            vs_cmd = -ground_speed * self._tan_gp - clamp(g.k_glide_path * gp_dev, -g.max_vs_correction_mps, g.max_vs_correction_mps)
+            speed_err = g.target_kias * KT_TO_MPS - s.cas_mps
+            self._i_speed = clamp(self._i_speed + speed_err * dt, -0.3 / max(g.ki_speed, 1e-9), 0.3 / max(g.ki_speed, 1e-9))
+            throttle = clamp(trim.throttle + g.k_speed * speed_err + g.ki_speed * self._i_speed, 0.0, 1.0)
+            pitch_hi = self.theta_ref + g.max_pitch_offset_rad
+        else:  # flare: raise the nose as the descent rate exceeds the shrinking command
+            self._flare_s += dt
+            vs_cmd = -max(g.flare_min_sink_mps, max(0.0, wheels_m) / g.flare_tau_s)
+            throttle = clamp(trim.throttle * (1.0 - self._flare_s / g.throttle_cut_s), 0.0, 1.0)
+            if self._flare_theta == -math.inf:
+                self._flare_theta = s.theta_rad
+            target = clamp(s.theta_rad + g.k_flare * (vs_cmd - climb), -1.0, g.flare_max_pitch_rad)
+            step = g.flare_pitch_rate_rad_s * dt
+            self._flare_theta = max(self._flare_theta, min(target, self._flare_theta + step))
+        vs_err = vs_cmd - climb
+        if self.phase == "approach":
+            self._i_vs = clamp(self._i_vs + vs_err * dt, -0.1 / max(g.ki_vs, 1e-9), 0.1 / max(g.ki_vs, 1e-9))
+            theta_cmd = clamp(self.theta_ref + g.k_vs * vs_err + g.ki_vs * self._i_vs, self.theta_ref - g.max_pitch_offset_rad, pitch_hi)
+        else:
+            theta_cmd = self._flare_theta
+        # Elevator + is nose down: pitch above the command pushes.
+        if self.phase == "approach":
+            elevator = trim.elevator + g.k_pitch * (s.theta_rad - theta_cmd) + g.k_pitch_rate * s.q_radps
+        else:
+            err = s.theta_rad - theta_cmd
+            self._i_pitch = clamp(self._i_pitch + err * dt, -0.5 / max(g.ki_pitch_flare, 1e-9), 0.5 / max(g.ki_pitch_flare, 1e-9))
+            elevator = trim.elevator + g.k_pitch_flare * err + g.ki_pitch_flare * self._i_pitch + g.k_pitch_rate * s.q_radps
+        return replace(trim, elevator=clamp(elevator, -1, 1), aileron=clamp(aileron, -1, 1), throttle=throttle)

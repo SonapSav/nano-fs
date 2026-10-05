@@ -33,14 +33,14 @@ from flightsim.envs.config import env_config_from_raw
 from flightsim.envs.evaluate import run_episode
 from flightsim.envs.policies import LQRPolicy, PIDPolicy, TrimHoldPolicy
 
-POLICIES = ("pid", "lqr", "rl", "trim_hold")
-BATCH_FORMAT = 4  # 2: lqr policy, envelope metrics; 3: comfort_cost; 4: code_version in manifest
+POLICIES = ("pid", "lqr", "rl", "approach", "trim_hold")
+BATCH_FORMAT = 5  # 2: lqr policy, envelope metrics; 3: comfort_cost; 4: code_version in manifest; 5: landing columns
 
 
 def make_manifest(env_raw: dict, policy: str, policy_raw: dict | None, seeds: list[int], logs: bool) -> dict:
     if policy not in POLICIES:
         raise ValueError(f"unknown policy {policy!r}; choose from {POLICIES}")
-    if policy in ("pid", "lqr", "rl") and policy_raw is None:
+    if policy in ("pid", "lqr", "rl", "approach") and policy_raw is None:
         raise ValueError(f"the {policy} policy needs its config")
     env_cfg = env_config_from_raw(env_raw)
     manifest = {
@@ -70,6 +70,11 @@ def make_policy(policy: str, policy_raw: dict | None, cfg):
         return PIDPolicy(autopilot_gains_from_raw(policy_raw), cfg.control_rate_hz)
     if policy == "lqr":
         return LQRPolicy.designed(cfg, policy_raw)
+    if policy == "approach":
+        from flightsim.control.approach import approach_gains_from_raw
+        from flightsim.envs.policies import ApproachPolicy
+
+        return ApproachPolicy(approach_gains_from_raw(policy_raw), cfg.control_rate_hz)
     if policy == "rl":
         from flightsim.rl.policy import load_policy, model_identity  # torch only when needed
 
@@ -101,7 +106,24 @@ def _run_seed(seed: int) -> dict:
     row = {"seed": seed, "run_id": run_id}
     row.update(env.conditions())
     row.update({k: v for k, v in asdict(metrics).items() if k not in ("seed", "policy")})
+    row.update(_landing_columns(env))
     return row
+
+
+LANDING_COLUMNS = ("landed", "landing_failure", "td_along_m", "td_cross_m", "td_sink_mps", "td_cas_mps", "td_pitch_deg", "td_bank_deg", "bounces")
+
+
+def _landing_columns(env) -> dict:
+    """The approach task's touchdown, or nulls for other tasks."""
+    if not hasattr(env, "landing_summary"):
+        return dict.fromkeys(LANDING_COLUMNS)
+    s = env.landing_summary()
+    td = s["touchdown"] or {}
+    return {
+        "landed": s["landed"], "landing_failure": s["failure"], "td_along_m": td.get("along_m"), "td_cross_m": td.get("cross_m"),
+        "td_sink_mps": td.get("sink_mps"), "td_cas_mps": td.get("cas_mps"), "td_pitch_deg": td.get("pitch_deg"),
+        "td_bank_deg": td.get("bank_deg"), "bounces": s["bounces"],
+    }  # fmt: skip
 
 
 # --- Driver -------------------------------------------------------------------------
@@ -119,6 +141,10 @@ SUMMARY_SCHEMA = pa.schema(
         ("alt_settle_s", pa.float64()), ("heading_settle_s", pa.float64()), ("action_rate", pa.float64()),
         ("max_bank_deg", pa.float64()), ("min_load_factor", pa.float64()), ("max_load_factor", pa.float64()),
         ("max_abs_climb_mps", pa.float64()), ("max_tas_dev_mps", pa.float64()), ("comfort_cost", pa.float64()),
+        # Approach task only (null otherwise): touchdown judged as in envs/approach.py.
+        ("landed", pa.bool_()), ("landing_failure", pa.string()), ("td_along_m", pa.float64()), ("td_cross_m", pa.float64()),
+        ("td_sink_mps", pa.float64()), ("td_cas_mps", pa.float64()), ("td_pitch_deg", pa.float64()), ("td_bank_deg", pa.float64()),
+        ("bounces", pa.int64()),
     ]
 )  # fmt: skip
 

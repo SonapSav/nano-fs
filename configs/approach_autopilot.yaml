@@ -1,0 +1,32 @@
+# Approach autopilot gains (flightsim/control/approach.py) for the approach and landing
+# task. Tuned on c172p, flaps 30, 65 KIAS, 20 Hz, on tuning seeds 1000-1099.
+target_kias: 65              # POH 60-70 KIAS with flaps down
+vertical:
+  k_glide_path: 0.15         # m/s more descent per m above the glide path
+  max_vs_correction_mps: 1.5
+  k_vs: 0.05                 # rad pitch per m/s descent-rate error
+  ki_vs: 0.01
+  max_pitch_offset_deg: 8
+  k_pitch: 3.0               # elevator per rad pitch error
+  k_pitch_rate: 0.8          # elevator per rad/s pitch rate
+  k_speed: 0.08              # throttle per m/s airspeed error
+  ki_speed: 0.02
+lateral:
+  intercept_m: 300           # aim the track at the centreline this far ahead
+  k_track: 1.5               # rad bank per rad track error
+  max_bank_deg: 15
+  k_bank: 1.5
+  k_roll_rate: 0.3
+flare:
+  wheel_height_m: 1.33       # c172p CG height above the ground when parked (4.36 ft)
+  flare_height_m: 6.0        # ~20 ft wheel height
+  tau_s: 2.0                 # sink command = wheel height / tau: the round-out starts near 2 x 1.8 = 3.6 m
+  min_sink_mps: 0.4          # ~80 ft/min: touch down instead of floating
+  max_pitch_deg: 9
+  k_flare: 0.3               # rad pitch per m/s too much sink in the flare
+  pitch_rate_deg_s: 3.0      # the nose comes up smoothly (a quick pull balloons)
+  k_pitch: 6.0               # elevator per rad pitch error in the flare
+  ki_pitch: 3.0
+  throttle_cut_s: 0.5        # close the throttle at the start of the flare
+  rollout_pitch_deg: 2
+  k_steer: -1.0              # rudder per rad heading error (rudder + = nose left)

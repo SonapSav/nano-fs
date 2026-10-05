@@ -183,8 +183,21 @@ owner before work can start.
     threshold" (nm), also in replays (approach geometry from the log's config). Fixed on
     the way: the fallback ground plane (one 200 km quad) covered the runway at some
     low camera positions (depth imprecision); it is now split into ~3 km cells.
-  - [ ] Approach autopilot baseline (glide path, centreline, speed, flare) and batch
-    metrics for landings (touchdown point, sink rate, ...).
+  - [x] Approach autopilot (2026-10-05): `flightsim/control/approach.py`,
+    `configs/approach_autopilot.yaml`, batch policy `approach`, "Watch the approach
+    autopilot land" in the viewer. Approach: descent-rate command (glide path rate +
+    correction) -> pitch, autothrottle at 65 KIAS, ground track steered onto the
+    centreline (crab-ready). Flare from ~3.5 m wheel height: throttle closed in 0.5 s,
+    sink command = wheel height / 2 s, pitch command only rises (at most 3 deg/s, so no
+    balloon), stronger pitch loop with integral. Rollout: nose 2 deg up, nosewheel
+    steering. Tuned on seeds 1000-1099. Seeds 0-999 (batch `see data/batch`): 1000/1000 landed,
+    touchdown 360-376 m past the threshold (zone 100-400; floats ~120 m past the aim
+    point), 0.2-2.2 m off the centreline, 39-58 ft/min, 53-54 KCAS, pitch 4.2-4.9 deg,
+    no bounces; glide path RMS 1.3 m; return mean -20 (median +27). Slower approaches
+    (60-63 kt) float less but lose more to the task's 65 kt speed term. Batch summaries
+    gained landing columns (format 5). Possible next: land nearer the aim point (aim
+    earlier / flare later), a gain-scheduled or LQR approach, seeds 3000-3999 for final
+    numbers.
   - [ ] Later: brakes and rollout, crosswind variant (needs the low-altitude wind model),
     takeoff, circuit.
 

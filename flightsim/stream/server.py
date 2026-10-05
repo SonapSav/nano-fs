@@ -20,7 +20,8 @@ from websockets.http11 import Request, Response
 
 from flightsim.control.autopilot import AutopilotGains
 from flightsim.envs import EnvConfig
-from flightsim.envs.policies import LQRPolicy, PIDPolicy
+from flightsim.control.approach import ApproachGains
+from flightsim.envs.policies import ApproachPolicy, LQRPolicy, PIDPolicy
 from flightsim.stream.protocol import PROTOCOL_VERSION, encode
 from flightsim.stream.sources import LiveSource, ManualSource, ReplaySource, Source, list_logs
 
@@ -37,13 +38,18 @@ class ServerConfig:
     # Manual-flight tasks by conditions name ("calm", "windy"); default: the autopilot task.
     manual_env_cfgs: dict[str, EnvConfig] | None = None
     lqr_raw: dict | None = None  # LQR config; None = only the PID can be watched
+    approach_env_cfg: EnvConfig | None = None  # approach task flown by the approach autopilot
+    approach_gains: ApproachGains | None = None
 
     def autopilot(self, name: str):
         if name == "pid":
             return PIDPolicy(self.gains, self.env_cfg.control_rate_hz)
         if name == "lqr" and self.lqr_raw is not None:
             return LQRPolicy.designed(self.env_cfg, self.lqr_raw)
-        raise ValueError(f"unknown autopilot {name!r}; choose from {['pid', 'lqr'] if self.lqr_raw else ['pid']}")
+        if name == "approach" and self.approach_gains is not None:
+            return ApproachPolicy(self.approach_gains, self.approach_env_cfg.control_rate_hz)
+        names = ["pid"] + (["lqr"] if self.lqr_raw else []) + (["approach"] if self.approach_gains else [])
+        raise ValueError(f"unknown autopilot {name!r}; choose from {names}")
 
 
 def _static_response(path: str) -> Response:
@@ -80,8 +86,10 @@ class Session:
                 source.seek(float(msg["start_s"]))
             return source
         if msg.get("source") == "live":
-            policy = self.cfg.autopilot(str(msg.get("autopilot", "pid")))
-            return LiveSource(self.cfg.env_cfg, None, int(msg.get("seed", 0)), policy=policy)
+            name = str(msg.get("autopilot", "pid"))
+            policy = self.cfg.autopilot(name)
+            env_cfg = self.cfg.approach_env_cfg if name == "approach" else self.cfg.env_cfg
+            return LiveSource(env_cfg, None, int(msg.get("seed", 0)), policy=policy)
         if msg.get("source") == "manual":
             tasks = self.cfg.manual_env_cfgs or {"calm": self.cfg.env_cfg}
             conditions = str(msg.get("conditions", next(iter(tasks))))
