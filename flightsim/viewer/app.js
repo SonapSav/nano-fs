@@ -60,7 +60,7 @@ const LANDING_FAILURES = {
 };
 const INPUT_SEND_HZ = 30;
 const VIEW_HINT = "Drag to look around, scroll to zoom, space to pause, C for cockpit view, M for sound";
-const FLY_HINT = "Arrows pitch and roll; Z/X rudder and nosewheel; W/S throttle; F/V flaps; T/G trim; B brakes; Shift full deflection. Gamepad: LB/RB flaps, D-pad trim, B brakes";
+const FLY_HINT = "Arrows pitch and roll; Z/X rudder and nosewheel; W/S throttle; F/V flaps; T/G trim; B brakes; hold a key to build it up, Shift for full deflection. Gamepad: LB/RB flaps, D-pad trim, B brakes";
 
 const scene = new FlightScene($("view"));
 const pilot = new PilotInput();

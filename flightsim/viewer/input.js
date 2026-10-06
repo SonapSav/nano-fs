@@ -6,7 +6,12 @@
 // Signs follow the simulator: elevator + = push (nose down); rudder + = nose LEFT,
 // so the right pedal sends a negative rudder command.
 
-const KEY_DEFLECTION = 0.2; // gentle; with Shift: full deflection
+// Arrow keys and Z/X build up while held: a tap gives a gentle KEY_START deflection, held
+// keys grow to KEY_MAX over KEY_BUILD_S (enough authority at approach speeds, where 20%
+// rolls right at only ~4 deg/s); with Shift: full deflection at once.
+export const KEY_START = 0.2;
+export const KEY_MAX = 0.6;
+export const KEY_BUILD_S = 1.0;
 const KEY_TIME_CONSTANT_S = 0.15; // keys ease in and out instead of jumping
 const THROTTLE_RATE_PER_S = 0.4;
 
@@ -37,6 +42,7 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 export class PilotInput {
   constructor() {
     this.down = new Set();
+    this.heldS = {}; // seconds each control key has been held
     this.shift = false;
     this.value = { elevator: 0, aileron: 0, rudder: 0, throttle: 0, flaps: 0, pitch_trim: 0, brake: 0 };
     this.gamepadName = null;
@@ -47,6 +53,7 @@ export class PilotInput {
   reset(throttle, flaps = 0, pitchTrim = 0) {
     this.value = { elevator: 0, aileron: 0, rudder: 0, throttle, flaps, pitch_trim: pitchTrim, brake: 0 };
     this.down.clear();
+    this.heldS = {};
     this._padPrev = {};
     this._leverStart = null; // a throttle lever takes over only once it is moved
     this._leverMoved = false;
@@ -65,11 +72,13 @@ export class PilotInput {
 
   keyup(e) {
     this.down.delete(e.code);
+    delete this.heldS[e.code];
     this.shift = e.shiftKey;
   }
 
   releaseAll() {
     this.down.clear();
+    this.heldS = {};
   }
 
   // Read the gamepad (its name and raw axes) without changing the control input; the
@@ -101,10 +110,14 @@ export class PilotInput {
   update(dt) {
     const pad = this.readPad();
     const k = 1 - Math.exp(-dt / KEY_TIME_CONSTANT_S);
-    const full = this.shift ? 1 : KEY_DEFLECTION;
     for (const [axis, keys] of Object.entries(AXIS_KEYS)) {
       let target = 0;
-      for (const [code, sign] of Object.entries(keys)) if (this.down.has(code)) target += sign * full;
+      for (const [code, sign] of Object.entries(keys)) {
+        if (!this.down.has(code)) continue;
+        const held = (this.heldS[code] = (this.heldS[code] ?? 0) + dt);
+        const deflection = this.shift ? 1 : KEY_START + (KEY_MAX - KEY_START) * Math.min(1, held / KEY_BUILD_S);
+        target += sign * deflection;
+      }
       this.value[axis] += (clamp(target, -1, 1) - this.value[axis]) * k;
     }
     let throttleDir = 0;
