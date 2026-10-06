@@ -279,7 +279,7 @@ owner before work can start.
       ((height lost / flare height)^1.5) from the flare-start pitch to 5 deg at the ground.
     - Crosswind seeds 0-999 (batch `2c86ad1f23c2`): 948/1000 landed and stopped (was
       919); failures nose first 18 (was 59), side load 18, hard landing 10 (was 3),
-      stall 6. Calm: (evaluation running).
+      stall 6. Calm 1000/1000 (batch `3a2020e405e0`; touchdown 359-371 m, 82-86 fpm).
     - Viewer: gusts in the wind readout (METAR style, e.g. 13G21 kt).
   - [x] **Circuit** (2026-10-06): takeoff, left-hand traffic pattern and landing in one
     episode.
@@ -296,7 +296,11 @@ owner before work can start.
       45 deg (flaps 20), final (flaps 30), then the approach autopilot once established.
       Pattern rules from AC 90-66B and the AFH ch. 8 (docs/REFERENCES.md).
     - Tuning seeds: calm 20/20, crosswind 92/100 (all failures in the landing, as in the
-      approach task). Seeds 0-999: (evaluation running).
+      approach task). Seeds 0-999 (commit `28e0a8a`): calm 1000/1000 landed and stopped
+      (batch `30790e84fbc9`; ~5.4 min each, touchdown 362 m; the calm circuits are nearly
+      identical, only the start offset varies). Crosswind 955/1000 (batch
+      `9d179cb649bd`): takeoff 999 (one stall in the climb-out), no pattern failures,
+      landing failures side load 17, nose first 13, hard landing 8, stall 6.
     - Viewer: "Fly a circuit" (calm, crosswind) and "Watch the circuit autopilot"; the
       glide path and threshold readouts show only on final.
     - Possible next: show the pattern legs in the viewer; RL on the circuit would need
