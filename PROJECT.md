@@ -270,7 +270,37 @@ owner before work can start.
       the takeoff autopilot"; readouts climb speed, centreline, runway left, wind.
     - Found on the way (see "Aircraft model fidelity"): POH takeoff distance and climb
       rate checks added; the model climbs ~24% faster than the POH, over the redline.
-  - [ ] Later: circuit (takeoff, pattern, approach, landing in one episode).
+  - [x] **Gust allowance and flare attitude floor** (2026-10-06, commit `afbabcb`):
+    - The approach and takeoff tasks give a wind report (mean wind at 20 ft, gust factor =
+      3 sigma of the along-wind turbulence at 20 ft, project choice; not the gusts). The
+      approach autopilot adds half the gust factor (FAA-H-8083-3C ch. 9), at most 10 kt.
+    - Alone, the allowance made nose-first touchdowns worse (12 -> 28 of 200 tuning
+      seeds): a fast flare is flatter. The flare now has an attitude floor rising late
+      ((height lost / flare height)^1.5) from the flare-start pitch to 5 deg at the ground.
+    - Crosswind seeds 0-999 (batch `2c86ad1f23c2`): 948/1000 landed and stopped (was
+      919); failures nose first 18 (was 59), side load 18, hard landing 10 (was 3),
+      stall 6. Calm: (evaluation running).
+    - Viewer: gusts in the wind readout (METAR style, e.g. 13G21 kt).
+  - [x] **Circuit** (2026-10-06): takeoff, left-hand traffic pattern and landing in one
+    episode.
+    - `flightsim/envs/circuit.py` (`configs/envs/circuit.yaml`, `circuit_crosswind.yaml`):
+      starts like the takeoff task, lands like the approach task (its section: limits,
+      rollout, wind). A landing counts after climbing 700 ft; ground contact before that
+      is `sank_back`; `lost` beyond 6 km. Reward: action rate and comfort only (the
+      pattern is the pilot's choice), plus the landing bonus and touchdown cost. The info
+      carries a landing-configuration reference trim for controllers.
+    - Circuit autopilot (`flightsim/control/circuit.py`, `configs/circuit_autopilot.yaml`):
+      the takeoff autopilot, then crosswind past the runway end within 300 ft of pattern
+      altitude, downwind 1 nm out at 1000 ft and 80 KIAS, descent from abeam the threshold
+      on a 3 deg profile measured along the remaining pattern (flaps 10, 70 KIAS), base at
+      45 deg (flaps 20), final (flaps 30), then the approach autopilot once established.
+      Pattern rules from AC 90-66B and the AFH ch. 8 (docs/REFERENCES.md).
+    - Tuning seeds: calm 20/20, crosswind 92/100 (all failures in the landing, as in the
+      approach task). Seeds 0-999: (evaluation running).
+    - Viewer: "Fly a circuit" (calm, crosswind) and "Watch the circuit autopilot"; the
+      glide path and threshold readouts show only on final.
+    - Possible next: show the pattern legs in the viewer; RL on the circuit would need
+      a tracking reward (the task has none).
 
 ### Second aircraft
 

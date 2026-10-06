@@ -139,6 +139,7 @@ class EnvConfig:
     terrain: str = "flat"  # "flat" (ground at 0 m everywhere) or "procedural" (the viewer's terrain)
     approach: ApproachConfig | None = None  # set: the approach and landing task
     takeoff: "TakeoffConfig | None" = None  # set: the takeoff and climb-out task
+    circuit: "CircuitConfig | None" = None  # set (with `approach`): takeoff, traffic pattern, landing
 
     @property
     def sim_steps_per_action(self) -> int:
@@ -212,6 +213,7 @@ def env_config_from_raw(raw: dict) -> EnvConfig:
         terrain=_parse_terrain(raw.get("terrain", "flat")),
         approach=_parse_approach(raw.get("approach")),
         takeoff=_parse_takeoff(raw.get("takeoff")),
+        circuit=_parse_circuit(raw.get("circuit")),
         config_hash=config_hash(raw),
         config_json=canonical_json(raw),
     )
@@ -237,6 +239,35 @@ class TakeoffConfig:
     max_ground_s: float  # still on the ground this long after the start: no_liftoff
     reward: dict  # weights and scales, see configs/envs/takeoff.yaml
     wind: dict | None = None  # low-altitude wind, as in the approach task
+
+
+@dataclass(frozen=True)
+class CircuitConfig:
+    """Circuit task (envs/circuit.py): start as in the takeoff task, then a landing judged
+    by the `approach` section (runway, glide path, limits, rollout, wind)."""
+
+    start_along_m: float
+    start_flaps: float
+    randomize_lateral_m: float
+    randomize_heading_rad: float
+    min_height_m: float  # climbed this high before a landing counts (lower contact: sank_back)
+    lost_distance_m: float  # this far from the runway midpoint: failure
+    max_ground_s: float  # still on the ground this long after the start: no_liftoff
+
+
+def _parse_circuit(c: dict | None) -> CircuitConfig | None:
+    if not c:
+        return None
+    st, rnd, lim = c["start"], c["randomize"], c["limits"]
+    return CircuitConfig(
+        start_along_m=float(st["along_m"]),
+        start_flaps=float(st["flaps"]),
+        randomize_lateral_m=float(rnd["lateral_m"]),
+        randomize_heading_rad=math.radians(rnd["heading_deg"]),
+        min_height_m=float(c["min_height_ft"]) * 0.3048,
+        lost_distance_m=float(lim["lost_distance_m"]),
+        max_ground_s=float(lim["max_ground_s"]),
+    )
 
 
 def _parse_takeoff(t: dict | None) -> TakeoffConfig | None:

@@ -33,14 +33,14 @@ from flightsim.envs.config import env_config_from_raw
 from flightsim.envs.evaluate import run_episode
 from flightsim.envs.policies import LQRPolicy, PIDPolicy, TrimHoldPolicy
 
-POLICIES = ("pid", "lqr", "rl", "approach", "takeoff", "trim_hold")
+POLICIES = ("pid", "lqr", "rl", "approach", "takeoff", "circuit", "trim_hold")
 BATCH_FORMAT = 7  # 2: lqr policy, envelope metrics; 3: comfort_cost; 4: code_version in manifest; 5: landing columns; 6: drift, rollout; 7: takeoff columns
 
 
 def make_manifest(env_raw: dict, policy: str, policy_raw: dict | None, seeds: list[int], logs: bool) -> dict:
     if policy not in POLICIES:
         raise ValueError(f"unknown policy {policy!r}; choose from {POLICIES}")
-    if policy in ("pid", "lqr", "rl", "approach", "takeoff") and policy_raw is None:
+    if policy in ("pid", "lqr", "rl", "approach", "takeoff", "circuit") and policy_raw is None:
         raise ValueError(f"the {policy} policy needs its config")
     env_cfg = env_config_from_raw(env_raw)
     manifest = {
@@ -80,6 +80,11 @@ def make_policy(policy: str, policy_raw: dict | None, cfg):
         from flightsim.envs.policies import TakeoffPolicy
 
         return TakeoffPolicy(takeoff_gains_from_raw(policy_raw), cfg.control_rate_hz)
+    if policy == "circuit":
+        from flightsim.control.circuit import circuit_gains_from_raw
+        from flightsim.envs.policies import CircuitPolicy
+
+        return CircuitPolicy(circuit_gains_from_raw(policy_raw), cfg.control_rate_hz)
     if policy == "rl":
         from flightsim.rl.policy import load_policy, model_identity  # torch only when needed
 

@@ -47,6 +47,7 @@ def main() -> None:
     parser.add_argument("--lqr", default="configs/lqr.yaml", help="LQR config (policy lqr)")
     parser.add_argument("--approach-autopilot", default="configs/approach_autopilot.yaml", help="approach autopilot gains (policy approach)")
     parser.add_argument("--takeoff-autopilot", default="configs/takeoff_autopilot.yaml", help="takeoff autopilot gains (policy takeoff)")
+    parser.add_argument("--circuit-autopilot", default="configs/circuit_autopilot.yaml", help="circuit autopilot (policy circuit)")
     parser.add_argument("--rl-model", help="trained model directory, e.g. data/rl/<run_id>/best (policy rl)")
     parser.add_argument("--policy-set", action="append", default=[], metavar="KEY=VALUE",
                         help="override a policy config value; part of the batch id")
@@ -65,6 +66,12 @@ def main() -> None:
         from flightsim.rl.policy import model_identity
 
         policy_raw = model_identity(args.rl_model)
+    elif args.policy == "circuit":
+        from flightsim.control.circuit import load_circuit_raw
+
+        if args.policy_set:
+            raise SystemExit("--policy-set is not supported for the circuit autopilot; edit its files")
+        policy_raw = load_circuit_raw(args.circuit_autopilot)
     else:
         policy_path = {"pid": args.autopilot, "lqr": args.lqr, "approach": args.approach_autopilot, "takeoff": args.takeoff_autopilot}.get(args.policy)
         policy_raw = load_raw(policy_path, parse_overrides(args.policy_set)) if policy_path else None

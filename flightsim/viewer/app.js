@@ -22,17 +22,21 @@ const LIVE = "live"; // PID autopilot
 const LIVE_LQR = "live_lqr";
 const LIVE_APPROACH = "live_approach";
 const LIVE_TAKEOFF = "live_takeoff";
-const isLive = (v) => v === LIVE || v === LIVE_LQR || v === LIVE_APPROACH || v === LIVE_TAKEOFF;
-const LIVE_AUTOPILOT = { [LIVE]: "pid", [LIVE_LQR]: "lqr", [LIVE_APPROACH]: "approach", [LIVE_TAKEOFF]: "takeoff" };
+const LIVE_CIRCUIT = "live_circuit";
+const LIVE_AUTOPILOT = { [LIVE]: "pid", [LIVE_LQR]: "lqr", [LIVE_APPROACH]: "approach", [LIVE_TAKEOFF]: "takeoff", [LIVE_CIRCUIT]: "circuit" };
+const isLive = (v) => v in LIVE_AUTOPILOT;
 const MANUAL = "manual"; // calm air
 const MANUAL_WIND = "manual_wind";
 const MANUAL_APPROACH = "manual_approach";
 const MANUAL_CROSSWIND = "manual_crosswind";
 const MANUAL_TAKEOFF = "manual_takeoff";
 const MANUAL_TAKEOFF_XW = "manual_takeoff_crosswind";
+const MANUAL_CIRCUIT = "manual_circuit";
+const MANUAL_CIRCUIT_XW = "manual_circuit_crosswind";
 const MANUAL_CONDITIONS = {
   [MANUAL]: "calm", [MANUAL_WIND]: "windy", [MANUAL_APPROACH]: "approach", [MANUAL_CROSSWIND]: "approach_crosswind",
   [MANUAL_TAKEOFF]: "takeoff", [MANUAL_TAKEOFF_XW]: "takeoff_crosswind",
+  [MANUAL_CIRCUIT]: "circuit", [MANUAL_CIRCUIT_XW]: "circuit_crosswind",
 };
 const isManual = (v) => v in MANUAL_CONDITIONS;
 // Why an approach ended (envs/approach.py failure reasons), for the message line.
@@ -51,7 +55,7 @@ const LANDING_FAILURES = {
   no_stop: "did not stop on the runway in time (hold B to brake)",
   // Takeoff (envs/takeoff.py)
   no_liftoff: "did not lift off in time (full throttle, lift the nose wheel at 55 kt)",
-  sank_back: "sank back onto the ground after lifting off (hold the attitude until climbing)",
+  sank_back: "touched the ground again before climbing out (hold the attitude until climbing)",
   lost: "too far off the extended centreline",
 };
 const INPUT_SEND_HZ = 30;
@@ -108,10 +112,13 @@ function populateSources(logs = allLogs) {
   els.source.add(new Option("Fly an approach to runway 09 and land (crosswind, gusts)", MANUAL_CROSSWIND));
   els.source.add(new Option("Take off from runway 09 and climb to 1000 ft (calm)", MANUAL_TAKEOFF));
   els.source.add(new Option("Take off from runway 09 and climb to 1000 ft (crosswind, gusts)", MANUAL_TAKEOFF_XW));
+  els.source.add(new Option("Fly a circuit: take off, left-hand pattern, land on 09 (calm)", MANUAL_CIRCUIT));
+  els.source.add(new Option("Fly a circuit: take off, left-hand pattern, land on 09 (crosswind, gusts)", MANUAL_CIRCUIT_XW));
   els.source.add(new Option("Watch the PID autopilot", LIVE));
   els.source.add(new Option("Watch the LQR autopilot", LIVE_LQR));
   els.source.add(new Option("Watch the approach autopilot land on runway 09", LIVE_APPROACH));
   els.source.add(new Option("Watch the takeoff autopilot (wind varies by seed)", LIVE_TAKEOFF));
+  els.source.add(new Option("Watch the circuit autopilot (wind varies by seed)", LIVE_CIRCUIT));
   sourceFilter.hidden = logs.length < FILTER_FROM && !sourceFilter.value;
   for (const g of groupLogs(logs, sourceFilter.value)) {
     const group = document.createElement("optgroup");
@@ -192,12 +199,15 @@ function handle(msg) {
       scene.reset();
       scene.setTargets(msg.targets);
       scene.setApproach(msg.approach ?? null);
+      circuitClimbed = false;
       if (msg.takeoff) scene.windsock.setWind(msg.takeoff.wind?.from_deg ?? 0, (msg.takeoff.wind?.u20_mps ?? 0) * 1.943844);
       showApproachRows(msg.approach ? "approach" : msg.takeoff ? "takeoff" : null);
-      const pilotName = { pid: "PID", lqr: "LQR", approach: "Approach", takeoff: "Takeoff" }[msg.pilot ?? "pid"] ?? msg.pilot;
+      const pilotName = { pid: "PID", lqr: "LQR", approach: "Approach", takeoff: "Takeoff", circuit: "Circuit" }[msg.pilot ?? "pid"] ?? msg.pilot;
       els.run.textContent = `${msg.source === "live" ? `${pilotName} autopilot` : { manual: "You are flying", replay: "Replay" }[msg.source]} ${msg.run_id}`;
       say(msg.source === "manual"
-        ? msg.approach
+        ? msg.approach?.task === "circuit"
+          ? "Take off, climb straight ahead past the runway end, turn left at 700 ft, fly downwind at 1000 ft about 1 nm north, descend from abeam the threshold, turn base at 45 degrees and land on 09." + (msg.approach.wind ? " Crosswind and gusts." : "")
+          : msg.approach
           ? "Follow the glide path to runway 09 (ahead), flare and land main wheels first." + (msg.approach.wind ? " Crosswind: crab on the approach, then line up with rudder and hold a wing low into the wind." : "")
           : msg.takeoff
             ? "Full throttle (W), keep the centreline with Z/X, lift the nose wheel at 55 kt and climb at 75 kt to 1000 ft." + (msg.takeoff.wind ? " Crosswind: aileron into the wind on the roll; after lift-off let the nose turn into the wind." : "")
@@ -452,6 +462,8 @@ function showApproachRows(kind) {
   }
 }
 
+let circuitClimbed = false; // a circuit is on final only after climbing out (reset on hello)
+
 function approachDeviations(row, a) {
   const R_EARTH = 6371000, h = (a.heading_deg * Math.PI) / 180;
   const dn = row.lat_rad * R_EARTH - a.threshold_north_m, de = row.lon_rad * R_EARTH - a.threshold_east_m;
@@ -483,9 +495,13 @@ function updateReadout(row) {
     if (row) {
       const d = approachDeviations(row, a);
       const ft = Math.round(d.gp * units.M_TO_FT);
-      readout.talt.textContent = Math.abs(ft) < 10 ? "on path" : `${Math.abs(ft)} ft ${ft > 0 ? "high" : "low"}`;
+      // A circuit: the glide path only means something on final (near the centreline, heading in).
+      const towardRunway = Math.cos(row.psi_rad - (a.heading_deg * Math.PI) / 180) > 0.8;
+      if (row.alt_msl_m - a.elevation_m > 200) circuitClimbed = true;
+      const onFinal = a.task !== "circuit" || (circuitClimbed && Math.abs(d.cross) < 300 && towardRunway);
+      readout.talt.textContent = !onFinal ? "in the pattern" : Math.abs(ft) < 10 ? "on path" : `${Math.abs(ft)} ft ${ft > 0 ? "high" : "low"}`;
       readout.thdg.textContent = Math.abs(d.cross) < 2 ? "on centreline" : `${Math.abs(d.cross).toFixed(0)} m ${d.cross > 0 ? "right" : "left"}`;
-      $("r-dist").textContent = d.along < 0 ? `${(-d.along / 1852).toFixed(2)} nm` : "over the runway";
+      $("r-dist").textContent = !onFinal ? "–" : d.along < 0 ? `${(-d.along / 1852).toFixed(2)} nm` : "over the runway";
     } else {
       readout.talt.textContent = readout.thdg.textContent = $("r-dist").textContent = "–";
     }

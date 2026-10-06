@@ -1,0 +1,46 @@
+# Circuit autopilot (flightsim/control/circuit.py): the takeoff and approach autopilots
+# (their files, inlined when loaded) and the traffic pattern between them.
+# Pattern from FAA AC 90-66B and the Airplane Flying Handbook ch. 8 (docs/REFERENCES.md);
+# flap limits and speeds from the C172P POH. Gains are project choices.
+takeoff: takeoff_autopilot.yaml
+approach: approach_autopilot.yaml
+pattern:
+  pattern_height_ft: 1000      # AC 90-66B 11.4
+  crosswind_below_ft: 300      # turn crosswind within 300 ft of pattern altitude (AC 90-66B 11.8)
+  downwind_offset_m: 1852      # 1 nm (AFH ch. 8: 1/2 to 1 mile); with a 3 deg profile from abeam the threshold the final starts on the glide path
+  climb_kias: 75               # POH climb 70-80 KIAS
+  downwind_kias: 80            # project choice
+  descent_kias: 70             # project choice: flaps 10 abeam, 20 on base
+  flaps_abeam: 0.3333          # 10 deg
+  flaps_base: 0.6667           # 20 deg
+  flaps_final: 1.0             # 30 deg, as the approach autopilot expects
+  vfe_10_kias: 110             # POH: flaps 0-10 deg below 110 KIAS
+  vfe_full_kias: 85            # POH: flaps 10-30 deg below 85 KIAS
+  pitch_trim_rate: 0.02        # per s: from the takeoff setting to the landing configuration's
+  lateral:
+    intercept_m: 300
+    k_track: 2.0               # rad bank per rad track error
+    max_bank_deg: 25           # project choice: medium-bank pattern turns
+    k_bank: 1.5
+    k_roll_rate: 0.3
+    k_beta: 2.0                # rudder per rad sideslip (centres the ball)
+    ki_beta: 1.0
+  vertical:
+    climb_margin_m: 30         # this far below the target height: full power, speed on pitch
+    k_alt: 0.2                 # (m/s climb) per m height error
+    max_climb_fpm: 700
+    max_descent_fpm: 800
+    k_vs: 0.05                 # rad pitch per m/s climb-rate error
+    ki_vs: 0.02
+    k_speed_pitch: 0.02        # climbing: rad pitch per m/s too fast
+    ki_speed_pitch: 0.004
+    k_pitch: 4.0               # elevator per rad pitch error
+    ki_pitch: 1.0
+    k_pitch_rate: 1.0
+    max_pitch_deg: 15
+    min_pitch_deg: -10
+    k_throttle: 0.08           # throttle per m/s speed error
+    ki_throttle: 0.02
+  established:                 # hand over to the approach autopilot on final
+    cross_m: 30
+    track_deg: 10

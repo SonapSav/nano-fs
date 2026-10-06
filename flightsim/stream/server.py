@@ -21,8 +21,9 @@ from websockets.http11 import Request, Response
 from flightsim.control.autopilot import AutopilotGains
 from flightsim.envs import EnvConfig
 from flightsim.control.approach import ApproachGains
+from flightsim.control.circuit import CircuitGains
 from flightsim.control.takeoff import TakeoffGains
-from flightsim.envs.policies import ApproachPolicy, LQRPolicy, PIDPolicy, TakeoffPolicy
+from flightsim.envs.policies import ApproachPolicy, CircuitPolicy, LQRPolicy, PIDPolicy, TakeoffPolicy
 from flightsim.stream.protocol import PROTOCOL_VERSION, encode
 from flightsim.stream.sources import LiveSource, ManualSource, ReplaySource, Source, list_logs
 
@@ -43,6 +44,8 @@ class ServerConfig:
     approach_gains: ApproachGains | None = None
     takeoff_env_cfg: EnvConfig | None = None  # takeoff task flown by the takeoff autopilot
     takeoff_gains: TakeoffGains | None = None
+    circuit_env_cfg: EnvConfig | None = None  # circuit task flown by the circuit autopilot
+    circuit_gains: CircuitGains | None = None
 
     def autopilot(self, name: str):
         if name == "pid":
@@ -53,8 +56,10 @@ class ServerConfig:
             return ApproachPolicy(self.approach_gains, self.approach_env_cfg.control_rate_hz)
         if name == "takeoff" and self.takeoff_gains is not None:
             return TakeoffPolicy(self.takeoff_gains, self.takeoff_env_cfg.control_rate_hz)
+        if name == "circuit" and self.circuit_gains is not None:
+            return CircuitPolicy(self.circuit_gains, self.circuit_env_cfg.control_rate_hz)
         names = (["pid"] + (["lqr"] if self.lqr_raw else []) + (["approach"] if self.approach_gains else [])
-                 + (["takeoff"] if self.takeoff_gains else []))  # fmt: skip
+                 + (["takeoff"] if self.takeoff_gains else []) + (["circuit"] if self.circuit_gains else []))  # fmt: skip
         raise ValueError(f"unknown autopilot {name!r}; choose from {names}")
 
 
@@ -94,7 +99,9 @@ class Session:
         if msg.get("source") == "live":
             name = str(msg.get("autopilot", "pid"))
             policy = self.cfg.autopilot(name)
-            env_cfg = {"approach": self.cfg.approach_env_cfg, "takeoff": self.cfg.takeoff_env_cfg}.get(name, self.cfg.env_cfg)
+            env_cfg = {"approach": self.cfg.approach_env_cfg, "takeoff": self.cfg.takeoff_env_cfg, "circuit": self.cfg.circuit_env_cfg}.get(
+                name, self.cfg.env_cfg
+            )
             return LiveSource(env_cfg, None, int(msg.get("seed", 0)), policy=policy)
         if msg.get("source") == "manual":
             tasks = self.cfg.manual_env_cfgs or {"calm": self.cfg.env_cfg}

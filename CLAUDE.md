@@ -86,8 +86,8 @@ Work through these in order. Finish and validate each step before starting the n
 flightsim/          # installable package (uv_build backend)
   core/             # JSBSim wrapper, State/Controls types (only place JSBSim is imported)
   datalog/          # schema + Parquet writer ("logging" would shadow the stdlib module)
-  envs/             # Gymnasium envs (altitude/heading hold; approach and landing; takeoff; runway.py shared), config, policy adapters, metrics
-  control/          # heading hold (step 1), PID autopilot (step 3), human pilot (step 5), gain-scheduled LQR, approach and takeoff autopilots
+  envs/             # Gymnasium envs (altitude/heading hold; approach and landing; takeoff; circuit; runway.py shared), config, policy adapters, metrics
+  control/          # heading hold (step 1), PID autopilot (step 3), human pilot (step 5), gain-scheduled LQR, approach, takeoff and circuit autopilots
   stream/           # protocol, frame sources (replay, live PID), HTTP + WebSocket server
   viewer/           # static Three.js app (no build step); three.js 0.186.1 + Sky addon + font vendored in viewer/vendor
                     #   terrain.js / scenery.js: procedural, seeded, visual-only scenery (airfield at 0 m = physics ground)
@@ -151,6 +151,7 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - Batch: `uv run python scripts/batch_run.py --seeds 0:1000 [--policy pid|lqr|trim_hold] [--set wind.steady_speed_mps=[5,15]] [--policy-set weights.states.phi_rad=0.1] [--logs]`
 - Approach and landing: `uv run python scripts/batch_run.py --env-config configs/envs/approach_landing.yaml --policy approach --seeds 0:1000` (prints landing and rollout statistics; landings roll to a full stop); crosswind and gusts: `configs/envs/approach_landing_crosswind.yaml`
 - Takeoff: `uv run python scripts/batch_run.py --env-config configs/envs/takeoff.yaml --policy takeoff --seeds 0:1000` (or `takeoff_crosswind.yaml`; prints lift-off and climb-out statistics)
+- Circuit: `uv run python scripts/batch_run.py --env-config configs/envs/circuit.yaml --policy circuit --seeds 0:1000` (or `circuit_crosswind.yaml`; `configs/circuit_autopilot.yaml` inlines the takeoff and approach autopilot files)
 - Controller comparison and RL use `configs/envs/altitude_heading_hold_comfort.yaml` (comfort penalties, structural limits, terminations charged for the remaining steps): `uv run python scripts/batch_run.py --env-config configs/envs/altitude_heading_hold_comfort.yaml --seeds 0:1000 --policy lqr`
 - Seeds: tune controllers on 1000-1999. Report on 0-999 and 2000-2999 (both were used while debugging the LQR retune, 2026-10-04) and on 3000-3999 (untouched; use only for final numbers). RL training draws its episodes from its own seeded streams, never these ranges. LQR gain schedules are cached in `data/cache/lqr/` (keyed by aircraft, JSBSim version, loading, LQR config, rate and flightsim source hash).
 - RL: `uv run python scripts/train_rl.py configs/rl/ppo_comfort.yaml [--set wall_clock_limit_min=5]` writes `data/rl/<run_id>/`; evaluate with `scripts/batch_run.py --policy rl --rl-model data/rl/<run_id>/best`. Long runs: start them in the background and write the console log to a file, so an interrupted session leaves the saved models and log behind.

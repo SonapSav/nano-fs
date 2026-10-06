@@ -98,3 +98,18 @@ Leaned (2026-10-05, POH procedures above, re-trimmed at the POH speed): 6.19 / 6
 ## PAPI (precision approach path indicator)
 
 Airport Lighting Company, *PAPI Style B, Type L-880 / L-881 Instruction Manual*, Rev 2.0 (https://www.airportlightingcompany.com/wp-content/uploads/2019/07/PAPI-Manual-Style-B-Rev2.0.pdf, retrieved 2026-10-05), following FAA AC 150/5345-28 and AC 150/5340-30: L-880 (4 box) aiming relative to the glide path, from the unit nearest the runway: +30', +10', -10', -30' (standard installation); the unit nearest the runway has the largest angle; units 20-30 ft (6-9 m) apart centre to centre; inboard unit at least 50 ft (15 m) from the runway edge (30 ft / 10 m allowed for small general aviation runways); visual threshold crossing height for height group 1 (general aviation) 40 ft.
+
+## Gusty-air approach speed
+
+FAA, *Airplane Flying Handbook* (FAA-H-8083-3C), Chapter 9 "Approaches and Landings" (https://www.faa.gov/sites/faa.gov/files/regulations_policies/handbooks_manuals/aviation/airplane_handbook/10_afh_ch9.pdf, retrieved 2026-10-06): "Pilots often use the normal approach speed plus one-half of the wind gust factors in turbulent conditions. If the normal speed is 70 knots, and the wind gusts are 15 knots, an increase of airspeed to 77 knots is appropriate." Short field: "In gusty air, no more than one-half the gust factor is added."
+
+## Traffic pattern (circuit)
+
+FAA Advisory Circular AC 90-66B, *Non-Towered Airport Flight Operations* (2018-03-13; https://www.faa.gov/documentLibrary/media/Advisory_Circular/AC_90-66B.pdf, retrieved 2026-10-06):
+- 9.1: standard traffic patterns use left turns.
+- 11.4: recommended traffic pattern altitude 1,000 ft AGL.
+- 11.5: hold pattern altitude until at least abeam the approach end on downwind; start the base turn at about 45 degrees relative bearing from the approach end.
+- 11.7, 11.8: after takeoff continue straight ahead until beyond the departure end; turn crosswind beyond the departure end and within 300 ft below pattern altitude; turn downwind at pattern altitude.
+- Appendix (key to traffic pattern operations): complete the turn to final at least 1/4 mile from the runway.
+
+FAA, *Airplane Flying Handbook* (FAA-H-8083-3C), Chapter 8 "Airport Traffic Patterns" (https://www.faa.gov/sites/faa.gov/files/regulations_policies/handbooks_manuals/aviation/airplane_handbook/09_afh_ch8.pdf, retrieved 2026-10-06): the downwind leg is flown "approximately 1/2 to 1 mile out from the landing runway".

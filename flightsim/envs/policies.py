@@ -6,6 +6,7 @@ from typing import Protocol
 import numpy as np
 
 from flightsim.control.approach import ApproachAutopilot, ApproachGains
+from flightsim.control.circuit import CircuitAutopilot, CircuitGains
 from flightsim.control.takeoff import TakeoffAutopilot, TakeoffGains
 from flightsim.control.autopilot import Autopilot, AutopilotGains
 from flightsim.control.lqr import GainSchedule, LQRAutopilot
@@ -111,3 +112,26 @@ class TakeoffPolicy:
 
     def __call__(self, obs: np.ndarray, info: dict) -> np.ndarray:
         return controls_to_action(self._autopilot(info["state"], info["on_ground"]), self._names)
+
+
+class CircuitPolicy:
+    """The circuit autopilot (takeoff, traffic pattern, approach, landing) for the circuit task."""
+
+    name = "circuit"
+
+    def __init__(self, gains: CircuitGains, control_rate_hz: float):
+        self.gains = gains
+        self.dt_s = 1.0 / control_rate_hz
+
+    def reset(self, info: dict) -> None:
+        if "approach_trim" not in info:
+            raise ValueError("the circuit autopilot needs the circuit task")
+        self._autopilot = CircuitAutopilot(
+            self.gains, info["approach"], info["trim"], info["trim_state"], info["approach_trim"], info["approach_trim_state"],
+            self.dt_s, info.get("wind_report"),
+        )  # fmt: skip
+        self._names = info["action_names"]
+
+    def __call__(self, obs: np.ndarray, info: dict) -> np.ndarray:
+        u = self._autopilot(info["state"], info["on_ground"], info["touched_down"], info.get("nose_wheel_down", False))
+        return controls_to_action(u, self._names)

@@ -1,0 +1,22 @@
+# Circuit (envs/circuit.py): take off from runway 09, fly a traffic pattern, land and stop
+# on runway 09, in one episode. The start is as in takeoff.yaml; the landing is judged by
+# the approach section inherited from approach_landing.yaml (its `start` and `randomize`
+# are not used here).
+#
+# Sources: pattern altitude 1000 ft AGL and the crosswind turn within 300 ft of it (FAA
+# AC 90-66B 11.4, 11.8), see docs/REFERENCES.md. Values marked "project choice" are ours.
+base: approach_landing.yaml
+episode_s: 900
+actions: [elevator, aileron, rudder, throttle, flaps, pitch_trim, brake]
+
+circuit:
+  start:
+    along_m: 10                 # project choice, as in takeoff.yaml
+    flaps: 0.0                  # POH normal takeoff: 0-10 deg
+  randomize:
+    lateral_m: 2
+    heading_deg: 2
+  min_height_ft: 700            # a landing counts only after climbing this high (pattern altitude - 300 ft)
+  limits:
+    lost_distance_m: 6000       # project choice: from the runway midpoint
+    max_ground_s: 60            # project choice

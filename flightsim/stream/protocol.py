@@ -24,9 +24,9 @@ Server -> client messages (JSON):
 Client -> server messages:
   {"type": "list"}
   {"type": "play", "source": "replay", "path": "<relative to the data dir>", "speed": 1.0, "start_s"?: 0.0}
-  {"type": "play", "source": "live", "autopilot": "pid" | "lqr" | "approach" | "takeoff" (default "pid"), "seed": 0, "speed": 1.0}
+  {"type": "play", "source": "live", "autopilot": "pid" | "lqr" | "approach" | "takeoff" | "circuit" (default "pid"), "seed": 0, "speed": 1.0}
   {"type": "play", "source": "manual", "conditions": "calm" | "windy" | "approach" | "approach_crosswind" | "takeoff"
-   | "takeoff_crosswind", "seed": 0, "record": true}
+   | "takeoff_crosswind" | "circuit" | "circuit_crosswind", "seed": 0, "record": true}
       (speed is capped at 1)
   {"type": "input", "elevator", "aileron", "rudder", "throttle", "flaps"?, "pitch_trim"?, "brake"?}
       Manual flights only. Stick and pedals in [-1, 1] relative to trim (elevator +

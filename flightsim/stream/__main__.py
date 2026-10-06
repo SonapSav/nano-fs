@@ -6,6 +6,7 @@ from pathlib import Path
 
 from flightsim.config import load_raw
 from flightsim.control.approach import load_approach_gains
+from flightsim.control.circuit import circuit_gains_from_raw, load_circuit_raw
 from flightsim.control.takeoff import load_takeoff_gains
 from flightsim.control.autopilot import load_autopilot_gains
 from flightsim.envs import load_env_config
@@ -24,6 +25,10 @@ def main() -> None:
     parser.add_argument("--approach-autopilot", default="configs/approach_autopilot.yaml", help="approach autopilot gains")
     parser.add_argument("--takeoff-config", default="configs/envs/takeoff_crosswind.yaml", help="takeoff task for the takeoff autopilot")
     parser.add_argument("--takeoff-autopilot", default="configs/takeoff_autopilot.yaml", help="takeoff autopilot gains")
+    parser.add_argument("--circuit-config", default="configs/envs/circuit_crosswind.yaml", help="circuit task for the circuit autopilot")
+    parser.add_argument("--circuit-autopilot", default="configs/circuit_autopilot.yaml", help="circuit autopilot")
+    parser.add_argument("--manual-circuit-config", default="configs/envs/circuit.yaml", help="manual circuit")
+    parser.add_argument("--manual-circuit-crosswind-config", default="configs/envs/circuit_crosswind.yaml", help="manual circuit, wind")
     parser.add_argument("--manual-config", default="configs/envs/manual.yaml", help="manual flight, calm air")
     parser.add_argument("--manual-wind-config", default="configs/envs/manual_wind.yaml", help="manual flight, wind and turbulence")
     parser.add_argument("--manual-approach-config", default="configs/envs/manual_approach.yaml", help="manual approach and landing")
@@ -45,12 +50,16 @@ def main() -> None:
             "approach_crosswind": load_env_config(args.manual_crosswind_config),
             "takeoff": load_env_config(args.manual_takeoff_config),
             "takeoff_crosswind": load_env_config(args.manual_takeoff_crosswind_config),
+            "circuit": load_env_config(args.manual_circuit_config),
+            "circuit_crosswind": load_env_config(args.manual_circuit_crosswind_config),
         },
         lqr_raw=load_raw(args.lqr),
         approach_env_cfg=load_env_config(args.approach_config),
         approach_gains=load_approach_gains(args.approach_autopilot),
         takeoff_env_cfg=load_env_config(args.takeoff_config),
         takeoff_gains=load_takeoff_gains(args.takeoff_autopilot),
+        circuit_env_cfg=load_env_config(args.circuit_config),
+        circuit_gains=circuit_gains_from_raw(load_circuit_raw(args.circuit_autopilot)),
     )
     # Design the LQR gain schedule now (or load it from data/cache/lqr), so the first
     # "watch the LQR" flight starts at once; designing takes ~15 s.
