@@ -93,16 +93,34 @@ def _silence_banner() -> None:
     jsbsim.FGJSBBase().debug_lvl = 0
 
 
+# Project aircraft (e.g. tuned copies of bundled models): flightsim/aircraft/<name>/<name>.xml,
+# with engine/propeller files in <name>/Engines/ (JSBSim looks there before its engine
+# directory). A project aircraft takes precedence over a bundled one of the same name.
+PROJECT_AIRCRAFT_DIR = Path(__file__).resolve().parent.parent / "aircraft"
+
+
+def _aircraft_root(aircraft: str) -> Path:
+    """The directory holding <aircraft>/<aircraft>.xml: the project's or JSBSim's."""
+    if (PROJECT_AIRCRAFT_DIR / aircraft / f"{aircraft}.xml").is_file():
+        return PROJECT_AIRCRAFT_DIR
+    return Path(jsbsim.get_default_root_dir()) / "aircraft"
+
+
 def aircraft_hash(aircraft: str) -> str:
     """SHA-256 over the aircraft's definition files and the engine/propeller files it references."""
     root = Path(jsbsim.get_default_root_dir())
-    files = sorted((root / "aircraft" / aircraft).glob("*.xml"))
-    model = ET.parse(root / "aircraft" / aircraft / f"{aircraft}.xml").getroot()
+    ac_root = _aircraft_root(aircraft)
+    files = sorted((ac_root / aircraft).glob("*.xml"))
+    model = ET.parse(ac_root / aircraft / f"{aircraft}.xml").getroot()
     referenced = {e.get("file") for e in model.iter() if e.tag in ("engine", "thruster")}
-    files += sorted(root / "engine" / f"{name}.xml" for name in referenced)
+    for name in sorted(referenced):
+        own = ac_root / aircraft / "Engines" / f"{name}.xml"
+        files.append(own if own.is_file() else root / "engine" / f"{name}.xml")
     h = hashlib.sha256()
     for f in files:
-        h.update(str(f.relative_to(root)).encode())
+        # Bundled files by their path in JSBSim's tree (unchanged ids); project files by theirs.
+        rel = f.relative_to(root) if f.is_relative_to(root) else Path("project") / f.relative_to(PROJECT_AIRCRAFT_DIR)
+        h.update(str(rel).encode())
         h.update(f.read_bytes())
     return h.hexdigest()
 
@@ -111,8 +129,7 @@ def aircraft_hash(aircraft: str) -> str:
 def _contact_points(aircraft: str) -> tuple[tuple[str, str, tuple[float, float, float]], ...]:
     """(name, type, structural location in inches) of each ground contact point, in JSBSim's
     unit order, from the aircraft file."""
-    root = Path(jsbsim.get_default_root_dir())
-    model = ET.parse(root / "aircraft" / aircraft / f"{aircraft}.xml").getroot()
+    model = ET.parse(_aircraft_root(aircraft) / aircraft / f"{aircraft}.xml").getroot()
     points = []
     for c in model.iter("contact"):
         loc = c.find("location")
@@ -143,6 +160,8 @@ class JSBSimCore:
         self.jsbsim_version = jsbsim.__version__
         self._fdm = jsbsim.FGFDMExec(None)
         self._fdm.set_debug_level(0)
+        if _aircraft_root(aircraft) == PROJECT_AIRCRAFT_DIR:
+            self._fdm.set_aircraft_path(str(PROJECT_AIRCRAFT_DIR))
         if not self._fdm.load_model(aircraft):
             raise ValueError(f"JSBSim could not load aircraft {aircraft!r}")
         self._fdm.set_dt(dt_s)

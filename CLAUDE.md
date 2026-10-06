@@ -85,6 +85,7 @@ Work through these in order. Finish and validate each step before starting the n
 ```
 flightsim/          # installable package (uv_build backend)
   core/             # JSBSim wrapper, State/Controls types (only place JSBSim is imported)
+  aircraft/         # project aircraft (loaded before JSBSim's): c172p_tuned = c172p with a tuned propeller and brakes
   datalog/          # schema + Parquet writer ("logging" would shadow the stdlib module)
   envs/             # Gymnasium envs (altitude/heading hold; approach and landing; takeoff; circuit; runway.py shared), config, policy adapters, metrics
   control/          # heading hold (step 1), PID autopilot (step 3), human pilot (step 5), gain-scheduled LQR, approach, takeoff and circuit autopilots
@@ -147,7 +148,7 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 
 ## Common commands
 - Local: `uv sync`, `uv run pytest`, `uv run python scripts/<script>.py`
-- Validation report: `uv run python scripts/validate.py` (regenerates `docs/VALIDATION.md`)
+- Validation report: `uv run python scripts/validate.py` (regenerates `docs/VALIDATION.md`); tuned model: `uv run python scripts/validate.py configs/validation/c172p_tuned.yaml --out docs/VALIDATION_c172p_tuned.md`
 - Controller comparison: `uv run python scripts/compare_controllers.py --episodes 100 [--log-dir data/episodes]`
 - Batch: `uv run python scripts/batch_run.py --seeds 0:1000 [--policy pid|lqr|trim_hold] [--set wind.steady_speed_mps=[5,15]] [--policy-set weights.states.phi_rad=0.1] [--logs]`
 - Approach and landing: `uv run python scripts/batch_run.py --env-config configs/envs/approach_landing.yaml --policy approach --seeds 0:1000` (prints landing and rollout statistics; landings roll to a full stop); crosswind and gusts: `configs/envs/approach_landing_crosswind.yaml`

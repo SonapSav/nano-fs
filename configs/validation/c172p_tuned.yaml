@@ -1,0 +1,17 @@
+# Validation of the tuned copy (flightsim/aircraft/c172p_tuned): the same checks and
+# references as c172p.yaml; only the aircraft and the known deviations differ.
+# Tuned (2026-10-06): propeller power and thrust coefficients at low advance ratio, main
+# gear tyre friction (see the comments in the aircraft and propeller files).
+base: c172p.yaml
+aircraft: c172p_tuned
+
+ground:
+  static_rpm:
+    known_deviation: null      # 2380 RPM, within 2300-2420
+  climb:
+    known_deviation: null      # 733 fpm at 2634 RPM, within the redline
+  landing:
+    known_deviation: null      # 538 ft
+  takeoff:
+    known_deviation: "model 1112 ft, 25% long: it lifts off at 55 KCAS, not 51 (see the lift-off speed; the roll to 51 KIAS is 884 ft, POH 892)"
+    liftoff_known_deviation: "model 55.5 KCAS, 4.5 kt fast: lifting off at 51 KIAS needs ~11 deg pitch, past the model's tail-skid contact (10.3 deg); aerodynamics and gear geometry unchanged from c172p"

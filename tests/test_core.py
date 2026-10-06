@@ -139,3 +139,21 @@ def test_brakes_stop_the_roll_and_the_pedals_steer_the_nosewheel():
 
 def core_heading_change(s) -> float:
     return math.atan2(math.sin(s.psi_rad - math.radians(90)), math.cos(s.psi_rad - math.radians(90)))
+
+
+def test_project_aircraft_load_with_their_own_propeller_and_hash():
+    """flightsim/aircraft/c172p_tuned is found before JSBSim's aircraft; its propeller comes
+    from its Engines folder. Bundled aircraft hashes are unchanged (logs and batch ids use them)."""
+    from flightsim.core import Controls, aircraft_hash
+
+    assert aircraft_hash("c172p") == "8da941af014dd4b4f422303beb3799e199cc2b672d6e8ea451008251270c647c"
+    assert aircraft_hash("c172p_tuned") != aircraft_hash("c172p")
+    rpm = {}
+    for ac in ("c172p", "c172p_tuned"):
+        core = JSBSimCore(ac, 1 / 120)
+        u = Controls(throttle=1.0, brake=1.0)
+        core.reset_on_ground(0.0, controls=u)
+        for _ in range(120 * 10):
+            s = core.step(u)
+        rpm[ac] = s.engine_rpm
+    assert rpm["c172p"] > 2500 and 2300 < rpm["c172p_tuned"] < 2420  # static RPM, POH 2300-2420

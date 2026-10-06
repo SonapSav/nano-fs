@@ -11,8 +11,7 @@ from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 
-import yaml
-
+from flightsim.config import load_raw
 from flightsim.analysis.maneuvers import (
     KT_TO_MPS, landing_ground_roll_m, lean_cruise, loading_for, max_climb_rate_mps, phugoid_response, stall_speed,
     takeoff_roll, trim_at_cas,
@@ -55,7 +54,9 @@ class PlannedCheck:
 
 
 def load_validation_config(path: str | Path) -> dict:
-    return yaml.safe_load(Path(path).read_text())
+    """The validation config, with a `base:` chain resolved (e.g. a tuned aircraft's file
+    extends the original's and changes only what differs)."""
+    return load_raw(path)
 
 
 @cache
@@ -106,8 +107,8 @@ def _phugoid_test(aircraft: str, loading: Loading, alt_ft: float, trim_kias: flo
 
 
 @cache
-def _takeoff(aircraft: str, loading: Loading, flaps_deg: float, elevator: float, max_pitch_deg: float, hold_s: float):
-    return takeoff_roll(aircraft, loading, flaps_deg / 30.0, elevator, math.radians(max_pitch_deg), hold_s)
+def _takeoff(aircraft: str, loading: Loading, flaps_deg: float, elevator: float, max_pitch_deg: float, hold_s: float, ref_kias: float):
+    return takeoff_roll(aircraft, loading, flaps_deg / 30.0, elevator, math.radians(max_pitch_deg), hold_s, ref_kias * KT_TO_MPS)
 
 
 def plan_checks(cfg: dict) -> list[PlannedCheck]:
@@ -204,7 +205,7 @@ def plan_checks(cfg: dict) -> list[PlannedCheck]:
 
     def takeoff():
         to = gr["takeoff"]
-        return _takeoff(ac, ground_loading(), to["flaps_deg"], to["elevator"], to["max_pitch_deg"], to["hold_s"])
+        return _takeoff(ac, ground_loading(), to["flaps_deg"], to["elevator"], to["max_pitch_deg"], to["hold_s"], to["liftoff_kias"])
 
     def static_rpm():
         r = gr["static_rpm"]
@@ -216,6 +217,13 @@ def plan_checks(cfg: dict) -> list[PlannedCheck]:
         ref, tol = to["ground_roll_ft"], to["ground_roll_ft"] * to["tolerance_pct"] / 100
         return Check("takeoff_ground_roll", src[gr["source"]], f"Takeoff ground roll, 2400 lb, sea level, 15 C ({to['ref']})",
                      f"{ref} ft", takeoff().ground_roll_m / FT_TO_M, "ft", ref - tol, ref + tol, to.get("known_deviation"))
+
+    def takeoff_acceleration():
+        to = gr["takeoff"]
+        ref, tol = to["ground_roll_ft"], to["ground_roll_ft"] * to["tolerance_pct"] / 100
+        return Check("takeoff_roll_to_liftoff_speed", src[gr["source"]],
+                     f"Takeoff roll to the POH lift-off speed ({to['liftoff_kias']} KIAS), i.e. the acceleration alone, 2400 lb, sea level, 15 C ({to['ref']})",
+                     f"{ref} ft", takeoff().to_reference_m / FT_TO_M, "ft", ref - tol, ref + tol, to.get("acceleration_known_deviation"))
 
     def liftoff_speed():
         to = gr["takeoff"]
@@ -241,6 +249,7 @@ def plan_checks(cfg: dict) -> list[PlannedCheck]:
     add("static_rpm", static_rpm, gr["static_rpm"].get("known_deviation"))
     add("max_climb_rate", climb_rate, gr["climb"].get("known_deviation"))
     add("takeoff_ground_roll", takeoff_ground_roll, gr["takeoff"].get("known_deviation"))
+    add("takeoff_roll_to_liftoff_speed", takeoff_acceleration, gr["takeoff"].get("acceleration_known_deviation"))
     add("takeoff_liftoff_speed", liftoff_speed, gr["takeoff"].get("liftoff_known_deviation"))
     add("landing_ground_roll", landing_ground_roll, gr["landing"].get("known_deviation"))
 

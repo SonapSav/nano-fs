@@ -113,3 +113,7 @@ FAA Advisory Circular AC 90-66B, *Non-Towered Airport Flight Operations* (2018-0
 - Appendix (key to traffic pattern operations): complete the turn to final at least 1/4 mile from the runway.
 
 FAA, *Airplane Flying Handbook* (FAA-H-8083-3C), Chapter 8 "Airport Traffic Patterns" (https://www.faa.gov/sites/faa.gov/files/regulations_policies/handbooks_manuals/aviation/airplane_handbook/09_afh_ch8.pdf, retrieved 2026-10-06): the downwind leg is flown "approximately 1/2 to 1 mile out from the landing runway".
+
+## Control surface travel (type certificate)
+
+FAA Type Certificate Data Sheet 3A12 (Cessna 172 series; copy in the NTSB docket, https://data.ntsb.gov/Docket/Document/docBLOB?ID=40338401&FileExtension=.PDF&FileName=FAA+Type+Certificate+Data+Sheet+No.+3A12-Master.PDF, retrieved 2026-10-06), section IX, Model 172P, Control Surface Movements: elevator up 28 deg (+1/-0), down 23 deg (+1/-0); ailerons up 20 deg +/-1, down 15 deg +/-1; rudder (landplane) 16 deg +/-1 left and right; wing flaps 0-30 deg (takeoff 0-10 deg). The c172p model's travel matches (checked 2026-10-06), so its elevator-limited stall speeds are not a travel error.

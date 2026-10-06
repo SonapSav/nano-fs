@@ -152,9 +152,29 @@ owner before work can start.
   rate limits) and the comfort penalties, not by the inner loop the residual corrects.
   The inner loop is already close to optimal for this quadratic-like cost, so the
   agent's corrections mostly add noise (more control activity, slightly worse altitude).
-- [ ] **Tuned aircraft model** to close the step 2 deviations, as a separate copy of
-  `c172p` (see "Aircraft model fidelity"). Decided 2026-10-04: deviations accepted for
-  now, tuning is a possible later step.
+- [x] **Tuned aircraft model** (2026-10-06): `flightsim/aircraft/c172p_tuned` (a copy of
+  `c172p`; project aircraft load before JSBSim's, with their own `Engines/`; the c172p
+  hash is unchanged). Validation (`configs/validation/c172p_tuned.yaml`,
+  `docs/VALIDATION_c172p_tuned.md`): 32 pass, 6 known deviations (c172p: 29 / 9).
+  - Propeller (`Engines/prop_75in2f_tuned.xml`): power coefficient x1.15 below J 0.45
+    (blending to x1.0 at J 0.65), thrust coefficient x1.15 below J 0.2 (to x1.0 at
+    0.45). Static RPM 2538 -> 2380 (POH 2300-2420); climb at 76 KCAS 867 -> 733 fpm
+    (POH ~700) at 2634 RPM (was 2752, over the 2700 redline); roll to 51 KIAS 884 ft
+    (POH 892); cruise RPM, power and fuel unchanged.
+  - Brakes: main gear static friction 0.8 -> 0.47 (dynamic 0.5 -> 0.29, same ratio):
+    maximum-braking landing roll 370 -> 538 ft (POH 540). JSBSim has no brake torque
+    limit, so the tyre friction stands in for it.
+  - Not tuned (no source to tune against): stall speeds (control travel matches TCDS
+    3A12, so it is aerodynamics), phugoid period, lift-off attitude (tail-skid contact
+    10.3 deg), so the full takeoff roll stays 25% long (lift-off at 55 KCAS).
+  - New check for both models: takeoff roll to the POH lift-off speed (acceleration
+    alone), separate from the lift-off speed.
+  - Autopilots on tuning seeds, c172p vs tuned: PID and LQR (cruise comfort, 100 seeds)
+    returns within 1%; approach calm 50/50 both (ground roll 261 -> 367 m with half
+    brakes); approach crosswind 191 vs 193/200; takeoff crosswind 100 vs 100/100;
+    circuit crosswind 92 vs 97/100.
+  - **Needs decision:** switch the tasks (env configs, viewer) to `c172p_tuned`. That
+    changes every batch id and result and needs the reported evaluations re-run.
 - [x] **Takeoff, approach and landing** (done 2026-10-06: approach, crosswind, brakes and
   rollout, takeoff, gust allowance, circuit). Decided 2026-10-05: approach and landing first.
   - [x] **Approach and landing task** (2026-10-05): `flightsim/envs/approach.py`,

@@ -93,7 +93,7 @@ ground:
     hold_s: 10            # brakes held at full throttle until the RPM settles
     ground_roll_ft: 892
     tolerance_pct: 15
-    known_deviation: "model 1059 ft, 19% long: lifting off at the POH's 51 KIAS needs ~11 deg pitch, past the model's tail-skid contact (10.3 deg); with the tail dragging it is 968 ft"
+    known_deviation: "model 1059 ft, 19% long: lifting off at the POH's 51 KIAS needs ~11 deg pitch, past the model's tail-skid contact (10.3 deg); the roll to 51 KIAS alone is 861 ft"
     liftoff_kias: 51      # model CAS compared (no airspeed position error modelled)
     liftoff_tolerance_kt: 3
     liftoff_known_deviation: "model 55.4 KCAS, 4.4 kt fast: the pitch limit below the tail-skid contact (see the ground roll)"

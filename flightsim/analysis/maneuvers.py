@@ -262,6 +262,7 @@ class TakeoffRoll:
     ground_roll_m: float  # brake release to lift-off (no wheel on the ground)
     liftoff_cas_mps: float
     liftoff_pitch_rad: float
+    to_reference_m: float | None = None  # brake release to `reference_cas_mps` (acceleration alone)
 
 
 K_PITCH_LIMIT = 20.0  # elevator per rad pitch above the limit (eases the back pressure)
@@ -269,7 +270,8 @@ K_PITCH_LIMIT_RATE = 4.0  # elevator per rad/s pitch rate in the limiter (the ro
 
 
 def takeoff_roll(
-    aircraft: str, loading: Loading, flaps: float, elevator: float, max_pitch_rad: float, hold_s: float = 10.0
+    aircraft: str, loading: Loading, flaps: float, elevator: float, max_pitch_rad: float, hold_s: float = 10.0,
+    reference_cas_mps: float | None = None,
 ) -> TakeoffRoll:
     """Short-field takeoff (POH Section 4): brakes set, full throttle (held `hold_s` until
     the RPM settles), brakes released, back pressure `elevator` (negative, "slightly tail
@@ -284,16 +286,18 @@ def takeoff_roll(
         s = core.step(u)
     static_rpm = s.engine_rpm
     u = replace(u, brake=0.0)
-    distance = 0.0
+    distance, to_reference = 0.0, None
     while s.t_s < hold_s + 120.0:
         pitch_hold = max(elevator, min(0.0, K_PITCH_LIMIT * (s.theta_rad - max_pitch_rad) + K_PITCH_LIMIT_RATE * s.q_radps))
         s = core.step(replace(u, rudder=_pedals(s), aileron=_wings_level(s), elevator=pitch_hold))
         distance += math.hypot(s.v_north_mps, s.v_east_mps) * GROUND_DT_S
+        if to_reference is None and reference_cas_mps is not None and s.cas_mps >= reference_cas_mps:
+            to_reference = distance
         contacts = core.contacts()
         if any(v for k, v in contacts.items() if k not in ("NOSE", "LEFT_MAIN", "RIGHT_MAIN")):
             raise RuntimeError(f"structure touched the ground during the takeoff roll: {contacts}")
         if not any(contacts[w] for w in ("NOSE", "LEFT_MAIN", "RIGHT_MAIN")):
-            return TakeoffRoll(static_rpm, distance, s.cas_mps, s.theta_rad)
+            return TakeoffRoll(static_rpm, distance, s.cas_mps, s.theta_rad, to_reference)
     raise RuntimeError("no lift-off within 120 s")
 
 
