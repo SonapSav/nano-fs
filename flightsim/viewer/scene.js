@@ -6,7 +6,7 @@
 // covers, the flat-earth approximation is far below anything visible.
 
 import * as THREE from "three";
-import { Papi, Windsock, addAirfield, addGroundFallback, addRunwayLights } from "./scenery.js";
+import { Papi, Windsock, addAirfield, addAirfieldDetail, addGroundFallback, addRunwayLights } from "./scenery.js";
 import { SkyController, TIMES } from "./sky.js";
 import { CloudField } from "./clouds.js";
 import { RoadNetwork } from "./roads.js";
@@ -74,6 +74,7 @@ export class FlightScene {
     this.roads = new RoadNetwork(this.scene);
     addGroundFallback(this.scene);
     addAirfield(this.scene);
+    addAirfieldDetail(this.scene);
     addRunwayLights(this.scene);
     this.papi = new Papi(this.scene);
     this.windsock = new Windsock(this.scene);

@@ -14,7 +14,7 @@ const LINK_M = 5000;
 const WIDTH_M = 7;
 const STEP_M = 25; // drape sample spacing
 const LIFT_M = 0.6; // above the terrain (the coarser far tiles can sit a little higher)
-export const AIRFIELD_GATE = [0, -320]; // north of the taxiway and apron
+export const AIRFIELD_GATE = [40, -330]; // the end of the airfield's access road (scenery.js), behind the hangars
 
 // Road segments [[x0, z0], [x1, z1]] for the villages around a cell (deterministic).
 export function roadSegments(ci, cj) {

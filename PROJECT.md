@@ -622,7 +622,12 @@ owner before work can start.
      two nearest within 5 km plus one to the airfield's north side, draped ribbons with
      causeways over lakes, rebuilt per 2 km cell; soft forest edges (colour blend around
      the forest threshold); sparser far trees in the second tile ring (medium/high).
-  6. [ ] Airfield detail: apron, parked aircraft, taxiway markings, a circuit landmark.
+  6. [x] **Airfield detail** (2026-10-07, `scenery.js addAirfieldDetail`): yellow taxiway
+     and connector centrelines, hold-short lines 30 m from the runway centreline, apron
+     stands with three parked 172s (the same model, parked attitude from the physics), a
+     fuel truck, hangar doors, an access road joining the road network, and a 60 m
+     red/white radio mast under the circuit's base turn (tested against the autopilot's
+     geometry). The pattern ribbon now fades out within ~200 m of the camera.
   Skip: real-world scenery (out of scope), water reflections, volumetric clouds, night.
 
 - [x] Seeking in replays (2026-10-05): click or drag the progress bar (also while paused

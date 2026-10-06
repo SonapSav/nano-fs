@@ -13,6 +13,20 @@ import * as THREE from "three";
 export const UPWIND_PAST_END_M = 600; // indicative: where the crosswind turn usually happens
 const COLOR = 0xd23cc8;
 
+// Fade out within ~200 m of the camera: flying along the pattern, the ribbon passes right
+// by the eye and would otherwise fill the view.
+function fadeNear(material) {
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying float vEyeDist;")
+      .replace("#include <project_vertex>", "#include <project_vertex>\nvEyeDist = -mvPosition.z;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nvarying float vEyeDist;")
+      .replace("#include <opaque_fragment>", "diffuseColor.a *= smoothstep(60.0, 220.0, vEyeDist);\n#include <opaque_fragment>");
+  };
+  return material;
+}
+
 // Pattern path as [along, cross, height] points, and the marker points.
 export function patternPath(a, p) {
   const d = p.downwind_offset_m, top = p.height_m, turn = p.height_m - p.crosswind_below_m;
@@ -41,13 +55,13 @@ export function buildPattern(a, p) {
   };
   const { points, markers } = patternPath(a, p);
   const group = new THREE.Group();
-  const material = new THREE.MeshBasicMaterial({ color: COLOR, transparent: true, opacity: 0.4 });
+  const material = fadeNear(new THREE.MeshBasicMaterial({ color: COLOR, transparent: true, opacity: 0.4 }));
   // Crosswind, downwind and base only: upwind runs straight ahead from the runway and final
   // has the glide-path gates; drawn, both would sit in the line of sight close to the ground.
   const path = new THREE.CurvePath();
   for (let i = 2; i < points.length - 1; i++) path.add(new THREE.LineCurve3(world(points[i - 1]), world(points[i])));
   group.add(new THREE.Mesh(new THREE.TubeGeometry(path, 400, 1.0, 6, false), material));
-  const markerMaterial = new THREE.MeshBasicMaterial({ color: COLOR, transparent: true, opacity: 0.8 });
+  const markerMaterial = fadeNear(new THREE.MeshBasicMaterial({ color: COLOR, transparent: true, opacity: 0.8 }));
   for (const point of Object.values(markers)) {
     const ring = new THREE.Mesh(new THREE.TorusGeometry(25, 2, 6, 24), markerMaterial);
     ring.position.copy(world(point));

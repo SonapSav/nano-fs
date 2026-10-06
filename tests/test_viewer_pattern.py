@@ -65,3 +65,28 @@ def test_server_sends_the_pattern_only_for_circuits():
     assert cfg.pattern_info() is None
     cfg.circuit_gains = circuit_gains_from_raw(load_circuit_raw(ROOT / "configs" / "circuit_autopilot.yaml"))
     assert cfg.pattern_info()["height_m"] == pytest.approx(304.8)
+
+
+def test_radio_mast_marks_the_circuit_base_turn(tmp_path):
+    """The airfield's radio mast (scenery.js) stands under the circuit autopilot's base turn:
+    45 deg from the 09 threshold, the downwind offset north of it."""
+    d = tmp_path
+    three = d / "node_modules" / "three"
+    three.mkdir(parents=True)
+    for f in ("three.module.js", "three.core.js"):
+        shutil.copy(VIEWER / "vendor" / f, three / f)
+    shutil.copytree(VIEWER / "vendor" / "addons", three / "addons")
+    (three / "package.json").write_text('{"name":"three","type":"module","exports":{".":"./three.module.js","./addons/*":"./addons/*"}}')
+    for f in ("scenery.js", "terrain.js", "groundDetail.js", "aircraft.js"):
+        shutil.copy(VIEWER / f, d / f)
+    script = 'const s = await import("./scenery.js"); console.log(JSON.stringify(s.BASE_TURN_MAST));'
+    res = subprocess.run([NODE, "--input-type=module", "-e", script], cwd=d, capture_output=True, text=True, timeout=60)
+    assert res.returncode == 0, res.stderr
+    mast = json.loads(res.stdout)
+    p = circuit_gains_from_raw(load_circuit_raw(ROOT / "configs" / "circuit_autopilot.yaml")).pattern
+    env = make_env(load_env_config(ROOT / "configs" / "envs" / "circuit.yaml"))
+    env.reset(seed=0)
+    a = env.approach_info()
+    # World frame x east, z south; runway 09: along = east, left (pattern side) = north (-z).
+    assert mast["x"] == pytest.approx(a["threshold_east_m"] - p.downwind_offset_m)
+    assert mast["z"] == pytest.approx(-(a["threshold_north_m"] + p.downwind_offset_m))
