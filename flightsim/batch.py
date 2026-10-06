@@ -33,14 +33,14 @@ from flightsim.envs.config import env_config_from_raw
 from flightsim.envs.evaluate import run_episode
 from flightsim.envs.policies import LQRPolicy, PIDPolicy, TrimHoldPolicy
 
-POLICIES = ("pid", "lqr", "rl", "approach", "trim_hold")
-BATCH_FORMAT = 6  # 2: lqr policy, envelope metrics; 3: comfort_cost; 4: code_version in manifest; 5: landing columns; 6: drift, rollout
+POLICIES = ("pid", "lqr", "rl", "approach", "takeoff", "trim_hold")
+BATCH_FORMAT = 7  # 2: lqr policy, envelope metrics; 3: comfort_cost; 4: code_version in manifest; 5: landing columns; 6: drift, rollout; 7: takeoff columns
 
 
 def make_manifest(env_raw: dict, policy: str, policy_raw: dict | None, seeds: list[int], logs: bool) -> dict:
     if policy not in POLICIES:
         raise ValueError(f"unknown policy {policy!r}; choose from {POLICIES}")
-    if policy in ("pid", "lqr", "rl", "approach") and policy_raw is None:
+    if policy in ("pid", "lqr", "rl", "approach", "takeoff") and policy_raw is None:
         raise ValueError(f"the {policy} policy needs its config")
     env_cfg = env_config_from_raw(env_raw)
     manifest = {
@@ -75,6 +75,11 @@ def make_policy(policy: str, policy_raw: dict | None, cfg):
         from flightsim.envs.policies import ApproachPolicy
 
         return ApproachPolicy(approach_gains_from_raw(policy_raw), cfg.control_rate_hz)
+    if policy == "takeoff":
+        from flightsim.control.takeoff import takeoff_gains_from_raw
+        from flightsim.envs.policies import TakeoffPolicy
+
+        return TakeoffPolicy(takeoff_gains_from_raw(policy_raw), cfg.control_rate_hz)
     if policy == "rl":
         from flightsim.rl.policy import load_policy, model_identity  # torch only when needed
 
@@ -107,6 +112,7 @@ def _run_seed(seed: int) -> dict:
     row.update(env.conditions())
     row.update({k: v for k, v in asdict(metrics).items() if k not in ("seed", "policy")})
     row.update(_landing_columns(env))
+    row.update(_takeoff_columns(env))
     return row
 
 
@@ -127,6 +133,25 @@ def _landing_columns(env) -> dict:
         "td_sink_mps": td.get("sink_mps"), "td_cas_mps": td.get("cas_mps"), "td_pitch_deg": td.get("pitch_deg"),
         "td_bank_deg": td.get("bank_deg"), "td_drift_deg": td.get("drift_deg"), "bounces": s["bounces"],
         "stop_along_m": ro.get("stop_along_m"), "ground_roll_m": ro.get("ground_roll_m"), "rollout_max_cross_m": ro.get("max_cross_m"),
+    }  # fmt: skip
+
+
+TAKEOFF_COLUMNS = (
+    "climbed", "takeoff_failure", "liftoff_ground_roll_m", "liftoff_cas_mps", "liftoff_pitch_deg", "fifty_ft_distance_m",
+    "ground_max_cross_m", "skips",
+)  # fmt: skip
+
+
+def _takeoff_columns(env) -> dict:
+    """The takeoff task's lift-off and climb-out, or nulls for other tasks."""
+    if not hasattr(env, "takeoff_summary"):
+        return dict.fromkeys(TAKEOFF_COLUMNS)
+    s = env.takeoff_summary()
+    lo, ff = s["liftoff"] or {}, s["fifty_ft"] or {}
+    return {
+        "climbed": s["climbed"], "takeoff_failure": s["failure"], "liftoff_ground_roll_m": lo.get("ground_roll_m"),
+        "liftoff_cas_mps": lo.get("cas_mps"), "liftoff_pitch_deg": lo.get("pitch_deg"), "fifty_ft_distance_m": ff.get("distance_m"),
+        "ground_max_cross_m": s["ground_max_cross_m"], "skips": s["skips"],
     }  # fmt: skip
 
 
@@ -151,6 +176,10 @@ SUMMARY_SCHEMA = pa.schema(
         ("td_drift_deg", pa.float64()), ("bounces", pa.int64()),
         # Full-stop approach tasks (`rollout` configured): where the aircraft stopped.
         ("stop_along_m", pa.float64()), ("ground_roll_m", pa.float64()), ("rollout_max_cross_m", pa.float64()),
+        # Takeoff task only (null otherwise): lift-off and climb-out as in envs/takeoff.py.
+        ("climbed", pa.bool_()), ("takeoff_failure", pa.string()), ("liftoff_ground_roll_m", pa.float64()),
+        ("liftoff_cas_mps", pa.float64()), ("liftoff_pitch_deg", pa.float64()), ("fifty_ft_distance_m", pa.float64()),
+        ("ground_max_cross_m", pa.float64()), ("skips", pa.int64()),
     ]
 )  # fmt: skip
 

@@ -6,6 +6,7 @@ from typing import Protocol
 import numpy as np
 
 from flightsim.control.approach import ApproachAutopilot, ApproachGains
+from flightsim.control.takeoff import TakeoffAutopilot, TakeoffGains
 from flightsim.control.autopilot import Autopilot, AutopilotGains
 from flightsim.control.lqr import GainSchedule, LQRAutopilot
 from flightsim.envs.altitude_heading import controls_to_action
@@ -89,3 +90,22 @@ class ApproachPolicy:
 
     def __call__(self, obs: np.ndarray, info: dict) -> np.ndarray:
         return controls_to_action(self._autopilot(info["state"], info["touched_down"], info.get("nose_wheel_down", False)), self._names)
+
+
+class TakeoffPolicy:
+    """The takeoff autopilot (ground roll, rotation, climb-out) for the takeoff task."""
+
+    name = "takeoff"
+
+    def __init__(self, gains: TakeoffGains, control_rate_hz: float):
+        self.gains = gains
+        self.dt_s = 1.0 / control_rate_hz
+
+    def reset(self, info: dict) -> None:
+        if "runway" not in info:
+            raise ValueError("the takeoff autopilot needs the takeoff task")
+        self._autopilot = TakeoffAutopilot(self.gains, info["runway"], info["trim"], info["trim_state"], self.dt_s)
+        self._names = info["action_names"]
+
+    def __call__(self, obs: np.ndarray, info: dict) -> np.ndarray:
+        return controls_to_action(self._autopilot(info["state"], info["on_ground"]), self._names)

@@ -1,0 +1,33 @@
+# Takeoff autopilot (flightsim/control/takeoff.py) for the takeoff task.
+# Speeds from the C172P POH Section 4, Normal Takeoff: lift the nose wheel at 55 KIAS,
+# climb 70-80 KIAS. Gains are project choices, tuned on seeds 1000-1999.
+rotate_kias: 55
+climb_kias: 75
+throttle_ramp_s: 2.0         # throttle to full over this time (smoothly, not slammed)
+ground:
+  intercept_m: 60            # aim the track at the centreline this far ahead
+  k_steer: -3.0              # rudder per rad track error (rudder + = nose left)
+  k_yaw_damp: 1.0            # rudder per rad/s yaw rate
+  k_aileron_beta: 3.0        # aileron per rad sideslip: into the wind
+  k_wings_level: 2.0
+  k_roll_rate: 0.3
+rotation:
+  rate_deg_s: 3.0
+  pitch_deg: 8.0             # below the model's tail-skid contact (10.3 deg on the main wheels)
+  k_pitch: 4.0               # elevator per rad pitch error (elevator + = nose down)
+  k_pitch_rate: 1.0
+climb:
+  k_speed: 0.02              # rad pitch per m/s above the climb speed
+  ki_speed: 0.004
+  max_pitch_deg: 15
+  clear_height_m: 3.0        # wheels this high: from here the speed and centreline laws fly
+  max_alpha_deg: 11
+  intercept_m: 300
+  ki_cross: 0.05             # 1/s integral of the centreline offset
+  k_track: 1.5
+  max_bank_deg: 15
+  low_bank_deg: 5            # below low_bank_height_m: keep the wingtips clear
+  low_bank_height_m: 15
+  k_bank: 1.5
+  k_beta: 2.0                # rudder per rad sideslip (centres the ball)
+  ki_beta: 1.0               # rudder per (rad sideslip x s): finds the rudder the propeller's yaw needs

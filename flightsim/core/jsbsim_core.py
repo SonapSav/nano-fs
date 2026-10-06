@@ -195,23 +195,34 @@ class JSBSimCore:
     def reset_on_ground(
         self, heading_rad: float, loading: Loading = Loading(), controls: Controls = Controls(),
         ground_elevation_m: float = 0.0, lat_rad: float = 0.0, lon_rad: float = 0.0,
-        speed_mps: float = 0.0, settle_s: float = 10.0,
+        speed_mps: float = 0.0, settle_s: float = 10.0, wind_north_mps: float = 0.0, wind_east_mps: float = 0.0,
     ) -> State:  # fmt: skip
-        """Start resting on the wheels (calm air), engine idling, then apply `controls`.
+        """Start on the wheels, engine idling, then apply `controls`.
 
         JSBSim starts the engine at about 2470 RPM whatever the throttle, so the aircraft
         first sits for `settle_s` with the brakes set, the throttle closed and the stick
         and pedals neutral while the engine spins down to idle. With `speed_mps` > 0 it then restarts rolling along
         `heading_rad` at that ground speed, keeping the engine state (run_ic does not reset
         it). JSBSim's ground trim puts the gear in equilibrium both times; it fails at speed
-        with the brakes set, so they are released first."""
+        with the brakes set, so they are released first.
+
+        A steady wind (the velocity of the air, NED) builds up over the first half of the
+        settle, at rest on the brakes: switched on at once, a crosswind jolts the parked
+        aircraft. Rolling starts are calm only."""
         fdm = self._fdm
         idle = replace(controls, elevator=0.0, aileron=0.0, rudder=0.0, throttle=0.0, brake=1.0)
         self.reset(InitialConditions(ground_elevation_m + 1.4, 0.0, heading_rad, lat_rad, lon_rad), loading, idle, ground_elevation_m)
         self._ground_trim()
-        for _ in range(round(settle_s / self.dt_s)):
+        n_settle = round(settle_s / self.dt_s)
+        for k in range(n_settle):
+            if wind_north_mps or wind_east_mps:
+                frac = min(1.0, 2.0 * (k + 1) / n_settle)
+                fdm["atmosphere/wind-north-fps"] = frac * wind_north_mps / FT_TO_M
+                fdm["atmosphere/wind-east-fps"] = frac * wind_east_mps / FT_TO_M
             self.step(idle)
         if speed_mps > 0.0:
+            if wind_north_mps or wind_east_mps:
+                raise ValueError("a rolling start on the ground is calm only")
             rest = self.state()
             self._apply(replace(idle, brake=0.0))
             fdm["ic/h-sl-ft"] = rest.alt_msl_m / FT_TO_M

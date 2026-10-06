@@ -35,10 +35,25 @@ class Source:
     end_reason: str = "finished"
     landing: dict | None = None  # approach task: the landing result, sent with the end message
     approach: dict | None = None  # approach task: runway and glide path (envs.approach.approach_geometry)
+    takeoff: dict | None = None  # takeoff task: runway and wind (envs.takeoff.TakeoffEnv.runway_info)
+    takeoff_result: dict | None = None  # takeoff task: the result, sent with the end message
     pilot_name: str | None = None  # who flies a live flight: "pid", "lqr" or "human"
 
     def frames(self) -> Iterator[tuple[float, dict]]:
         raise NotImplementedError
+
+
+def _logged_takeoff(meta: dict, seed: int | None) -> dict | None:
+    """Runway and wind of a takeoff log (None for other tasks or unreadable configs)."""
+    try:
+        raw = json.loads(meta.get("flightsim.config_json", "null"))
+        if not raw or "takeoff" not in raw or seed is None:
+            return None
+        env = make_env(env_config_from_raw(raw))
+        env.reset(seed=seed)
+        return env.runway_info()
+    except (ValueError, KeyError, TypeError):
+        return None
 
 
 def _logged_approach(meta: dict, seed: int | None) -> dict | None:
@@ -68,6 +83,7 @@ class ReplaySource(Source):
         rate = (len(self._rows) - 1) / duration if duration > 0 else 0.0
         super().__init__("replay", meta["flightsim.run_id"], meta["flightsim.aircraft"], round(rate, 6), duration, None, meta)
         self.approach = _logged_approach(meta, self._rows[0]["seed"] if self._rows else None)
+        self.takeoff = _logged_takeoff(meta, self._rows[0]["seed"] if self._rows else None)
 
     def seek(self, t_s: float) -> None:
         """Continue from the first row at or after t_s (clamped to the log), also while
@@ -99,6 +115,7 @@ class LiveSource(Source):
         super().__init__(source, run_id, env_cfg.aircraft, env_cfg.sim_rate_hz, env_cfg.episode_s, targets)
         self.pilot_name = "human" if source == "manual" else self._policy.name
         self.approach = self._env.approach_info() if hasattr(self._env, "approach_info") else None
+        self.takeoff = self._env.runway_info() if hasattr(self._env, "runway_info") else None
         self._config_hash = env_cfg.config_hash
 
     def frames(self) -> Iterator[tuple[float, dict]]:
@@ -115,6 +132,10 @@ class LiveSource(Source):
                     self.landing = self._info["landing"]
                     if truncated and self.landing["landed"]:
                         self.end_reason = "landed"
+                if "takeoff" in self._info:
+                    self.takeoff_result = self._info["takeoff"]
+                    if truncated and self.takeoff_result["climbed"]:
+                        self.end_reason = "climbed"
                 done = terminated or truncated
                 states, controls = env.recorded
             while emitted < len(states) - 1:

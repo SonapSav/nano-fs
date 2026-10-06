@@ -1,6 +1,6 @@
 """State stream protocol, version 1. One format for live flights and replays.
 
-A frame carries exactly the columns of log schema v1 for one row (same names, SI
+A frame carries exactly the columns of the log schema (v2) for one row (same names, SI
 units), so a replayed log and a live run are indistinguishable to consumers.
 Commands are null when no command follows the state (end of a log).
 
@@ -8,10 +8,13 @@ Server -> client messages (JSON):
   {"type": "hello", "protocol": 1, "source": "live" | "manual" | "replay", "run_id", "aircraft",
    "sim_rate_hz", "frame_rate_hz", "duration_s" (null if unknown), "targets" (or null),
    "meta" (log metadata, replay only), "pilot" ("pid" | "lqr" | "human"; null for replay),
-   "approach" (approach task: runway and glide path, see envs.approach.approach_geometry; else null)}
+   "approach" (approach task: runway and glide path, see envs.approach.approach_geometry; else null),
+   "takeoff" (takeoff task: runway and wind, see envs.takeoff.TakeoffEnv.runway_info; else null)}
   {"type": "frame", "row": {<log column>: value, ...}}
-  {"type": "end", "reason": "finished" | "landed" | "stopped" | "terminated:<why>", "landing"?: {...}}
+  {"type": "end", "reason": "finished" | "landed" | "climbed" | "stopped" | "terminated:<why>",
+   "landing"?: {...}, "takeoff"?: {...}}
       landing: the approach task's result (touchdown point, sink rate, ...), approach only
+      takeoff: the takeoff task's result (lift-off, 50 ft point, ...), takeoff only
   {"type": "logs", "logs": [{"path", "group", "run_id", "aircraft", "rows", "duration_s", "seed",
                              "pilot", "mtime"}, ...]}
       group: "demos", "batch/<id>" or the top directory under the data dir.
@@ -21,8 +24,9 @@ Server -> client messages (JSON):
 Client -> server messages:
   {"type": "list"}
   {"type": "play", "source": "replay", "path": "<relative to the data dir>", "speed": 1.0, "start_s"?: 0.0}
-  {"type": "play", "source": "live", "autopilot": "pid" | "lqr" | "approach" (default "pid"), "seed": 0, "speed": 1.0}
-  {"type": "play", "source": "manual", "conditions": "calm" | "windy" | "approach" | "approach_crosswind", "seed": 0, "record": true}
+  {"type": "play", "source": "live", "autopilot": "pid" | "lqr" | "approach" | "takeoff" (default "pid"), "seed": 0, "speed": 1.0}
+  {"type": "play", "source": "manual", "conditions": "calm" | "windy" | "approach" | "approach_crosswind" | "takeoff"
+   | "takeoff_crosswind", "seed": 0, "record": true}
       (speed is capped at 1)
   {"type": "input", "elevator", "aileron", "rudder", "throttle", "flaps"?, "pitch_trim"?, "brake"?}
       Manual flights only. Stick and pedals in [-1, 1] relative to trim (elevator +

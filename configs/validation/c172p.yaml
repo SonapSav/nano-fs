@@ -88,12 +88,21 @@ ground:
   takeoff:
     ref: Figure 5-5 short field (flaps 10, full throttle before brake release; 10 C 860 ft, 20 C 925 ft); Section 4 Short Field Takeoff
     flaps_deg: 10
-    elevator: -0.2        # "slightly tail low": back pressure that lifts the nosewheel at ~30 KCAS (a technique choice)
+    elevator: -0.3        # "slightly tail low": back pressure from brake release (a technique choice) ...
+    max_pitch_deg: 9      # ... eased to keep the pitch below 9 deg (the model's tail skid touches at 10.3 deg on the main wheels)
     hold_s: 10            # brakes held at full throttle until the RPM settles
     ground_roll_ft: 892
     tolerance_pct: 15
+    known_deviation: "model 1059 ft, 19% long: lifting off at the POH's 51 KIAS needs ~11 deg pitch, past the model's tail-skid contact (10.3 deg); with the tail dragging it is 968 ft"
     liftoff_kias: 51      # model CAS compared (no airspeed position error modelled)
     liftoff_tolerance_kt: 3
+    liftoff_known_deviation: "model 55.4 KCAS, 4.4 kt fast: the pitch limit below the tail-skid contact (see the ground roll)"
+  climb:
+    ref: Figure 5-5 Maximum Rate of Climb (1981 POH; flaps up, full throttle, 76 KIAS at S.L.; 0 C 745, 20 C 685 fpm)
+    kcas: 76              # model CAS compared with KIAS
+    rate_fpm: 700
+    tolerance_pct: 15
+    known_deviation: "model 867 fpm, 24% high, at 2760 RPM (over the 2700 redline at full throttle; the climb rate still rises at 82 KCAS): engine/propeller too strong, as the static RPM"
   landing:
     ref: Figure 5-11 short field (flaps 30, power off, maximum braking; 10 C 530 ft, 20 C 550 ft)
     touchdown_kcas: 51    # not stated by the POH: 1.1 x the flaps 30 stall speed (46 KCAS, Figure 5-3)

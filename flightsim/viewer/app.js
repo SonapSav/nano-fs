@@ -21,14 +21,20 @@ const readout = { alt: $("r-alt"), talt: $("r-talt"), hdg: $("r-hdg"), thdg: $("
 const LIVE = "live"; // PID autopilot
 const LIVE_LQR = "live_lqr";
 const LIVE_APPROACH = "live_approach";
-const isLive = (v) => v === LIVE || v === LIVE_LQR || v === LIVE_APPROACH;
-const LIVE_AUTOPILOT = { [LIVE]: "pid", [LIVE_LQR]: "lqr", [LIVE_APPROACH]: "approach" };
+const LIVE_TAKEOFF = "live_takeoff";
+const isLive = (v) => v === LIVE || v === LIVE_LQR || v === LIVE_APPROACH || v === LIVE_TAKEOFF;
+const LIVE_AUTOPILOT = { [LIVE]: "pid", [LIVE_LQR]: "lqr", [LIVE_APPROACH]: "approach", [LIVE_TAKEOFF]: "takeoff" };
 const MANUAL = "manual"; // calm air
 const MANUAL_WIND = "manual_wind";
 const MANUAL_APPROACH = "manual_approach";
 const MANUAL_CROSSWIND = "manual_crosswind";
-const isManual = (v) => v === MANUAL || v === MANUAL_WIND || v === MANUAL_APPROACH || v === MANUAL_CROSSWIND;
-const MANUAL_CONDITIONS = { [MANUAL]: "calm", [MANUAL_WIND]: "windy", [MANUAL_APPROACH]: "approach", [MANUAL_CROSSWIND]: "approach_crosswind" };
+const MANUAL_TAKEOFF = "manual_takeoff";
+const MANUAL_TAKEOFF_XW = "manual_takeoff_crosswind";
+const MANUAL_CONDITIONS = {
+  [MANUAL]: "calm", [MANUAL_WIND]: "windy", [MANUAL_APPROACH]: "approach", [MANUAL_CROSSWIND]: "approach_crosswind",
+  [MANUAL_TAKEOFF]: "takeoff", [MANUAL_TAKEOFF_XW]: "takeoff_crosswind",
+};
+const isManual = (v) => v in MANUAL_CONDITIONS;
 // Why an approach ended (envs/approach.py failure reasons), for the message line.
 const LANDING_FAILURES = {
   undershoot: "touched down short of the runway",
@@ -41,8 +47,12 @@ const LANDING_FAILURES = {
   wingtip_strike: "wingtip struck the ground",
   nose_strike: "propeller/nose struck the ground",
   lost_approach: "too far off the glide path or centreline",
-  overrun: "ran off the end of the runway (hold B to brake once the nose wheel is down)",
+  overrun: "ran off the end of the runway",
   no_stop: "did not stop on the runway in time (hold B to brake)",
+  // Takeoff (envs/takeoff.py)
+  no_liftoff: "did not lift off in time (full throttle, lift the nose wheel at 55 kt)",
+  sank_back: "sank back onto the ground after lifting off (hold the attitude until climbing)",
+  lost: "too far off the extended centreline",
 };
 const INPUT_SEND_HZ = 30;
 const VIEW_HINT = "Drag to look around, scroll to zoom, space to pause, C for cockpit view, M for sound";
@@ -96,9 +106,12 @@ function populateSources(logs = allLogs) {
   els.source.add(new Option("Fly it yourself (wind and turbulence)", MANUAL_WIND));
   els.source.add(new Option("Fly an approach to runway 09 and land (calm)", MANUAL_APPROACH));
   els.source.add(new Option("Fly an approach to runway 09 and land (crosswind, gusts)", MANUAL_CROSSWIND));
+  els.source.add(new Option("Take off from runway 09 and climb to 1000 ft (calm)", MANUAL_TAKEOFF));
+  els.source.add(new Option("Take off from runway 09 and climb to 1000 ft (crosswind, gusts)", MANUAL_TAKEOFF_XW));
   els.source.add(new Option("Watch the PID autopilot", LIVE));
   els.source.add(new Option("Watch the LQR autopilot", LIVE_LQR));
   els.source.add(new Option("Watch the approach autopilot land on runway 09", LIVE_APPROACH));
+  els.source.add(new Option("Watch the takeoff autopilot (wind varies by seed)", LIVE_TAKEOFF));
   sourceFilter.hidden = logs.length < FILTER_FROM && !sourceFilter.value;
   for (const g of groupLogs(logs, sourceFilter.value)) {
     const group = document.createElement("optgroup");
@@ -179,13 +192,16 @@ function handle(msg) {
       scene.reset();
       scene.setTargets(msg.targets);
       scene.setApproach(msg.approach ?? null);
-      showApproachRows(Boolean(msg.approach));
-      const pilotName = { pid: "PID", lqr: "LQR", approach: "Approach" }[msg.pilot ?? "pid"] ?? msg.pilot;
+      if (msg.takeoff) scene.windsock.setWind(msg.takeoff.wind?.from_deg ?? 0, (msg.takeoff.wind?.u20_mps ?? 0) * 1.943844);
+      showApproachRows(msg.approach ? "approach" : msg.takeoff ? "takeoff" : null);
+      const pilotName = { pid: "PID", lqr: "LQR", approach: "Approach", takeoff: "Takeoff" }[msg.pilot ?? "pid"] ?? msg.pilot;
       els.run.textContent = `${msg.source === "live" ? `${pilotName} autopilot` : { manual: "You are flying", replay: "Replay" }[msg.source]} ${msg.run_id}`;
       say(msg.source === "manual"
-        ? ([MANUAL_APPROACH, MANUAL_CROSSWIND].includes(els.source.value)
-          ? "Follow the glide path to runway 09 (ahead), flare and land main wheels first." + (msg.approach?.wind ? " Crosswind: crab on the approach, then line up with rudder and hold a wing low into the wind." : "")
-          : "Fly to the magenta altitude and heading bugs.")
+        ? msg.approach
+          ? "Follow the glide path to runway 09 (ahead), flare and land main wheels first." + (msg.approach.wind ? " Crosswind: crab on the approach, then line up with rudder and hold a wing low into the wind." : "")
+          : msg.takeoff
+            ? "Full throttle (W), keep the centreline with Z/X, lift the nose wheel at 55 kt and climb at 75 kt to 1000 ft." + (msg.takeoff.wind ? " Crosswind: aileron into the wind on the roll; after lift-off let the nose turn into the wind." : "")
+            : "Fly to the magenta altitude and heading bugs."
         : "");
       setPlaying(true);
       break;
@@ -221,6 +237,10 @@ function handle(msg) {
           `${Math.abs(td.cross_m).toFixed(1)} m ${td.cross_m >= 0 ? "right" : "left"} of the centreline${msg.landing.bounces ? `, ${msg.landing.bounces} bounce(s)` : ""}` +
           (msg.landing.rollout ? `; stopped after a ${Math.round(msg.landing.rollout.ground_roll_m)} m ground roll, ${Math.round(msg.landing.rollout.stop_along_m)} m down the runway` : "") +
           ". Press Play to go again.");
+      } else if (msg.reason === "climbed") {
+        const lo = msg.takeoff.liftoff, ff = msg.takeoff.fifty_ft;
+        say(`Climbed to 1000 ft. Lift-off at ${Math.round(lo.cas_mps * 1.94384)} kt after a ${Math.round(lo.ground_roll_m)} m ground roll` +
+          (ff ? `, 50 ft after ${Math.round(ff.distance_m)} m` : "") + ". Press Play to go again.");
       } else if (msg.reason === "finished") say("Flight finished. Press Play to go again.");
       else if (msg.reason.startsWith("terminated:")) {
         const why = msg.reason.slice(11);
@@ -415,12 +435,14 @@ document.addEventListener("keyup", (e) => pilot.keyup(e));
 window.addEventListener("blur", () => pilot.releaseAll());
 window.addEventListener("resize", () => (dirty = true));
 
-// Approach: glide path and centreline deviations replace the cruise targets.
-function showApproachRows(on) {
-  $("l-talt").textContent = on ? "Glide path" : "Altitude target";
+// Approach and takeoff: deviations from the runway task replace the cruise targets.
+function showApproachRows(kind) {
+  const on = Boolean(kind);
+  $("l-talt").textContent = { approach: "Glide path", takeoff: "Climb speed" }[kind] ?? "Altitude target";
   $("l-thdg").textContent = on ? "Centreline" : "Heading target";
+  $("l-dist").textContent = kind === "takeoff" ? "Runway left" : "To threshold";
   $("l-dist").hidden = $("r-dist").hidden = !on;
-  const w = on ? session?.approach?.wind : null;
+  const w = on ? (session?.approach ?? session?.takeoff)?.wind : null;
   $("l-wind").hidden = $("r-wind").hidden = !w;
   if (w) {
     const kt = (v) => Math.round(Math.abs(v) * 1.943844);
@@ -437,9 +459,26 @@ function approachDeviations(row, a) {
   return { along, cross, gp };
 }
 
+// Takeoff: POH Section 4 normal takeoff, nose wheel up at 55 KIAS, climb 70-80 KIAS (75 used).
+const ROTATE_KT = 55;
+const CLIMB_KT = 75;
+
 function updateReadout(row) {
-  const a = session?.approach;
-  if (a) {
+  const a = session?.approach ?? session?.takeoff;
+  if (session?.takeoff) {
+    const tk = session.takeoff;
+    if (row) {
+      const d = approachDeviations(row, { ...tk, aim_point_m: 0, glide_path_deg: 0 });
+      const kt = row.cas_mps * units.MPS_TO_KT, height = row.alt_msl_m - tk.elevation_m;
+      const airborne = height > 3;
+      readout.talt.textContent = !airborne ? `rotate at ${ROTATE_KT} kt`
+        : Math.abs(kt - CLIMB_KT) < 3 ? "on speed" : `${Math.round(Math.abs(kt - CLIMB_KT))} kt ${kt > CLIMB_KT ? "fast" : "slow"}`;
+      readout.thdg.textContent = Math.abs(d.cross) < 2 ? "on centreline" : `${Math.abs(d.cross).toFixed(0)} m ${d.cross > 0 ? "right" : "left"}`;
+      $("r-dist").textContent = airborne ? "airborne" : `${Math.max(0, Math.round(tk.length_m - d.along))} m`;
+    } else {
+      readout.talt.textContent = readout.thdg.textContent = $("r-dist").textContent = "–";
+    }
+  } else if (a) {
     if (row) {
       const d = approachDeviations(row, a);
       const ft = Math.round(d.gp * units.M_TO_FT);

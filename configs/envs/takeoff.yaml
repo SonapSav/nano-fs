@@ -1,0 +1,40 @@
+# Takeoff and climb-out (envs/takeoff.py): from rest on runway 09 near the threshold,
+# take off and climb on the runway heading to 1000 ft above the runway. The episode ends
+# there, or on a failure.
+#
+# Sources: C172P POH (1981/1985) Section 4, Normal Takeoff: wing flaps 0-10 deg, throttle
+# full open, lift the nose wheel at 55 KIAS, climb speed 70-80 KIAS. Runway geometry as
+# in approach_landing.yaml. Values marked "project choice" are ours, not from a document.
+base: altitude_heading_hold.yaml   # aircraft, rates, loading; its cruise targets are unused here
+terrain: procedural
+episode_s: 240
+actions: [elevator, aileron, rudder, throttle, brake]  # flaps and pitch trim held at the start values
+
+takeoff:
+  runway: {threshold_north_m: 0, threshold_east_m: -500, heading_deg: 90, length_m: 1000, width_m: 30}
+  start:
+    along_m: 10                 # project choice: just past the threshold markings
+    flaps: 0.0                  # POH normal takeoff: 0-10 deg
+  randomize:                    # uniform +/- per seed
+    lateral_m: 2
+    heading_deg: 2
+  climb_kias: 75                # POH normal climb out 70-80 KIAS
+  target_height_ft: 1000        # project choice: a circuit height
+  limits:
+    lost_lateral_m: 300         # project choice
+    max_ground_s: 60            # project choice: no lift-off by then is a failure
+  reward:                       # per decision: -(sum of w * min((error/scale)^2, clip))
+    lateral_scale_m: 10
+    speed_scale_kt: 5
+    w_lateral: 1.0
+    w_speed: 0.5                # airborne only
+    w_action_rate: 0.1
+    clip: 4.0
+    climb_bonus: 500            # reached the target height without a failure
+    failure_penalty: 2000
+
+reward:
+  termination_penalty: 0        # the takeoff task scores failures itself
+termination:
+  max_bank_deg: 45
+  min_alt_agl_m: -100           # unused: the takeoff task handles ground contact

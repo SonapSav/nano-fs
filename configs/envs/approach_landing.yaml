@@ -1,7 +1,7 @@
 # Approach and landing (envs/approach.py): from 3 nm out on runway 09's extended
 # centreline, follow the 3 deg glide path and centreline, and land main wheels first in
-# the touchdown zone. The episode ends once the aircraft has settled on the runway (no
-# brakes yet, so the rollout is not part of the task), or on a failure.
+# the touchdown zone, then brake to a stop on the runway. The episode ends once the
+# aircraft has stopped, or on a failure.
 #
 # Sources: approach speeds from the C172P POH (1985) Section 4, Normal Landing (60-70 KIAS
 # flaps down; touchdown main wheels first). Runway geometry from the viewer's scenery

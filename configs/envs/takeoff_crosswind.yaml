@@ -1,0 +1,11 @@
+# Takeoff with wind: the takeoff task plus a random low-altitude wind per seed, as in
+# approach_landing_crosswind.yaml (MIL-F-8785C 3.7.3: log-profile shear and Dryden
+# turbulence aligned with the wind; crosswind up to the POH's 15 kt, no tailwind).
+base: takeoff.yaml
+
+takeoff:
+  wind:
+    u20_kt: [0, 20]             # wind at 20 ft, uniform
+    max_crosswind_kt: 15        # C172P POH maximum demonstrated crosswind (Section 4)
+    max_tailwind_kt: 0          # project choice: no tailwind takeoffs
+    turbulence: true

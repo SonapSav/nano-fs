@@ -222,13 +222,50 @@ owner before work can start.
       20 ft: 0-3 kt 96%, 3-6 kt 89%, 6-9 kt 75%, 9-12 kt 48%, 12-15 kt 24%. Failures:
       side load 101 (mostly above 9 kt: the late de-crab cannot remove a 12-17 deg crab
       in time), nose first 89 (gusts in the flare), off runway 32, hard landing 3,
-      stall 1. Possible next: a sideslip (wing-low) approach from ~100 ft instead of a
-      late de-crab, a gust additive to the approach speed (half the gust factor),
-      touchdown with less flap in strong crosswinds.
+      stall 1. Superseded by the refinement below.
     - Viewer: windsock left of the 09 threshold (points downwind, stands out at 15 kt;
       tested), wind readout ("129 deg 17 kt, 10 kt crosswind from the right"), "Fly an
       approach to runway 09 and land (crosswind, gusts)", side-load message.
-  - [ ] Later: brakes and rollout, takeoff, circuit.
+  - [x] **Crosswind refinement, brakes and rollout** (2026-10-06, commit `a6aa134`):
+    - Found: the c172p model does not steer the nosewheel with the rudder (ground
+      handling was aerodynamic rudder only, so rollouts weathervaned). The core now
+      links them.
+    - Brakes: `Controls.brake` (both mains), log schema 2 (`cmd_brake_norm`; version 1
+      logs read with brake 0), optional env action, viewer B key / gamepad B, Brakes
+      readout. `JSBSimCore.reset_on_ground` for ground starts (engine idling).
+    - Approach task: `rollout` block (stop_speed_kt 2, max_rollout_s 90): landed =
+      stopped on the runway; new failures overrun, no_stop.
+    - Autopilot: de-crab with a stronger rudder alignment (k_align -10) and an integral
+      wing low (a 15 kt crosswind needs ~11 deg sideslip); rollout lowers the nose at
+      2 deg/s, brakes 0.5 once the nosewheel is down, aileron into the wind. A gradual
+      (rate-limited) de-crab from higher up was tried and did not help.
+    - Seeds 0-999: calm 1000/1000 landed and stopped (batch `322c286ac066`; ground roll
+      248-272 m, rollout within 0.9 m of the centreline). Crosswind 919/1000 (batch
+      `adafd1d08a72`; was 774): by crosswind at 20 ft 0-3 kt 95%, 3-6 kt 94%, 6-9 kt
+      89%, 9-12 kt 95%, 12-15 kt 78%; failures nose first 59 (gusts in the flare), side load
+      15, stall 4, hard landing 3; no runway excursions. Possible next: a gust additive
+      to the approach speed.
+  - [x] **Takeoff and climb-out** (2026-10-06):
+    - `flightsim/envs/takeoff.py` (`configs/envs/takeoff.yaml`, `takeoff_crosswind.yaml`,
+      manual variants): at rest 10 m past the 09 threshold, engine idling; climbed =
+      1000 ft above the runway. Failures: off_runway, overrun, no_liftoff, sank_back
+      (touching again after 5 m), strikes, lost, bank/alpha/load factor once airborne.
+      Summary: lift-off (ground roll, speed, pitch), 50 ft point, centreline on the
+      ground, skips (lift-offs that touch again below 5 m). Shares the runway frame and
+      low-altitude wind with the approach (`flightsim/envs/runway.py`; refactor checked
+      bit-identical on approach episodes).
+    - Takeoff autopilot (`flightsim/control/takeoff.py`, `configs/takeoff_autopilot.yaml`):
+      throttle to full over 2 s; pedals steer the centreline and ailerons go into the wind
+      on the roll; nose wheel up at 55 KIAS (POH) to 8 deg (below the 10.3 deg tail-skid
+      contact), held until the wheels are 3 m up; then speed on pitch at 75 KIAS (POH
+      70-80) and the extended centreline by bank (5 deg limit below 15 m) with a
+      ball-centring rudder that starts from the ground roll's rudder (crabs into the wind).
+    - Tuning seeds: calm 40/40, crosswind 80/80 (14 skips in gusts).
+    - Viewer: "Take off from runway 09 and climb to 1000 ft" (calm, crosswind), "Watch
+      the takeoff autopilot"; readouts climb speed, centreline, runway left, wind.
+    - Found on the way (see "Aircraft model fidelity"): POH takeoff distance and climb
+      rate checks added; the model climbs ~24% faster than the POH, over the redline.
+  - [ ] Later: circuit (takeoff, pattern, approach, landing in one episode).
 
 ### Second aircraft
 
@@ -260,10 +297,19 @@ owner before work can start.
   and peak EGT mixtures are far apart (unlike a real engine); fine for fuel flow.
 - [ ] The model's empty-aircraft CG is aft of a typical 172P: the forward CG limit at
   2400 lb needs about 40 lb fuel and 860 lb in the front seats.
-- [ ] Ground checks (added 2026-10-06, POH at 2400 lb, sea level, 15 C): takeoff ground
-  roll 968 ft vs 892 (+8.5%, passes) and lift-off 52.6 KCAS vs 51 KIAS (passes), with a
-  "slightly tail low" elevator of -0.2 chosen as the technique. Two known deviations:
+- [ ] Ground checks (added 2026-10-06, POH at 2400 lb, sea level, 15 C), four known
+  deviations:
+  - Takeoff (short field, flaps 10): ground roll 1059 ft vs 892 (+19%), lift-off 55.4
+    KCAS vs 51 KIAS, with back pressure eased to keep the pitch below 9 deg. The model's
+    tail skid touches at 10.3 deg pitch on the main wheels, and lifting off at 51 KIAS
+    needs ~11 deg; with the tail dragging the roll is 968 ft (the first version of this
+    check did that and passed by mistake; corrected the same day). The real aircraft's
+    tail-strike attitude has not been checked against a source yet.
   - Static RPM 2538 vs 2300-2420 (Section 2): about 120 RPM high.
+  - Maximum rate of climb at 76 KCAS: 867 fpm vs ~700 (Figure 5-5, +24%), at 2760 RPM,
+    over the 2700 RPM redline at full throttle; the model's climb rate still rises at 82
+    KCAS (its best-rate speed is above the POH's 76). Engine/propeller too strong, the
+    same cause as the static RPM. A tuned model would fix the propeller (pitch/power).
   - Landing ground roll with maximum braking from 51 KCAS: 370 ft vs 540 (31% short).
     The model's full brakes give ~0.3 g (main gear static friction 0.8); the POH roll
     implies ~0.2 g. Autopilot/RL braking well below full is unaffected; a tuned model

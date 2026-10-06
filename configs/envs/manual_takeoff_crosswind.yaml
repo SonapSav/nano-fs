@@ -1,0 +1,3 @@
+# Manual crosswind takeoff in the viewer.
+base: takeoff_crosswind.yaml
+actions: [elevator, aileron, rudder, throttle, flaps, pitch_trim, brake]

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from flightsim.config import load_raw
 from flightsim.control.approach import load_approach_gains
+from flightsim.control.takeoff import load_takeoff_gains
 from flightsim.control.autopilot import load_autopilot_gains
 from flightsim.envs import load_env_config
 from flightsim.stream.server import ServerConfig, run_server
@@ -21,10 +22,14 @@ def main() -> None:
     parser.add_argument("--lqr", default="configs/lqr.yaml", help="LQR autopilot config")
     parser.add_argument("--approach-config", default="configs/envs/approach_landing.yaml", help="approach task for the approach autopilot")
     parser.add_argument("--approach-autopilot", default="configs/approach_autopilot.yaml", help="approach autopilot gains")
+    parser.add_argument("--takeoff-config", default="configs/envs/takeoff_crosswind.yaml", help="takeoff task for the takeoff autopilot")
+    parser.add_argument("--takeoff-autopilot", default="configs/takeoff_autopilot.yaml", help="takeoff autopilot gains")
     parser.add_argument("--manual-config", default="configs/envs/manual.yaml", help="manual flight, calm air")
     parser.add_argument("--manual-wind-config", default="configs/envs/manual_wind.yaml", help="manual flight, wind and turbulence")
     parser.add_argument("--manual-approach-config", default="configs/envs/manual_approach.yaml", help="manual approach and landing")
     parser.add_argument("--manual-crosswind-config", default="configs/envs/manual_approach_crosswind.yaml", help="manual approach, wind")
+    parser.add_argument("--manual-takeoff-config", default="configs/envs/manual_takeoff.yaml", help="manual takeoff")
+    parser.add_argument("--manual-takeoff-crosswind-config", default="configs/envs/manual_takeoff_crosswind.yaml", help="manual takeoff, wind")
     parser.add_argument("--frame-rate", type=float, default=30.0)
     args = parser.parse_args()
 
@@ -38,10 +43,14 @@ def main() -> None:
             "windy": load_env_config(args.manual_wind_config),
             "approach": load_env_config(args.manual_approach_config),
             "approach_crosswind": load_env_config(args.manual_crosswind_config),
+            "takeoff": load_env_config(args.manual_takeoff_config),
+            "takeoff_crosswind": load_env_config(args.manual_takeoff_crosswind_config),
         },
         lqr_raw=load_raw(args.lqr),
         approach_env_cfg=load_env_config(args.approach_config),
         approach_gains=load_approach_gains(args.approach_autopilot),
+        takeoff_env_cfg=load_env_config(args.takeoff_config),
+        takeoff_gains=load_takeoff_gains(args.takeoff_autopilot),
     )
     # Design the LQR gain schedule now (or load it from data/cache/lqr), so the first
     # "watch the LQR" flight starts at once; designing takes ~15 s.

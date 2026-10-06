@@ -227,12 +227,18 @@ def lean_cruise(
 GROUND_DT_S = 1.0 / 120.0
 K_STEER = 4.0  # rudder (and nosewheel) per rad heading error: keeps the roll straight
 K_YAW_DAMP = 1.0  # rudder per rad/s yaw rate
+K_WINGS_LEVEL = 2.0  # aileron per rad bank (the propeller torque rolls the aircraft left)
+K_ROLL_DAMP = 0.3  # aileron per rad/s roll rate
 
 
 def _pedals(s: State) -> float:
     """Rudder that holds heading 000 on the ground (rudder + = nose left), like a pilot
     holding the centreline against the propeller's left-turning tendency."""
     return max(-1.0, min(1.0, K_STEER * math.atan2(math.sin(s.psi_rad), math.cos(s.psi_rad)) + K_YAW_DAMP * s.r_radps))
+
+
+def _wings_level(s: State) -> float:
+    return max(-1.0, min(1.0, -K_WINGS_LEVEL * s.phi_rad - K_ROLL_DAMP * s.p_radps))
 
 
 def landing_ground_roll_m(aircraft: str, loading: Loading, touchdown_cas_mps: float, flaps: float = 1.0) -> float:
@@ -258,11 +264,19 @@ class TakeoffRoll:
     liftoff_pitch_rad: float
 
 
-def takeoff_roll(aircraft: str, loading: Loading, flaps: float, elevator: float, hold_s: float = 10.0) -> TakeoffRoll:
+K_PITCH_LIMIT = 20.0  # elevator per rad pitch above the limit (eases the back pressure)
+K_PITCH_LIMIT_RATE = 4.0  # elevator per rad/s pitch rate in the limiter (the rotation overshoots without it)
+
+
+def takeoff_roll(
+    aircraft: str, loading: Loading, flaps: float, elevator: float, max_pitch_rad: float, hold_s: float = 10.0
+) -> TakeoffRoll:
     """Short-field takeoff (POH Section 4): brakes set, full throttle (held `hold_s` until
-    the RPM settles), brakes released, the elevator held at `elevator` (negative = back
-    pressure, "slightly tail low") and the pedals holding the heading until the aircraft
-    lifts off."""
+    the RPM settles), brakes released, back pressure `elevator` (negative, "slightly tail
+    low") eased so the pitch stays below `max_pitch_rad` (the tail skid touches at about
+    10 deg on the main wheels), pedals holding the heading and ailerons the wings level,
+    until the aircraft lifts off.
+    Raises if anything but the wheels touches the ground."""
     core = JSBSimCore(aircraft, GROUND_DT_S)
     u = Controls(throttle=1.0, flaps=flaps, brake=1.0, elevator=elevator)
     s = core.reset_on_ground(0.0, loading, u)
@@ -272,8 +286,32 @@ def takeoff_roll(aircraft: str, loading: Loading, flaps: float, elevator: float,
     u = replace(u, brake=0.0)
     distance = 0.0
     while s.t_s < hold_s + 120.0:
-        s = core.step(replace(u, rudder=_pedals(s)))
+        pitch_hold = max(elevator, min(0.0, K_PITCH_LIMIT * (s.theta_rad - max_pitch_rad) + K_PITCH_LIMIT_RATE * s.q_radps))
+        s = core.step(replace(u, rudder=_pedals(s), aileron=_wings_level(s), elevator=pitch_hold))
         distance += math.hypot(s.v_north_mps, s.v_east_mps) * GROUND_DT_S
-        if not any(core.contacts()[w] for w in ("NOSE", "LEFT_MAIN", "RIGHT_MAIN")):
+        contacts = core.contacts()
+        if any(v for k, v in contacts.items() if k not in ("NOSE", "LEFT_MAIN", "RIGHT_MAIN")):
+            raise RuntimeError(f"structure touched the ground during the takeoff roll: {contacts}")
+        if not any(contacts[w] for w in ("NOSE", "LEFT_MAIN", "RIGHT_MAIN")):
             return TakeoffRoll(static_rpm, distance, s.cas_mps, s.theta_rad)
     raise RuntimeError("no lift-off within 120 s")
+
+
+def max_climb_rate_mps(
+    aircraft: str, loading: Loading, cas_mps: float, alt_msl_m: float = 30.0, settle_s: float = 20.0, measure_s: float = 20.0
+) -> float:
+    """Full-throttle climb at a held calibrated airspeed, flaps up (POH Figure 5-5): trimmed
+    level at `alt_msl_m`, then full throttle with the pitch attitude holding the speed
+    (speed on pitch, pitch on elevator). Mean climb rate over `measure_s` after `settle_s`."""
+    core, _, trim = trim_at_cas(aircraft, alt_msl_m, cas_mps, loading)
+    s, i_err, dt = core.state(), 0.0, core.dt_s
+    theta_ref, alt0 = s.theta_rad, None
+    for k in range(round((settle_s + measure_s) / dt)):
+        err = s.cas_mps - cas_mps  # too fast -> nose up
+        i_err += err * dt
+        theta_cmd = theta_ref + 0.02 * err + 0.004 * i_err
+        elevator = trim.elevator + 4.0 * (s.theta_rad - theta_cmd) + 1.0 * s.q_radps  # elevator + = nose down
+        s = core.step(replace(trim, throttle=1.0, elevator=max(-1.0, min(1.0, elevator)), aileron=-2.0 * s.phi_rad - 0.3 * s.p_radps))
+        if alt0 is None and (k + 1) * dt >= settle_s:
+            alt0 = s.alt_msl_m
+    return (s.alt_msl_m - alt0) / measure_s

@@ -1,0 +1,3 @@
+# Manual takeoff in the viewer: the takeoff task with flaps and pitch trim in the action set.
+base: takeoff.yaml
+actions: [elevator, aileron, rudder, throttle, flaps, pitch_trim, brake]

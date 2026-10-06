@@ -6,11 +6,15 @@ from flightsim.envs.config import EnvConfig, load_env_config
 
 def make_env(cfg: EnvConfig, record: bool = False) -> AltitudeHeadingHoldEnv:
     """The task a config describes: approach and landing if it has an `approach` section,
-    otherwise altitude and heading hold."""
+    takeoff if it has a `takeoff` section, otherwise altitude and heading hold."""
     if cfg.approach is not None:
         from flightsim.envs.approach import ApproachLandingEnv
 
         return ApproachLandingEnv(cfg, record=record)
+    if cfg.takeoff is not None:
+        from flightsim.envs.takeoff import TakeoffEnv
+
+        return TakeoffEnv(cfg, record=record)
     return AltitudeHeadingHoldEnv(cfg, record=record)
 
 ENV_ID = "flightsim/AltitudeHeadingHold-v0"

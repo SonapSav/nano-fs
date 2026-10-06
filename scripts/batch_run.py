@@ -46,6 +46,7 @@ def main() -> None:
     parser.add_argument("--autopilot", default="configs/autopilot.yaml", help="PID gains (policy pid)")
     parser.add_argument("--lqr", default="configs/lqr.yaml", help="LQR config (policy lqr)")
     parser.add_argument("--approach-autopilot", default="configs/approach_autopilot.yaml", help="approach autopilot gains (policy approach)")
+    parser.add_argument("--takeoff-autopilot", default="configs/takeoff_autopilot.yaml", help="takeoff autopilot gains (policy takeoff)")
     parser.add_argument("--rl-model", help="trained model directory, e.g. data/rl/<run_id>/best (policy rl)")
     parser.add_argument("--policy-set", action="append", default=[], metavar="KEY=VALUE",
                         help="override a policy config value; part of the batch id")
@@ -65,7 +66,7 @@ def main() -> None:
 
         policy_raw = model_identity(args.rl_model)
     else:
-        policy_path = {"pid": args.autopilot, "lqr": args.lqr, "approach": args.approach_autopilot}.get(args.policy)
+        policy_path = {"pid": args.autopilot, "lqr": args.lqr, "approach": args.approach_autopilot, "takeoff": args.takeoff_autopilot}.get(args.policy)
         policy_raw = load_raw(policy_path, parse_overrides(args.policy_set)) if policy_path else None
     seeds = parse_seeds(args.seeds)
 
@@ -113,6 +114,24 @@ def main() -> None:
                 print(f"  stopped past threshold m:   {span('stop_along_m')}")
                 print(f"  rollout max offset m:       {span('rollout_max_cross_m')}")
 
+    if rows and rows[0]["climbed"] is not None:  # takeoff task: the climb-outs
+        climbed = [r for r in rows if r["climbed"]]
+        fails = {}
+        for r in rows:
+            if not r["climbed"]:
+                why = r["takeoff_failure"] or r["termination_reason"] or "timeout"
+                fails[why] = fails.get(why, 0) + 1
+        print(f"\ntakeoffs: {len(climbed)}/{len(rows)} climbed" + (f"; failures {fails}" if fails else ""))
+        if climbed:
+            def span(key, scale=1.0):
+                v = [r[key] * scale for r in climbed]
+                return f"mean {sum(v) / len(v):.1f}, range {min(v):.1f} .. {max(v):.1f}"
+            print(f"  ground roll m:              {span('liftoff_ground_roll_m')}")
+            print(f"  lift-off KCAS:              {span('liftoff_cas_mps', 1.943844)}")
+            print(f"  lift-off pitch deg:         {span('liftoff_pitch_deg')}")
+            print(f"  to 50 ft m:                 {span('fifty_ft_distance_m')}")
+            print(f"  max centreline offset m:    {span('ground_max_cross_m')}")
+            print(f"  skips: {sum(r['skips'] for r in rows)}")
 
 if __name__ == "__main__":
     main()

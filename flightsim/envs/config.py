@@ -138,6 +138,7 @@ class EnvConfig:
     config_json: str
     terrain: str = "flat"  # "flat" (ground at 0 m everywhere) or "procedural" (the viewer's terrain)
     approach: ApproachConfig | None = None  # set: the approach and landing task
+    takeoff: "TakeoffConfig | None" = None  # set: the takeoff and climb-out task
 
     @property
     def sim_steps_per_action(self) -> int:
@@ -210,8 +211,54 @@ def env_config_from_raw(raw: dict) -> EnvConfig:
         actions=_parse_actions(raw.get("actions")),
         terrain=_parse_terrain(raw.get("terrain", "flat")),
         approach=_parse_approach(raw.get("approach")),
+        takeoff=_parse_takeoff(raw.get("takeoff")),
         config_hash=config_hash(raw),
         config_json=canonical_json(raw),
+    )
+
+
+@dataclass(frozen=True)
+class TakeoffConfig:
+    """Takeoff and climb-out task (envs/takeoff.py). Runway as in ApproachConfig; the
+    takeoff runs in the runway direction from `start_along_m` past the threshold."""
+
+    threshold_north_m: float
+    threshold_east_m: float
+    runway_heading_rad: float
+    runway_length_m: float
+    runway_width_m: float
+    start_along_m: float
+    start_flaps: float  # normalized, 1 = 30 deg
+    randomize_lateral_m: float
+    randomize_heading_rad: float
+    climb_cas_mps: float  # climb-out speed the reward asks for once airborne
+    target_height_m: float  # climbed this high above the runway: done
+    lost_lateral_m: float  # this far off the extended centreline once airborne: failure
+    max_ground_s: float  # still on the ground this long after the start: no_liftoff
+    reward: dict  # weights and scales, see configs/envs/takeoff.yaml
+    wind: dict | None = None  # low-altitude wind, as in the approach task
+
+
+def _parse_takeoff(t: dict | None) -> TakeoffConfig | None:
+    if not t:
+        return None
+    rw, st, rnd, lim = t["runway"], t["start"], t["randomize"], t["limits"]
+    return TakeoffConfig(
+        threshold_north_m=float(rw["threshold_north_m"]),
+        threshold_east_m=float(rw["threshold_east_m"]),
+        runway_heading_rad=math.radians(rw["heading_deg"]),
+        runway_length_m=float(rw["length_m"]),
+        runway_width_m=float(rw["width_m"]),
+        start_along_m=float(st["along_m"]),
+        start_flaps=float(st["flaps"]),
+        randomize_lateral_m=float(rnd["lateral_m"]),
+        randomize_heading_rad=math.radians(rnd["heading_deg"]),
+        climb_cas_mps=float(t["climb_kias"]) * KT_TO_MPS,
+        target_height_m=float(t["target_height_ft"]) * 0.3048,
+        lost_lateral_m=float(lim["lost_lateral_m"]),
+        max_ground_s=float(lim["max_ground_s"]),
+        reward=dict(t["reward"]),
+        wind=dict(t["wind"]) if t.get("wind") else None,
     )
 
 
