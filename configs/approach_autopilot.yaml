@@ -29,11 +29,14 @@ flare:
   max_pitch_deg: 9
   k_flare: 0.3               # rad pitch per m/s too much sink in the flare
   pitch_rate_deg_s: 3.0      # the nose comes up smoothly (a quick pull balloons)
-  k_pitch: 6.0               # elevator per rad pitch error in the flare
+  k_pitch: 10.0              # elevator per rad pitch error in the flare (firm: the pitch lagged ~3 deg in gusts)
   ki_pitch: 3.0
-  throttle_cut_s: 0.5        # close the throttle at the start of the flare
+  throttle_cut_s: 2.0        # close the throttle over the first 2 s of the flare (not at once: shear near the ground)
   touchdown_pitch_deg: 5.0   # flare attitude floor rising to this at the ground: main wheels first even from a fast, nose-low flare
   touchdown_pitch_shape: 1.5 # the floor rises late: (height lost / flare height)^1.5 (linear floats calm landings past the zone)
+  float_sink_mps: 0.15       # sinking slower than this in the flare is a float ...
+  float_min_pitch_deg: 3.0   # ... the pitch command eases down to 3 deg (still main wheels first) so it settles
+  float_relief_rate_deg_s: 2.0  # instead of hanging while it slows (in a strong crosswind the rudder then runs out)
   rollout_pitch_deg: 2
   k_steer: -4.0              # rudder per rad heading error on the rollout (rudder + = nose left)
   # Crosswind: de-crab with rudder and hold the centreline with a wing low

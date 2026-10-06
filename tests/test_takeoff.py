@@ -106,3 +106,16 @@ def test_batch_runs_the_takeoff_autopilot(tmp_path):
     rows = table.to_pylist()
     assert all(r["climbed"] for r in rows) and all(r["liftoff_ground_roll_m"] > 100 for r in rows)
     assert rows[0]["landed"] is None  # approach columns stay null
+
+
+def test_windy_starts_sit_steady_on_the_wheels():
+    """Parked in a crosswind on fully set brakes, JSBSim's gear rocks the aircraft onto its
+    tail; the start holds partial brakes while the wind builds (seed 689 used to start at
+    9.5 deg pitch, tail down, and strike the tail at once)."""
+    env = make_env(load_env_config(CROSSWIND))
+    pitches = []
+    for seed in (689, 741, *range(20)):
+        _, info = env.reset(seed=seed)
+        pitches.append(math.degrees(info["state"].theta_rad))
+        assert not env._core.contacts()["TAIL_SKID"]
+    assert max(pitches) < 6.0 and min(pitches) > 0.5

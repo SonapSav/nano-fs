@@ -37,6 +37,10 @@ _CONTROL_PROPS = {
     "brake": "fcs/left-brake-cmd-norm",  # also written to the right brake (_apply)
 }
 _RIGHT_BRAKE = "fcs/right-brake-cmd-norm"
+# Parked start in wind (reset_on_ground): the wind builds up over this time, with the brakes
+# held partly (fully set brakes rock the aircraft in a crosswind).
+WIND_RAMP_S = 5.0
+WIND_HOLD_BRAKE = 0.3
 # Nosewheel steering. The pedals move the rudder and the nosewheel together (as in the
 # C172), but the c172p model does not link them: rudder-cmd-norm leaves the steering at 0.
 # steer-cmd-norm +1 turns the nose right (10 deg), rudder + is nose left, hence the sign.
@@ -225,20 +229,26 @@ class JSBSimCore:
         it). JSBSim's ground trim puts the gear in equilibrium both times; it fails at speed
         with the brakes set, so they are released first.
 
-        A steady wind (the velocity of the air, NED) builds up over the first half of the
-        settle, at rest on the brakes: switched on at once, a crosswind jolts the parked
-        aircraft. Rolling starts are calm only."""
+        A steady wind (the velocity of the air, NED) then builds up over WIND_RAMP_S with
+        the brakes at WIND_HOLD_BRAKE: switched on at once, a crosswind jolts the parked
+        aircraft, and with the brakes fully set JSBSim's braked gear in a crosswind rocks
+        the aircraft in pitch until it sits on its tail (verified 2026-10-06; it is steady
+        with partial or no brakes, and it creeps ~25 m without them). Rolling starts are
+        calm only."""
         fdm = self._fdm
         idle = replace(controls, elevator=0.0, aileron=0.0, rudder=0.0, throttle=0.0, brake=1.0)
         self.reset(InitialConditions(ground_elevation_m + 1.4, 0.0, heading_rad, lat_rad, lon_rad), loading, idle, ground_elevation_m)
         self._ground_trim()
-        n_settle = round(settle_s / self.dt_s)
-        for k in range(n_settle):
-            if wind_north_mps or wind_east_mps:
-                frac = min(1.0, 2.0 * (k + 1) / n_settle)
+        for _ in range(round(settle_s / self.dt_s)):
+            self.step(idle)
+        if wind_north_mps or wind_east_mps:
+            hold = replace(idle, brake=WIND_HOLD_BRAKE)
+            n_ramp = round(WIND_RAMP_S / self.dt_s)
+            for k in range(n_ramp):
+                frac = (k + 1) / n_ramp
                 fdm["atmosphere/wind-north-fps"] = frac * wind_north_mps / FT_TO_M
                 fdm["atmosphere/wind-east-fps"] = frac * wind_east_mps / FT_TO_M
-            self.step(idle)
+                self.step(hold)
         if speed_mps > 0.0:
             if wind_north_mps or wind_east_mps:
                 raise ValueError("a rolling start on the ground is calm only")

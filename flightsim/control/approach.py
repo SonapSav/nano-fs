@@ -65,6 +65,9 @@ class ApproachGains:
     throttle_cut_s: float  # throttle ramps to idle over this time in the flare
     touchdown_pitch_rad: float | None  # the flare's pitch rises at least to this by the ground (main wheels first)
     touchdown_pitch_shape: float  # floor = start + (touchdown - start) * (height lost / flare height)^shape
+    float_sink_mps: float  # sinking slower than this in the flare is a float ...
+    float_min_pitch_rad: float | None  # ... and the pitch command eases down to this (None: never)
+    float_relief_rate_rad_s: float
     rollout_pitch_rad: float
     k_steer: float  # rudder per rad heading error on the ground (negative: rudder + = nose left)
     # Crosswind: de-crab (align the nose with the runway) and wing low (bank into the wind)
@@ -115,6 +118,9 @@ def approach_gains_from_raw(raw: dict) -> ApproachGains:
         throttle_cut_s=float(fl["throttle_cut_s"]),
         touchdown_pitch_rad=rad(fl["touchdown_pitch_deg"]) if "touchdown_pitch_deg" in fl else None,
         touchdown_pitch_shape=float(fl.get("touchdown_pitch_shape", 1.0)),
+        float_sink_mps=float(fl.get("float_sink_mps", 0.0)),
+        float_min_pitch_rad=rad(fl["float_min_pitch_deg"]) if "float_min_pitch_deg" in fl else None,
+        float_relief_rate_rad_s=rad(fl.get("float_relief_rate_deg_s", 0.0)),
         rollout_pitch_rad=rad(fl["rollout_pitch_deg"]),
         k_steer=float(fl["k_steer"]),
         decrab_height_m=float(fl["decrab_height_m"]),
@@ -235,12 +241,21 @@ class ApproachAutopilot:
             target = clamp(s.theta_rad + g.k_flare * (vs_cmd - climb), -1.0, g.flare_max_pitch_rad)
             step = g.flare_pitch_rate_rad_s * dt
             self._flare_theta = max(self._flare_theta, min(target, self._flare_theta + step))
+            floating = g.float_min_pitch_rad is not None and climb > -g.float_sink_mps
             if g.touchdown_pitch_rad is not None:
                 # Attitude floor: from the flare-start pitch to the touchdown attitude as the
                 # wheels come down, so a fast or nose-low flare still lands main wheels first.
                 frac = clamp(1.0 - wheels_m / g.flare_height_m, 0.0, 1.0) ** g.touchdown_pitch_shape
                 start = min(self._flare_start_theta, g.touchdown_pitch_rad)
-                self._flare_theta = max(self._flare_theta, start + (g.touchdown_pitch_rad - start) * frac)
+                floor = start + (g.touchdown_pitch_rad - start) * frac
+                if floating:  # no floor above the float minimum while floating
+                    floor = min(floor, g.float_min_pitch_rad)
+                self._flare_theta = max(self._flare_theta, floor)
+            if floating and self._flare_theta > g.float_min_pitch_rad:
+                # Floating (a gust, ground effect, extra speed): ease the back pressure so the
+                # aircraft settles instead of hanging in the air while it slows, which in a
+                # strong crosswind leaves the rudder too weak to hold the nose straight.
+                self._flare_theta = max(g.float_min_pitch_rad, self._flare_theta - g.float_relief_rate_rad_s * dt)
         vs_err = vs_cmd - climb
         if self.phase == "approach":
             self._i_vs = clamp(self._i_vs + vs_err * dt, -0.1 / max(g.ki_vs, 1e-9), 0.1 / max(g.ki_vs, 1e-9))
