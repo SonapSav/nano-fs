@@ -173,8 +173,24 @@ owner before work can start.
     returns within 1%; approach calm 50/50 both (ground roll 261 -> 367 m with half
     brakes); approach crosswind 191 vs 193/200; takeoff crosswind 100 vs 100/100;
     circuit crosswind 92 vs 97/100.
-  - **Needs decision:** switch the tasks (env configs, viewer) to `c172p_tuned`. That
-    changes every batch id and result and needs the reported evaluations re-run.
+  - [x] **Tasks switched to `c172p_tuned`** (decided 2026-10-06, commit `01e684a`).
+    Reported evaluations re-run on it (earlier c172p batches above stay as the record):
+
+    | Evaluation | c172p | c172p_tuned (batch) |
+    |---|---|---|
+    | Approach calm, seeds 0-999 | 1000/1000 | 1000/1000 (`d2ea22fecfa9`; ground roll 353-379 m) |
+    | Approach crosswind, 0-999 | 948 | 953 (`4ac17648d647`; side load 18, nose first 15, hard 9, stall 5) |
+    | Takeoff calm, 0-999 | 1000/1000 | 1000/1000 (`1f84fae98ee3`; ground roll 252 m) |
+    | Takeoff crosswind, 0-999 | 998 | 997 (`d2d24487505d`; 3 tail strikes, new) |
+    | Circuit calm, 0-999 | 1000/1000 | 1000/1000 (`fb378ad755c0`) |
+    | Circuit crosswind, 0-999 | 955 | 939 (`0722531dfb16`; side load 30, nose first 17, hard 7, stall 5, tail strike 2) |
+    | PID comfort, 3000-3999 | -1468 | -1480 (`b136d786dff6`) |
+    | LQR comfort, 3000-3999 | -1479 | -1493 (`1c84a38e7034`) |
+
+    The PID and LQR were tuned on c172p; their returns are about 1% worse on the tuned
+    model. The weaker low-speed thrust shows as 3 crosswind takeoff tail strikes (rotation
+    with less acceleration in gusts) and a few more circuit side loads. RL models in
+    `data/rl/` were trained on c172p.
 - [x] **Takeoff, approach and landing** (done 2026-10-06: approach, crosswind, brakes and
   rollout, takeoff, gust allowance, circuit). Decided 2026-10-05: approach and landing first.
   - [x] **Approach and landing task** (2026-10-05): `flightsim/envs/approach.py`,
