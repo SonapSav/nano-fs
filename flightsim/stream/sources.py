@@ -37,6 +37,7 @@ class Source:
     approach: dict | None = None  # approach task: runway and glide path (envs.approach.approach_geometry)
     takeoff: dict | None = None  # takeoff task: runway and wind (envs.takeoff.TakeoffEnv.runway_info)
     takeoff_result: dict | None = None  # takeoff task: the result, sent with the end message
+    visual: dict | None = None  # viewer conditions (envs: visual_conditions); None: viewer defaults
     pilot_name: str | None = None  # who flies a live flight: "pid", "lqr" or "human"
 
     def frames(self) -> Iterator[tuple[float, dict]]:
@@ -87,6 +88,7 @@ class ReplaySource(Source):
         self.approach = _logged_approach(meta, self._rows[0]["seed"] if self._rows else None, env)
         self.takeoff = env.runway_info() if env is not None and hasattr(env, "runway_info") else None
         if env is not None:
+            self.visual = env.visual_conditions()
             t = env.targets
             self.targets = {"alt_msl_m": t.alt_msl_m, "heading_rad": t.heading_rad, "tas_mps": t.tas_mps}
 
@@ -121,6 +123,7 @@ class LiveSource(Source):
         self.pilot_name = "human" if source == "manual" else self._policy.name
         self.approach = self._env.approach_info() if hasattr(self._env, "approach_info") else None
         self.takeoff = self._env.runway_info() if hasattr(self._env, "runway_info") else None
+        self.visual = self._env.visual_conditions()
         self._config_hash = env_cfg.config_hash
 
     def frames(self) -> Iterator[tuple[float, dict]]:

@@ -94,6 +94,8 @@ flightsim/          # installable package (uv_build backend)
                     #   terrain.js / scenery.js: procedural, seeded, visual-only scenery (airfield at 0 m = physics ground)
                     #   aircraft.js: C172P model built in code; control surfaces follow the logged positions
                     #   pattern.js: circuit traffic pattern drawing (from the stream's `pattern`)
+                    #   sky.js / clouds.js: time of day, visibility, seeded clouds (from the stream's `visual`)
+                    #   groundDetail.js: close-up ground texture (shader noise)
                     #   sound.js: synthesized engine, wind, stall horn, flap motor (Web Audio, driven by frames)
   analysis/         # mode identification, validation maneuvers, validation checks
   atmosphere/       # Dryden turbulence (MIL-F-8785C)

@@ -155,6 +155,7 @@
     <button id="sound-toggle" type="button" aria-pressed="true">Sound on</button>
     <input id="sound-volume" type="range" min="0" max="1" step="0.05" aria-label="Sound volume">
     <button id="stick-open" type="button">Stick settings</button>
+    <button id="sky-open" type="button">Sky</button>
     <label for="quality">Quality</label>
     <select id="quality" title="Low: shorter view, fewer trees, no close-up ground detail (for integrated graphics)">
       <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
@@ -221,6 +222,26 @@
       </div>
       <div class="dialog-buttons">
         <button type="button" id="stick-reset">Reset to defaults</button>
+        <button value="done">Done</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="sky-dialog" aria-labelledby="sky-title">
+    <form method="dialog">
+      <h2 id="sky-title">Sky</h2>
+      <p>By default each flight shows its own conditions (set in its task config; clouds follow its wind and turbulence). Override them here for this browser. Visual only: the physics never sees them.</p>
+      <div class="stick-row"><label class="axis" for="sky-time">Time</label>
+        <select id="sky-time"><option value="flight">As the flight</option><option value="morning">Morning</option><option value="midday">Midday</option><option value="afternoon">Afternoon</option><option value="evening">Evening</option></select>
+        <span id="sky-time-flight" class="what"></span></div>
+      <div class="stick-row"><label class="axis" for="sky-visibility">Visibility</label>
+        <select id="sky-visibility"><option value="flight">As the flight</option><option value="clear">Clear</option><option value="normal">Normal</option><option value="hazy">Hazy</option></select>
+        <span id="sky-visibility-flight" class="what"></span></div>
+      <div class="stick-row"><label class="axis" for="sky-clouds">Clouds</label>
+        <select id="sky-clouds"><option value="flight">As the flight</option><option value="clear">Clear</option><option value="few">Few</option><option value="scattered">Scattered</option><option value="broken">Broken</option></select>
+        <span id="sky-clouds-flight" class="what"></span></div>
+      <div class="dialog-buttons">
+        <button type="button" id="sky-reset">All as the flight</button>
         <button value="done">Done</button>
       </div>
     </form>

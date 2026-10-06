@@ -140,6 +140,9 @@ class EnvConfig:
     approach: ApproachConfig | None = None  # set: the approach and landing task
     takeoff: "TakeoffConfig | None" = None  # set: the takeoff and climb-out task
     circuit: "CircuitConfig | None" = None  # set (with `approach`): takeoff, traffic pattern, landing
+    # Viewer conditions (visual only, never the physics): time_of_day, visibility, clouds;
+    # each "auto" unless set (see VISUAL_OPTIONS). Part of the config, so replays match.
+    visual: tuple[tuple[str, str], ...] = ()
 
     @property
     def sim_steps_per_action(self) -> int:
@@ -214,6 +217,7 @@ def env_config_from_raw(raw: dict) -> EnvConfig:
         approach=_parse_approach(raw.get("approach")),
         takeoff=_parse_takeoff(raw.get("takeoff")),
         circuit=_parse_circuit(raw.get("circuit")),
+        visual=_parse_visual(raw.get("visual")),
         config_hash=config_hash(raw),
         config_json=canonical_json(raw),
     )
@@ -239,6 +243,23 @@ class TakeoffConfig:
     max_ground_s: float  # still on the ground this long after the start: no_liftoff
     reward: dict  # weights and scales, see configs/envs/takeoff.yaml
     wind: dict | None = None  # low-altitude wind, as in the approach task
+
+
+# Visual conditions a task config may set (viewer only). "auto": time and visibility take
+# the defaults below, clouds follow the flight's wind and turbulence.
+VISUAL_OPTIONS = {
+    "time_of_day": ("auto", "morning", "midday", "afternoon", "evening"),
+    "visibility": ("auto", "clear", "normal", "hazy"),
+    "clouds": ("auto", "clear", "few", "scattered", "broken"),
+}
+
+
+def _parse_visual(v: dict | None) -> tuple[tuple[str, str], ...]:
+    v = dict(v or {})
+    for key, value in v.items():
+        if key not in VISUAL_OPTIONS or value not in VISUAL_OPTIONS[key]:
+            raise ValueError(f"visual.{key} must be one of {VISUAL_OPTIONS.get(key, ())}, got {value!r}")
+    return tuple(sorted(v.items()))
 
 
 @dataclass(frozen=True)

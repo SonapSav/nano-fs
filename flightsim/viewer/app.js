@@ -219,6 +219,7 @@ function handle(msg) {
       scene.setTargets(msg.targets);
       scene.setApproach(msg.approach ?? null);
       scene.setPattern(msg.pattern ?? null);
+      applySky();
       circuitClimbed = false;
       if (msg.takeoff) scene.windsock.setWind(msg.takeoff.wind?.from_deg ?? 0, (msg.takeoff.wind?.u20_mps ?? 0) * 1.943844);
       showApproachRows(msg.approach ? "approach" : msg.takeoff ? "takeoff" : null);
@@ -808,3 +809,51 @@ populateSources([]);
 if (document.fonts) document.fonts.ready.then(() => (dirty = true));
 connect();
 requestAnimationFrame(frame);
+
+// --- Sky: the flight's conditions (hello "visual"), each overridable in this browser ----
+
+const SKY_KEY = "flightsim.sky";
+const SKY_DEFAULTS = { time_of_day: "afternoon", visibility: "normal", clouds: "few" };
+const SKY_FIELDS = { time_of_day: "sky-time", visibility: "sky-visibility", clouds: "sky-clouds" };
+let skyOverride = (() => {
+  try {
+    return JSON.parse(localStorage.getItem(SKY_KEY)) ?? {};
+  } catch {
+    return {};
+  }
+})();
+
+function applySky() {
+  const flight = { ...SKY_DEFAULTS, cloud_seed: 0, ...(session?.visual ?? {}) };
+  const effective = { ...flight };
+  for (const [key, id] of Object.entries(SKY_FIELDS)) {
+    if (skyOverride[key] && skyOverride[key] !== "flight") effective[key] = skyOverride[key];
+    $(id).value = skyOverride[key] ?? "flight";
+    $(`${id}-flight`).textContent = `flight: ${flight[key]}`;
+  }
+  scene.setVisual(effective);
+  dirty = true;
+}
+
+for (const [key, id] of Object.entries(SKY_FIELDS)) {
+  $(id).addEventListener("change", (e) => {
+    skyOverride[key] = e.target.value;
+    try {
+      localStorage.setItem(SKY_KEY, JSON.stringify(skyOverride));
+    } catch {
+      // storage unavailable: the choice lasts for this page only
+    }
+    applySky();
+  });
+}
+$("sky-reset").addEventListener("click", () => {
+  skyOverride = {};
+  try {
+    localStorage.removeItem(SKY_KEY);
+  } catch {
+    // storage unavailable
+  }
+  applySky();
+});
+$("sky-open").addEventListener("click", () => $("sky-dialog").showModal());
+applySky();

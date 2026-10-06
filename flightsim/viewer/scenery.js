@@ -1,36 +1,8 @@
-// Sky, sun, water and the airfield. Visual only (see terrain.js for the height model).
+// Ground fallback, airfield, runway lights, PAPI and windsock. Visual only (sky and light: sky.js).
 
 import * as THREE from "three";
 import { addGroundDetail } from "./groundDetail.js";
-import { Sky } from "three/addons/objects/Sky.js";
 import { AIRFIELD } from "./terrain.js";
-
-const SUN_ELEVATION_DEG = 38;
-const SUN_AZIMUTH_DEG = 215; // from north, clockwise (south-west, afternoon)
-export const HAZE = 0xc9d6e2;
-
-export function addSky(scene) {
-  const sky = new Sky();
-  sky.scale.setScalar(450000);
-  const u = sky.material.uniforms;
-  u.turbidity.value = 4;
-  u.rayleigh.value = 1.2;
-  u.mieCoefficient.value = 0.004;
-  u.mieDirectionalG.value = 0.8;
-  const phi = THREE.MathUtils.degToRad(90 - SUN_ELEVATION_DEG);
-  const az = THREE.MathUtils.degToRad(SUN_AZIMUTH_DEG);
-  // World frame: x = east, y = up, z = south. Azimuth from north (-z) towards east (+x).
-  const sunDir = new THREE.Vector3(Math.sin(phi) * Math.sin(az), Math.cos(phi), -Math.sin(phi) * Math.cos(az));
-  u.sunPosition.value.copy(sunDir);
-  scene.add(sky);
-
-  const sun = new THREE.DirectionalLight(0xfff4e0, 2.4);
-  sun.position.copy(sunDir).multiplyScalar(10000);
-  scene.add(sun, sun.target);
-  scene.add(new THREE.HemisphereLight(0xcfe3f5, 0x5a6844, 1.1));
-  scene.fog = new THREE.Fog(HAZE, 9000, 21000);
-  return { sky, sun, sunDir };
-}
 
 export function addGroundFallback(scene) {
   // Plain land just below the terrain: shows only where a tile is not built yet (distant

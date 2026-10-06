@@ -223,6 +223,25 @@ class AltitudeHeadingHoldEnv(gym.Env):
             "turbulence_sigma_mps": self.wind["turbulence_sigma_mps"],
         }
 
+    def visual_conditions(self) -> dict:
+        """What the viewer should show (never used by the physics): time of day, visibility
+        and the cloud amount, with "auto" resolved, plus a seed for the cloud layout. Auto
+        clouds follow the wind: the low-altitude wind of runway tasks, else the turbulence."""
+        v = {"time_of_day": "auto", "visibility": "auto", "clouds": "auto", **dict(self.cfg.visual)}
+        if v["time_of_day"] == "auto":
+            v["time_of_day"] = "afternoon"
+        if v["visibility"] == "auto":
+            v["visibility"] = "normal"
+        if v["clouds"] == "auto":
+            low = getattr(self, "approach_wind", None) or getattr(self, "takeoff_wind", None)
+            if low is not None:
+                kt = low["u20_mps"] / 0.514444
+                v["clouds"] = "few" if kt < 6 else "scattered" if kt < 13 else "broken"
+            else:
+                v["clouds"] = {"none": "few", "light": "scattered"}.get(self.wind["turbulence"], "broken")
+        v["cloud_seed"] = int(self.episode_seed or 0)
+        return v
+
     # --- Task definition -------------------------------------------------------
 
     def errors(self, s: State | None = None) -> tuple[float, float, float]:

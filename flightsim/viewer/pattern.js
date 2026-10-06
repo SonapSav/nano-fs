@@ -41,12 +41,12 @@ export function buildPattern(a, p) {
   };
   const { points, markers } = patternPath(a, p);
   const group = new THREE.Group();
-  const material = new THREE.MeshBasicMaterial({ color: COLOR, transparent: true, opacity: 0.55 });
+  const material = new THREE.MeshBasicMaterial({ color: COLOR, transparent: true, opacity: 0.4 });
   // Crosswind, downwind and base only: upwind runs straight ahead from the runway and final
   // has the glide-path gates; drawn, both would sit in the line of sight close to the ground.
   const path = new THREE.CurvePath();
   for (let i = 2; i < points.length - 1; i++) path.add(new THREE.LineCurve3(world(points[i - 1]), world(points[i])));
-  group.add(new THREE.Mesh(new THREE.TubeGeometry(path, 400, 2.0, 6, false), material));
+  group.add(new THREE.Mesh(new THREE.TubeGeometry(path, 400, 1.0, 6, false), material));
   const markerMaterial = new THREE.MeshBasicMaterial({ color: COLOR, transparent: true, opacity: 0.8 });
   for (const point of Object.values(markers)) {
     const ring = new THREE.Mesh(new THREE.TorusGeometry(25, 2, 6, 24), markerMaterial);

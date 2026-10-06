@@ -193,7 +193,7 @@ class Session:
             "type": "hello", "protocol": PROTOCOL_VERSION, "source": source.source, "run_id": source.run_id,
             "aircraft": source.aircraft, "sim_rate_hz": source.sim_rate_hz, "frame_rate_hz": self.cfg.frame_rate_hz,
             "duration_s": source.duration_s, "targets": source.targets, "meta": source.meta,
-            "pilot": source.pilot_name, "approach": source.approach, "takeoff": source.takeoff,
+            "pilot": source.pilot_name, "approach": source.approach, "takeoff": source.takeoff, "visual": source.visual,
             "pattern": self.cfg.pattern_info() if (source.approach or {}).get("task") == "circuit" else None,
         }))  # fmt: skip
         frame_dt = 1.0 / self.cfg.frame_rate_hz

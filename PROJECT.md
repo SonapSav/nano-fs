@@ -604,10 +604,19 @@ owner before work can start.
      tile, haze, pixel ratio, ground detail (off on low). High is the earlier setting.
      The circuit's pattern ribbon now omits upwind and final (they sat in the line of
      sight near the ground; final has the gates).
-  Later, as a cruise/navigation package: clouds (~half a day, could follow the
-  conditions); roads, rivers, towns (~1 day); smooth forest edges and trees/houses
-  beyond the nearest 3 x 3 tiles (~half a day); time of day and visibility as config
-  (~2-3 h). Skip: real-world scenery (out of scope), water reflections, detailed buildings.
+  4. [x] **Sky** (2026-10-06): task configs may set `visual: {time_of_day, visibility,
+     clouds}` (each "auto" by default; absent, the config hash is unchanged). Envs resolve
+     them (`visual_conditions`: afternoon, normal visibility; auto clouds from the wind:
+     the low-altitude wind of runway tasks, else the turbulence level) with a cloud seed
+     = the episode seed; the stream hello carries them for live flights and replays.
+     Viewer: `sky.js` (time-of-day presets: sun position and colour, sky scattering,
+     haze, exposure; visibility clear/normal/hazy within the quality setting's reach),
+     `clouds.js` (seeded cumulus fields of billboard puffs, bases ~3000 ft, 10 km tiles,
+     one draw call each; few/scattered/broken), and a "Sky" dialog to override each
+     setting per browser ("as the flight" by default).
+  5. [ ] Ground features: roads, a river, towns, smoother forest edges, far trees.
+  6. [ ] Airfield detail: apron, parked aircraft, taxiway markings, a circuit landmark.
+  Skip: real-world scenery (out of scope), water reflections, volumetric clouds, night.
 
 - [x] Seeking in replays (2026-10-05): click or drag the progress bar (also while paused
   or after the replay ended), or arrow keys on it (5 s; up/down 30 s; Home/End).

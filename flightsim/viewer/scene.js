@@ -6,7 +6,9 @@
 // covers, the flat-earth approximation is far below anything visible.
 
 import * as THREE from "three";
-import { Papi, Windsock, addAirfield, addGroundFallback, addRunwayLights, addSky } from "./scenery.js";
+import { Papi, Windsock, addAirfield, addGroundFallback, addRunwayLights } from "./scenery.js";
+import { SkyController, TIMES } from "./sky.js";
+import { CloudField } from "./clouds.js";
 import { QUALITY, Terrain, WATER_LEVEL_M, height as terrainHeight } from "./terrain.js";
 import { groundDetailStrength } from "./groundDetail.js";
 import { buildC172 } from "./aircraft.js";
@@ -65,7 +67,9 @@ export class FlightScene {
     container.prepend(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
-    this.sunDir = addSky(this.scene).sunDir;
+    this.skyLight = new SkyController(this.scene, this.renderer);
+    this.sunDir = this.skyLight.sunDir; // updated in place with the time of day
+    this.clouds = new CloudField(this.scene);
     addGroundFallback(this.scene);
     addAirfield(this.scene);
     addRunwayLights(this.scene);
@@ -145,6 +149,15 @@ export class FlightScene {
 
   // Approach task geometry (stream hello "approach"), or null: draws the glide path from
   // the aim point back 5 nm along the extended centreline.
+  // Viewer conditions: time of day, visibility, cloud amount and cloud layout seed.
+  setVisual({ time_of_day = "afternoon", visibility = "normal", clouds = "few", cloud_seed = 0 } = {}) {
+    this.skyLight.setTime(time_of_day);
+    this.skyLight.setVisibility(visibility);
+    const tint = new THREE.Color(TIMES[this.skyLight.time].sun).lerp(new THREE.Color(0xffffff), 0.55);
+    this.clouds.setTint(tint);
+    this.clouds.set(clouds, cloud_seed);
+  }
+
   // Quality preset (terrain.js QUALITY): low / medium / high.
   setQuality(quality) {
     if (!(quality in QUALITY) || quality === this.quality) return;
@@ -158,8 +171,7 @@ export class FlightScene {
   _applyQuality(quality) {
     const q = QUALITY[quality];
     groundDetailStrength.value = q.groundDetail;
-    this.scene.fog.near = q.fog[0];
-    this.scene.fog.far = q.fog[1];
+    this.skyLight.setVisibility(this.skyLight.visibility, q.fog);
   }
 
   setApproach(a) {
@@ -279,6 +291,7 @@ export class FlightScene {
       const head = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(this.head.pitch, this.head.yaw, 0, "YXZ"));
       this.camera.quaternion.setFromRotationMatrix(rot.multiply(head));
       this.terrain.update(this.camera.position.x, this.camera.position.z);
+      this.clouds.update(this.camera.position.x, this.camera.position.z);
       this.renderer.render(this.scene, this.camera);
       return;
     }
@@ -290,6 +303,7 @@ export class FlightScene {
     this.camera.position.copy(this.position).add(offset);
     this.camera.lookAt(this.position);
     this.terrain.update(this.camera.position.x, this.camera.position.z);
+    this.clouds.update(this.camera.position.x, this.camera.position.z);
     this.renderer.render(this.scene, this.camera);
   }
 

@@ -11,7 +11,9 @@ Server -> client messages (JSON):
    "approach" (approach task: runway and glide path, see envs.approach.approach_geometry; else null),
    "takeoff" (takeoff task: runway and wind, see envs.takeoff.TakeoffEnv.runway_info; else null),
    "pattern" (circuit task: the circuit autopilot's pattern height, crosswind turn margin and
-              downwind offset, for drawing; else null)}
+              downwind offset, for drawing; else null),
+   "visual" ({"time_of_day", "visibility", "clouds", "cloud_seed"}: the flight's viewer
+             conditions, envs visual_conditions; null when unknown: viewer defaults)}
   {"type": "frame", "row": {<log column>: value, ...}}
   {"type": "end", "reason": "finished" | "landed" | "climbed" | "stopped" | "terminated:<why>",
    "landing"?: {...}, "takeoff"?: {...}}
