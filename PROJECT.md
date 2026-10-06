@@ -261,6 +261,11 @@ owner before work can start.
       70-80) and the extended centreline by bank (5 deg limit below 15 m) with a
       ball-centring rudder that starts from the ground roll's rudder (crabs into the wind).
     - Tuning seeds: calm 40/40, crosswind 80/80 (14 skips in gusts).
+    - Seeds 0-999 (commit `5224af9`): calm 1000/1000 climbed (batch `a52efad6287a`;
+      ground roll 245 m, lift-off 60 KCAS, 50 ft after 542 m, centreline within 2 m).
+      Crosswind 998/1000 (batch `2d6e38b6051f`; tail strike 1, stall 1; ground roll
+      108-264 m, lift-off 53-68 KCAS, centreline within 6 m; 136 skips in gusts).
+      Possible next: rotate a few knots later in gusty wind to cut the skips.
     - Viewer: "Take off from runway 09 and climb to 1000 ft" (calm, crosswind), "Watch
       the takeoff autopilot"; readouts climb speed, centreline, runway left, wind.
     - Found on the way (see "Aircraft model fidelity"): POH takeoff distance and climb
