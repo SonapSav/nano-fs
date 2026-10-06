@@ -1,5 +1,5 @@
 # Step 1: straight-and-level cruise, heading hold only.
-aircraft: c172p
+aircraft: c172p_tuned  # c172p with a POH-tuned propeller and brakes (flightsim/aircraft, docs/VALIDATION_c172p_tuned.md)
 sim_rate_hz: 120          # JSBSim's default rate
 duration_s: 300
 seed: 0                   # no randomness used yet; recorded for provenance

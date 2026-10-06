@@ -2,7 +2,7 @@
 #
 # Each episode: trim at a randomized cruise condition, then draw new targets offset
 # from it. Randomness comes only from the seed passed to reset(seed=...).
-aircraft: c172p
+aircraft: c172p_tuned  # c172p with a POH-tuned propeller and brakes (flightsim/aircraft, docs/VALIDATION_c172p_tuned.md)
 sim_rate_hz: 120
 control_rate_hz: 20        # agent/autopilot decision rate; each action is held for 6 sim steps
 episode_s: 120

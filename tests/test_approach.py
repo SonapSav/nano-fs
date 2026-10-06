@@ -296,7 +296,7 @@ def test_approach_autopilot_brakes_to_a_stop_near_the_centreline():
     run_episode(env, ApproachPolicy(load_approach_gains(ROOT / "configs" / "approach_autopilot.yaml"), cfg.control_rate_hz), 0)
     s = env.landing_summary()
     assert s["landed"] and s["rollout"]["max_cross_m"] < 2.0
-    assert 150 < s["rollout"]["ground_roll_m"] < 350  # half brakes from ~53 KCAS (calm seeds: 250-271 m)
+    assert 250 < s["rollout"]["ground_roll_m"] < 450  # half brakes from ~53 KCAS (c172p_tuned, calm seeds: 353-379 m)
 
 
 def test_wind_report_and_half_gust_factor_on_the_approach_speed():
