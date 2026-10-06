@@ -614,7 +614,14 @@ owner before work can start.
      `clouds.js` (seeded cumulus fields of billboard puffs, bases ~3000 ft, 10 km tiles,
      one draw call each; few/scattered/broken), and a "Sky" dialog to override each
      setting per browser ("as the flight" by default).
-  5. [ ] Ground features: roads, a river, towns, smoother forest edges, far trees.
+  5. [x] **Ground features** (2026-10-07), visual only (terrain heights unchanged, so the
+     physics port is untouched): rivers on the valley floors (terrain shader: a contour of a
+     smooth noise field, ~20 m wide with banks, not on the airfield); villages also on dry
+     valley floors, one in three 2 km cells (`terrain.js villageCentre`), each with a
+     landmark (church with spire or water tower); roads (`roads.js`): each village to its
+     two nearest within 5 km plus one to the airfield's north side, draped ribbons with
+     causeways over lakes, rebuilt per 2 km cell; soft forest edges (colour blend around
+     the forest threshold); sparser far trees in the second tile ring (medium/high).
   6. [ ] Airfield detail: apron, parked aircraft, taxiway markings, a circuit landmark.
   Skip: real-world scenery (out of scope), water reflections, volumetric clouds, night.
 

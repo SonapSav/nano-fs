@@ -9,6 +9,7 @@ import * as THREE from "three";
 import { Papi, Windsock, addAirfield, addGroundFallback, addRunwayLights } from "./scenery.js";
 import { SkyController, TIMES } from "./sky.js";
 import { CloudField } from "./clouds.js";
+import { RoadNetwork } from "./roads.js";
 import { QUALITY, Terrain, WATER_LEVEL_M, height as terrainHeight } from "./terrain.js";
 import { groundDetailStrength } from "./groundDetail.js";
 import { buildC172 } from "./aircraft.js";
@@ -70,6 +71,7 @@ export class FlightScene {
     this.skyLight = new SkyController(this.scene, this.renderer);
     this.sunDir = this.skyLight.sunDir; // updated in place with the time of day
     this.clouds = new CloudField(this.scene);
+    this.roads = new RoadNetwork(this.scene);
     addGroundFallback(this.scene);
     addAirfield(this.scene);
     addRunwayLights(this.scene);
@@ -292,6 +294,7 @@ export class FlightScene {
       this.camera.quaternion.setFromRotationMatrix(rot.multiply(head));
       this.terrain.update(this.camera.position.x, this.camera.position.z);
       this.clouds.update(this.camera.position.x, this.camera.position.z);
+      this.roads.update(this.camera.position.x, this.camera.position.z);
       this.renderer.render(this.scene, this.camera);
       return;
     }
@@ -304,6 +307,7 @@ export class FlightScene {
     this.camera.lookAt(this.position);
     this.terrain.update(this.camera.position.x, this.camera.position.z);
     this.clouds.update(this.camera.position.x, this.camera.position.z);
+    this.roads.update(this.camera.position.x, this.camera.position.z);
     this.renderer.render(this.scene, this.camera);
   }
 
