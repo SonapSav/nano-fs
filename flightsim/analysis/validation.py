@@ -13,7 +13,9 @@ from pathlib import Path
 
 import yaml
 
-from flightsim.analysis.maneuvers import KT_TO_MPS, lean_cruise, loading_for, phugoid_response, stall_speed, trim_at_cas
+from flightsim.analysis.maneuvers import (
+    KT_TO_MPS, landing_ground_roll_m, lean_cruise, loading_for, phugoid_response, stall_speed, takeoff_roll, trim_at_cas,
+)  # fmt: skip
 from flightsim.analysis.modes import lateral_modes, longitudinal_modes
 from flightsim.core import InitialConditions, JSBSimCore, Loading
 from flightsim.core.jsbsim_core import FT_TO_M, HP_TO_W, IN_TO_M, LBM_TO_KG
@@ -102,6 +104,11 @@ def _phugoid_test(aircraft: str, loading: Loading, alt_ft: float, trim_kias: flo
     return osc, longitudinal_modes(core.linearize()).phugoid
 
 
+@cache
+def _takeoff(aircraft: str, loading: Loading, flaps_deg: float, elevator: float, hold_s: float):
+    return takeoff_roll(aircraft, loading, flaps_deg / 30.0, elevator, hold_s)
+
+
 def plan_checks(cfg: dict) -> list[PlannedCheck]:
     ac = cfg["aircraft"]
     src = cfg["sources"]
@@ -187,6 +194,46 @@ def plan_checks(cfg: dict) -> list[PlannedCheck]:
     add("phugoid_period_flight_test", ph_period, ph.get("period_known_deviation"))
     add("phugoid_damping_flight_test", ph_zeta)
     add("phugoid_linear_vs_nonlinear", ph_consistency)
+
+    # Ground: static RPM, takeoff and landing ground roll (POH Sections 2 and 5)
+    gr = cfg["ground"]
+
+    def ground_loading():
+        return _loading(ac, gr["weight_lb"], gr["cg_in"], gr["fuel_lb"])
+
+    def takeoff():
+        to = gr["takeoff"]
+        return _takeoff(ac, ground_loading(), to["flaps_deg"], to["elevator"], to["hold_s"])
+
+    def static_rpm():
+        r = gr["static_rpm"]
+        return Check("static_rpm", src[gr["source"]], f"Static RPM, full throttle, sea level ({r['ref']})",
+                     f"{r['min']}-{r['max']} rpm", takeoff().static_rpm, "rpm", r["min"], r["max"], r.get("known_deviation"))
+
+    def takeoff_ground_roll():
+        to = gr["takeoff"]
+        ref, tol = to["ground_roll_ft"], to["ground_roll_ft"] * to["tolerance_pct"] / 100
+        return Check("takeoff_ground_roll", src[gr["source"]], f"Takeoff ground roll, 2400 lb, sea level, 15 C ({to['ref']})",
+                     f"{ref} ft", takeoff().ground_roll_m / FT_TO_M, "ft", ref - tol, ref + tol, to.get("known_deviation"))
+
+    def liftoff_speed():
+        to = gr["takeoff"]
+        ref, tol = to["liftoff_kias"], to["liftoff_tolerance_kt"]
+        return Check("takeoff_liftoff_speed", src[gr["source"]], f"Takeoff lift-off speed, short field, flaps {to['flaps_deg']} deg ({to['ref']})",
+                     f"{ref} KIAS", takeoff().liftoff_cas_mps / KT_TO_MPS, "KCAS", ref - tol, ref + tol)
+
+    def landing_ground_roll():
+        la = gr["landing"]
+        ref, tol = la["ground_roll_ft"], la["ground_roll_ft"] * la["tolerance_pct"] / 100
+        roll = landing_ground_roll_m(ac, ground_loading(), la["touchdown_kcas"] * KT_TO_MPS)
+        return Check("landing_ground_roll", src[gr["source"]],
+                     f"Landing ground roll, maximum braking from {la['touchdown_kcas']} KCAS, 2400 lb, sea level, 15 C ({la['ref']})",
+                     f"{ref} ft", roll / FT_TO_M, "ft", ref - tol, ref + tol, la.get("known_deviation"))
+
+    add("static_rpm", static_rpm, gr["static_rpm"].get("known_deviation"))
+    add("takeoff_ground_roll", takeoff_ground_roll, gr["takeoff"].get("known_deviation"))
+    add("takeoff_liftoff_speed", liftoff_speed)
+    add("landing_ground_roll", landing_ground_roll, gr["landing"].get("known_deviation"))
 
     # Flying qualities (MIL-F-8785C, Class I, Category B, Level 1)
     fq = cfg["flying_qualities"]

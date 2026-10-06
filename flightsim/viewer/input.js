@@ -1,7 +1,8 @@
 // Pilot input from keyboard and gamepad, in the stream protocol's terms:
 // stick and pedals in [-1, 1] relative to trim, throttle and flaps absolute in [0, 1],
 // pitch trim absolute in [-1, 1] (+ = nose down, like rolling the trim wheel forward).
-// Flaps move one detent (0, 10, 20, 30 deg) per press; pitch trim moves while held.
+// Flaps move one detent (0, 10, 20, 30 deg) per press; pitch trim moves while held;
+// brakes (both main wheels, in [0, 1]) act while held.
 // Signs follow the simulator: elevator + = push (nose down); rudder + = nose LEFT,
 // so the right pedal sends a negative rudder command.
 
@@ -17,14 +18,16 @@ const AXIS_KEYS = {
 const THROTTLE_KEYS = { KeyW: 1, PageUp: 1, KeyS: -1, PageDown: -1 };
 const FLAP_KEYS = { KeyF: -1, KeyV: 1 }; // F = flaps up one detent, V = down one detent
 const TRIM_KEYS = { KeyT: 1, KeyG: -1 }; // T = trim nose down, G = trim nose up
+const BRAKE_KEY = "KeyB"; // hold for the toe brakes
 const TRIM_RATE_PER_S = 0.15;
 const FLAP_DETENTS = 3; // 0, 10, 20, 30 deg = 0, 1/3, 2/3, 1
 // Standard gamepad buttons: 4 = LB, 5 = RB, 12 = D-pad up, 13 = D-pad down.
 const PAD_FLAPS = { 4: -1, 5: 1 };
 const PAD_TRIM = { 12: 1, 13: -1 };
+const PAD_BRAKE = 1; // B (Xbox) / circle
 export const HANDLED_KEYS = new Set([
   ...Object.values(AXIS_KEYS).flatMap(Object.keys),
-  ...Object.keys(THROTTLE_KEYS), ...Object.keys(FLAP_KEYS), ...Object.keys(TRIM_KEYS),
+  ...Object.keys(THROTTLE_KEYS), ...Object.keys(FLAP_KEYS), ...Object.keys(TRIM_KEYS), BRAKE_KEY,
 ]);
 
 import { choosePad, controlValue, deadzone, loadSettings, profileFor, shape } from "./stick.js";
@@ -35,14 +38,14 @@ export class PilotInput {
   constructor() {
     this.down = new Set();
     this.shift = false;
-    this.value = { elevator: 0, aileron: 0, rudder: 0, throttle: 0, flaps: 0, pitch_trim: 0 };
+    this.value = { elevator: 0, aileron: 0, rudder: 0, throttle: 0, flaps: 0, pitch_trim: 0, brake: 0 };
     this.gamepadName = null;
     this._padPrev = {};
     this.stick = loadSettings(); // per-axis sensitivity and expo (stick.js)
   }
 
   reset(throttle, flaps = 0, pitchTrim = 0) {
-    this.value = { elevator: 0, aileron: 0, rudder: 0, throttle, flaps, pitch_trim: pitchTrim };
+    this.value = { elevator: 0, aileron: 0, rudder: 0, throttle, flaps, pitch_trim: pitchTrim, brake: 0 };
     this.down.clear();
     this._padPrev = {};
     this._leverStart = null; // a throttle lever takes over only once it is moved
@@ -108,6 +111,7 @@ export class PilotInput {
     for (const [code, sign] of Object.entries(THROTTLE_KEYS)) if (this.down.has(code)) throttleDir += sign;
     let trimDir = 0;
     for (const [code, sign] of Object.entries(TRIM_KEYS)) if (this.down.has(code)) trimDir += sign;
+    let brake = this.down.has(BRAKE_KEY) ? 1 : 0;
     let lever = null;
     if (pad) {
       // Axes as mapped in Stick settings (defaults for standard gamepads: left stick =
@@ -127,6 +131,7 @@ export class PilotInput {
         // Standard layout: triggers = throttle up (RT) and down (LT), bumpers = flaps, D-pad = trim.
         throttleDir += (pad.buttons[7]?.value ?? 0) - (pad.buttons[6]?.value ?? 0);
         for (const [b, sign] of Object.entries(PAD_TRIM)) if (pad.buttons[b]?.pressed) trimDir += sign;
+        brake = Math.max(brake, pad.buttons[PAD_BRAKE]?.value ?? 0);
         for (const [b, dir] of Object.entries(PAD_FLAPS)) {
           const pressed = Boolean(pad.buttons[b]?.pressed);
           if (pressed && !this._padPrev[b]) this._stepFlaps(dir); // one detent per press
@@ -145,6 +150,7 @@ export class PilotInput {
       }
     }
     this.value.pitch_trim = clamp(this.value.pitch_trim + clamp(trimDir, -1, 1) * TRIM_RATE_PER_S * dt, -1, 1);
+    this.value.brake += (brake - this.value.brake) * k;
     return { ...this.value };
   }
 }

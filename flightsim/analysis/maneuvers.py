@@ -3,6 +3,7 @@
 Each maneuver builds its own core so results do not depend on earlier runs.
 """
 
+import math
 from dataclasses import dataclass, replace
 
 import numpy as np
@@ -219,3 +220,60 @@ def lean_cruise(
     u = core.trim()
     s = core.step(u)
     return LeanCruise(mixture=mixture, throttle=u.throttle, engine_rpm=s.engine_rpm, fuel_flow_kgps=core.engine().fuel_flow_kgps)
+
+
+# --- Ground roll (POH Section 5 takeoff and landing distances) ------------------------------
+
+GROUND_DT_S = 1.0 / 120.0
+K_STEER = 4.0  # rudder (and nosewheel) per rad heading error: keeps the roll straight
+K_YAW_DAMP = 1.0  # rudder per rad/s yaw rate
+
+
+def _pedals(s: State) -> float:
+    """Rudder that holds heading 000 on the ground (rudder + = nose left), like a pilot
+    holding the centreline against the propeller's left-turning tendency."""
+    return max(-1.0, min(1.0, K_STEER * math.atan2(math.sin(s.psi_rad), math.cos(s.psi_rad)) + K_YAW_DAMP * s.r_radps))
+
+
+def landing_ground_roll_m(aircraft: str, loading: Loading, touchdown_cas_mps: float, flaps: float = 1.0) -> float:
+    """Ground roll with maximum braking from a touchdown at `touchdown_cas_mps` (sea level,
+    calm, so CAS = TAS = ground speed): all wheels down, throttle closed (engine idling),
+    full brakes, pedals holding the heading, other controls neutral. Distance from
+    touchdown to a stop, integrated from the ground speed."""
+    core = JSBSimCore(aircraft, GROUND_DT_S)
+    u = Controls(throttle=0.0, flaps=flaps, brake=1.0)
+    s = core.reset_on_ground(0.0, loading, u, speed_mps=touchdown_cas_mps)
+    distance = 0.0
+    while math.hypot(s.v_north_mps, s.v_east_mps) > 0.05 and s.t_s < 120.0:
+        s = core.step(replace(u, rudder=_pedals(s)))
+        distance += math.hypot(s.v_north_mps, s.v_east_mps) * GROUND_DT_S
+    return distance
+
+
+@dataclass(frozen=True)
+class TakeoffRoll:
+    static_rpm: float  # full throttle against the brakes, settled
+    ground_roll_m: float  # brake release to lift-off (no wheel on the ground)
+    liftoff_cas_mps: float
+    liftoff_pitch_rad: float
+
+
+def takeoff_roll(aircraft: str, loading: Loading, flaps: float, elevator: float, hold_s: float = 10.0) -> TakeoffRoll:
+    """Short-field takeoff (POH Section 4): brakes set, full throttle (held `hold_s` until
+    the RPM settles), brakes released, the elevator held at `elevator` (negative = back
+    pressure, "slightly tail low") and the pedals holding the heading until the aircraft
+    lifts off."""
+    core = JSBSimCore(aircraft, GROUND_DT_S)
+    u = Controls(throttle=1.0, flaps=flaps, brake=1.0, elevator=elevator)
+    s = core.reset_on_ground(0.0, loading, u)
+    for _ in range(round(hold_s / GROUND_DT_S)):
+        s = core.step(u)
+    static_rpm = s.engine_rpm
+    u = replace(u, brake=0.0)
+    distance = 0.0
+    while s.t_s < hold_s + 120.0:
+        s = core.step(replace(u, rudder=_pedals(s)))
+        distance += math.hypot(s.v_north_mps, s.v_east_mps) * GROUND_DT_S
+        if not any(core.contacts()[w] for w in ("NOSE", "LEFT_MAIN", "RIGHT_MAIN")):
+            return TakeoffRoll(static_rpm, distance, s.cas_mps, s.theta_rad)
+    raise RuntimeError("no lift-off within 120 s")

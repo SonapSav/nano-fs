@@ -106,7 +106,12 @@ def main() -> None:
             print(f"  sink rate ft/min:           {span('td_sink_mps', 196.850394)}")
             print(f"  airspeed KCAS:              {span('td_cas_mps', 1.943844)}")
             print(f"  pitch deg:                  {span('td_pitch_deg')}")
+            print(f"  crab at touchdown deg:      {span('td_drift_deg')}")
             print(f"  bounces: {sum(r['bounces'] for r in landed)}")
+            if all(r["ground_roll_m"] is not None for r in landed):
+                print(f"  ground roll m:              {span('ground_roll_m')}")
+                print(f"  stopped past threshold m:   {span('stop_along_m')}")
+                print(f"  rollout max offset m:       {span('rollout_max_cross_m')}")
 
 
 if __name__ == "__main__":

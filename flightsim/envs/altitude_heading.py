@@ -1,8 +1,8 @@
 """Gymnasium environment: capture and hold a target altitude and heading.
 
 Action (Box[-1, 1]^n): absolute commands for the task's controls (`actions` in the env
-config): elevator, aileron, rudder, throttle, optionally flaps and pitch trim.
-Throttle and flaps map [-1, 1] -> [0, 1]. Controls not in the action set (pitch trim,
+config): elevator, aileron, rudder, throttle, optionally flaps, pitch trim and brake.
+Throttle, flaps and brake map [-1, 1] -> [0, 1]. Controls not in the action set (pitch trim,
 mixture, flaps by default) are held at the episode's trim values, so an action near the
 trim point flies straight and level.
 
@@ -31,7 +31,7 @@ from flightsim.world import ground_elevation_m
 
 ACTION_NAMES = BASE_ACTIONS  # default controls
 G0 = 9.80665
-_UNIT_RANGE = ("throttle", "flaps")  # commands in [0, 1], actions in [-1, 1]
+_UNIT_RANGE = ("throttle", "flaps", "brake")  # commands in [0, 1], actions in [-1, 1]
 
 # Observation name -> scale it is divided by (keeps typical values within about +/-1).
 OBS_SCALES = {

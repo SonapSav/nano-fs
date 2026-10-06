@@ -10,9 +10,9 @@ from flightsim.world.terrain import R_EARTH_M
 
 
 # Controls a task may give its pilot, in action-vector order. Every task has the first four;
-# flaps and pitch trim are optional (held at trim otherwise).
+# flaps, pitch trim and brake are optional (held at trim otherwise; the brake is 0 at trim).
 BASE_ACTIONS = ("elevator", "aileron", "rudder", "throttle")
-OPTIONAL_ACTIONS = ("flaps", "pitch_trim")
+OPTIONAL_ACTIONS = ("flaps", "pitch_trim", "brake")
 
 
 @dataclass(frozen=True)
@@ -111,6 +111,10 @@ class ApproachConfig:
     reward: dict  # weights and scales, see configs/envs/approach_landing.yaml
     max_drift_rad: float = math.inf  # crab (track - heading) at touchdown; more is a side load
     wind: dict | None = None  # low-altitude wind (MIL-F-8785C 3.7.3), see approach_landing_crosswind.yaml
+    # Rollout to a full stop (when configured): landed = stopped on the runway, slower than
+    # this; not stopped within max_ground_s of the first contact is a failure (no_stop).
+    # Without it, landed = all wheels down for settle_s.
+    stop_speed_mps: float | None = None
 
 
 @dataclass(frozen=True)
@@ -237,10 +241,11 @@ def _parse_approach(a: dict | None) -> ApproachConfig | None:
         lost_vertical_m=float(lim["lost_vertical_m"]),
         lost_lateral_m=float(lim["lost_lateral_m"]),
         settle_s=float(a["settle_s"]),
-        max_ground_s=float(a["max_ground_s"]),
+        max_ground_s=float(a["rollout"]["max_rollout_s"]) if a.get("rollout") else float(a["max_ground_s"]),
         reward=dict(a["reward"]),
         max_drift_rad=math.radians(lim["max_drift_deg"]) if "max_drift_deg" in lim else math.inf,
         wind=dict(a["wind"]) if a.get("wind") else None,
+        stop_speed_mps=float(a["rollout"]["stop_speed_kt"]) * KT_TO_MPS if a.get("rollout") else None,
     )
 
 

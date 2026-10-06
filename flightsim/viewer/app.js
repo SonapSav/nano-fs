@@ -16,7 +16,7 @@ const els = {
   message: $("message"), run: $("run"), hint: $("hint"),
 };
 const gauges = { asi: $("asi"), ai: $("ai"), alt: $("alt"), tc: $("tc"), hi: $("hi"), vsi: $("vsi"), tach: $("tach"), controls: $("controls") };
-const readout = { alt: $("r-alt"), talt: $("r-talt"), hdg: $("r-hdg"), thdg: $("r-thdg"), kias: $("r-kias"), aoa: $("r-aoa"), g: $("r-g"), flaps: $("r-flaps"), trim: $("r-trim") };
+const readout = { alt: $("r-alt"), talt: $("r-talt"), hdg: $("r-hdg"), thdg: $("r-thdg"), kias: $("r-kias"), aoa: $("r-aoa"), g: $("r-g"), flaps: $("r-flaps"), trim: $("r-trim"), brake: $("r-brake") };
 
 const LIVE = "live"; // PID autopilot
 const LIVE_LQR = "live_lqr";
@@ -41,10 +41,12 @@ const LANDING_FAILURES = {
   wingtip_strike: "wingtip struck the ground",
   nose_strike: "propeller/nose struck the ground",
   lost_approach: "too far off the glide path or centreline",
+  overrun: "ran off the end of the runway (hold B to brake once the nose wheel is down)",
+  no_stop: "did not stop on the runway in time (hold B to brake)",
 };
 const INPUT_SEND_HZ = 30;
 const VIEW_HINT = "Drag to look around, scroll to zoom, space to pause, C for cockpit view, M for sound";
-const FLY_HINT = "Arrows pitch and roll; Z/X rudder; W/S throttle; F/V flaps; T/G trim; Shift full deflection. Gamepad: LB/RB flaps, D-pad trim";
+const FLY_HINT = "Arrows pitch and roll; Z/X rudder and nosewheel; W/S throttle; F/V flaps; T/G trim; B brakes; Shift full deflection. Gamepad: LB/RB flaps, D-pad trim, B brakes";
 
 const scene = new FlightScene($("view"));
 const pilot = new PilotInput();
@@ -216,7 +218,9 @@ function handle(msg) {
         const td = msg.landing.touchdown;
         const zone = td.in_zone ? "in the touchdown zone" : `${Math.round(td.along_m)} m past the threshold (zone 100-400 m)`;
         say(`Landed ${zone}, ${Math.round(td.sink_mps * 196.85)} ft/min, ${Math.round(td.cas_mps * 1.94384)} kt, ` +
-          `${Math.abs(td.cross_m).toFixed(1)} m ${td.cross_m >= 0 ? "right" : "left"} of the centreline${msg.landing.bounces ? `, ${msg.landing.bounces} bounce(s)` : ""}. Press Play to go again.`);
+          `${Math.abs(td.cross_m).toFixed(1)} m ${td.cross_m >= 0 ? "right" : "left"} of the centreline${msg.landing.bounces ? `, ${msg.landing.bounces} bounce(s)` : ""}` +
+          (msg.landing.rollout ? `; stopped after a ${Math.round(msg.landing.rollout.ground_roll_m)} m ground roll, ${Math.round(msg.landing.rollout.stop_along_m)} m down the runway` : "") +
+          ". Press Play to go again.");
       } else if (msg.reason === "finished") say("Flight finished. Press Play to go again.");
       else if (msg.reason.startsWith("terminated:")) {
         const why = msg.reason.slice(11);
@@ -463,8 +467,10 @@ function updateReadout(row) {
     readout.flaps.classList.toggle("warn", over);
     const trim = row.cmd_pitch_trim_norm;
     readout.trim.textContent = trim == null ? "–" : `${Math.round(Math.abs(trim) * 100)}% ${trim >= 0 ? "nose down" : "nose up"}`;
+    const brake = row.cmd_brake_norm;
+    readout.brake.textContent = brake == null ? "–" : brake < 0.01 ? "off" : `${Math.round(brake * 100)}%`;
   } else {
-    readout.flaps.textContent = readout.trim.textContent = "–";
+    readout.flaps.textContent = readout.trim.textContent = readout.brake.textContent = "–";
   }
 }
 

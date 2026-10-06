@@ -66,7 +66,7 @@ Work through these in order. Finish and validate each step before starting the n
   - All randomness (wind, gusts, initial-state perturbations) is generated in Python from a seeded `numpy.random.Generator` and fed into JSBSim as inputs. Do not rely on JSBSim's internal turbulence RNG unless we verify it can be seeded.
   - Every log records the JSBSim version and a hash of the aircraft definition files, alongside seed and config hash.
   - Identical logs are expected on the same machine with pinned versions; bit-identical results across platforms are not guaranteed.
-- **Logging schema:** defined once in `flightsim/datalog/schema.py` and versioned (`SCHEMA_VERSION`, currently 1). Do not change column names or units without bumping the version; `read_log` refuses other versions. Schema v1 decisions:
+- **Logging schema:** defined once in `flightsim/datalog/schema.py` and versioned (`SCHEMA_VERSION`, currently 2: v1 plus `cmd_brake_norm`). Do not change column names or units without bumping the version; `read_log` reads the versions in `READABLE_VERSIONS` (v1 logs come back with brake 0) and refuses others. Schema decisions (v1):
   - One row per timestep, float64 throughout (precision for fitting dynamic modes); written with zstd, float columns BYTE_STREAM_SPLIT-encoded (lossless, about half the size). Row i = state i + the command produced from it; the last row's commands are null.
   - `run_id`, `seed`, `config_hash` repeated on every row so runs concatenate trivially.
   - File metadata: schema version, run id, aircraft, aircraft hash, JSBSim version, canonical config JSON (what the hash covers), trim result, code version (`flightsim.code_version`: source hash of the flightsim package plus git commit / dirty flag / diff hash when a repository is available; see `flightsim/provenance.py`).
@@ -106,7 +106,7 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 ```
 
 ## Sign conventions (verified against JSBSim c172p)
-- Elevator command +: nose down. Aileron +: roll right. Rudder +: trailing edge left, nose LEFT (opposite of pedal intuition).
+- Elevator command +: nose down. Aileron +: roll right. Rudder +: trailing edge left, nose LEFT (opposite of pedal intuition); the rudder command also steers the nosewheel the same way. Brake: 0-1, both main wheels.
 - JSBSim trim adjusts throttle, `pitch_trim`, aileron and rudder; `elevator` stays 0. Controllers must output total commands (trim value + correction).
 - Body-axis accelerations in `State` are specific force (what an accelerometer reads): about -1 g on z in level flight.
 
@@ -120,6 +120,8 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - JSBSim's trim in wind fails for strong headwinds at approach speeds (wind above ~0.75 x airspeed in the descent; its alpha iteration does not settle). The approach task trims in calm air and then calls `JSBSimCore.add_steady_wind` on the same core, which re-runs the IC with the same air-relative state and keeps the engine's trimmed RPM (a fresh core would restart the engine at the wrong RPM; the RPM properties are read-only).
 - Steady wind at trim: `ic/vw-north-fps` ignores writes; set `ic/vw-mag-fps` + `ic/vw-dir-deg` (direction the air moves TOWARD) and then the ground velocity `ic/vn-fps`/`ic/ve-fps`/`ic/vd-fps` = air velocity + wind. Setting `ic/vt-fps` with wind gives a slipping, wrong-airspeed start, or a failed trim. `JSBSimCore.reset` handles this; calm resets keep the original path.
 - `propulsion/set-running` resets the mixture command to full rich (other commands are kept); `JSBSimCore.reset` re-applies the requested mixture. The c172p tanks use 6.6 lb/gal fuel, so convert fuel mass (`JSBSimCore.engine()`), not JSBSim's gallon figures, when comparing with the POH (6 lb/gal).
+- The c172p model does not link nosewheel steering to the rudder (`fcs/steer-cmd-norm` stays 0, so ground handling is aerodynamic rudder only). The core sets steer = -rudder (steer +1 = nose right, 10 deg) in `_apply`.
+- `propulsion/set-running` starts the engine at ~2470 RPM whatever the throttle; it takes seconds to spin down. `JSBSimCore.reset_on_ground` sits with brakes set and throttle closed (`settle_s`), then for a rolling start re-runs the IC (the engine state survives `run_ic()`). JSBSim's ground trim (`simulation/do_simple_trim = 2`) fails at speed with the brakes set or with non-neutral stick/pedals.
 - `atmosphere/gust-*-fps` survive `run_ic()`; `JSBSimCore.reset` zeroes them.
 - Terrain: JSBSim's default ground is a level plane at `position/terrain-elevation-asl-ft` (the gear and `h-agl-ft` follow it, also when changed mid-run). Envs with `terrain: procedural` set it every step from `flightsim/world` at the aircraft's position (slopes under the gear are ignored); `JSBSimCore.reset(..., ground_elevation_m=)` sets it for the start. Turbulence is ours (seeded, `flightsim/atmosphere/turbulence.py`), not JSBSim's `turb-type`.
 
@@ -146,7 +148,7 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - Validation report: `uv run python scripts/validate.py` (regenerates `docs/VALIDATION.md`)
 - Controller comparison: `uv run python scripts/compare_controllers.py --episodes 100 [--log-dir data/episodes]`
 - Batch: `uv run python scripts/batch_run.py --seeds 0:1000 [--policy pid|lqr|trim_hold] [--set wind.steady_speed_mps=[5,15]] [--policy-set weights.states.phi_rad=0.1] [--logs]`
-- Approach and landing: `uv run python scripts/batch_run.py --env-config configs/envs/approach_landing.yaml --policy approach --seeds 0:1000` (prints landing statistics)
+- Approach and landing: `uv run python scripts/batch_run.py --env-config configs/envs/approach_landing.yaml --policy approach --seeds 0:1000` (prints landing and rollout statistics; landings roll to a full stop); crosswind and gusts: `configs/envs/approach_landing_crosswind.yaml`
 - Controller comparison and RL use `configs/envs/altitude_heading_hold_comfort.yaml` (comfort penalties, structural limits, terminations charged for the remaining steps): `uv run python scripts/batch_run.py --env-config configs/envs/altitude_heading_hold_comfort.yaml --seeds 0:1000 --policy lqr`
 - Seeds: tune controllers on 1000-1999. Report on 0-999 and 2000-2999 (both were used while debugging the LQR retune, 2026-10-04) and on 3000-3999 (untouched; use only for final numbers). RL training draws its episodes from its own seeded streams, never these ranges. LQR gain schedules are cached in `data/cache/lqr/` (keyed by aircraft, JSBSim version, loading, LQR config, rate and flightsim source hash).
 - RL: `uv run python scripts/train_rl.py configs/rl/ppo_comfort.yaml [--set wall_clock_limit_min=5]` writes `data/rl/<run_id>/`; evaluate with `scripts/batch_run.py --policy rl --rl-model data/rl/<run_id>/best`. Long runs: start them in the background and write the console log to a file, so an interrupted session leaves the saved models and log behind.

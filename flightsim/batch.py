@@ -34,7 +34,7 @@ from flightsim.envs.evaluate import run_episode
 from flightsim.envs.policies import LQRPolicy, PIDPolicy, TrimHoldPolicy
 
 POLICIES = ("pid", "lqr", "rl", "approach", "trim_hold")
-BATCH_FORMAT = 5  # 2: lqr policy, envelope metrics; 3: comfort_cost; 4: code_version in manifest; 5: landing columns
+BATCH_FORMAT = 6  # 2: lqr policy, envelope metrics; 3: comfort_cost; 4: code_version in manifest; 5: landing columns; 6: drift, rollout
 
 
 def make_manifest(env_raw: dict, policy: str, policy_raw: dict | None, seeds: list[int], logs: bool) -> dict:
@@ -110,7 +110,10 @@ def _run_seed(seed: int) -> dict:
     return row
 
 
-LANDING_COLUMNS = ("landed", "landing_failure", "td_along_m", "td_cross_m", "td_sink_mps", "td_cas_mps", "td_pitch_deg", "td_bank_deg", "bounces")
+LANDING_COLUMNS = (
+    "landed", "landing_failure", "td_along_m", "td_cross_m", "td_sink_mps", "td_cas_mps", "td_pitch_deg", "td_bank_deg",
+    "td_drift_deg", "bounces", "stop_along_m", "ground_roll_m", "rollout_max_cross_m",
+)  # fmt: skip
 
 
 def _landing_columns(env) -> dict:
@@ -118,11 +121,12 @@ def _landing_columns(env) -> dict:
     if not hasattr(env, "landing_summary"):
         return dict.fromkeys(LANDING_COLUMNS)
     s = env.landing_summary()
-    td = s["touchdown"] or {}
+    td, ro = s["touchdown"] or {}, s.get("rollout") or {}
     return {
         "landed": s["landed"], "landing_failure": s["failure"], "td_along_m": td.get("along_m"), "td_cross_m": td.get("cross_m"),
         "td_sink_mps": td.get("sink_mps"), "td_cas_mps": td.get("cas_mps"), "td_pitch_deg": td.get("pitch_deg"),
-        "td_bank_deg": td.get("bank_deg"), "bounces": s["bounces"],
+        "td_bank_deg": td.get("bank_deg"), "td_drift_deg": td.get("drift_deg"), "bounces": s["bounces"],
+        "stop_along_m": ro.get("stop_along_m"), "ground_roll_m": ro.get("ground_roll_m"), "rollout_max_cross_m": ro.get("max_cross_m"),
     }  # fmt: skip
 
 
@@ -144,7 +148,9 @@ SUMMARY_SCHEMA = pa.schema(
         # Approach task only (null otherwise): touchdown judged as in envs/approach.py.
         ("landed", pa.bool_()), ("landing_failure", pa.string()), ("td_along_m", pa.float64()), ("td_cross_m", pa.float64()),
         ("td_sink_mps", pa.float64()), ("td_cas_mps", pa.float64()), ("td_pitch_deg", pa.float64()), ("td_bank_deg", pa.float64()),
-        ("bounces", pa.int64()),
+        ("td_drift_deg", pa.float64()), ("bounces", pa.int64()),
+        # Full-stop approach tasks (`rollout` configured): where the aircraft stopped.
+        ("stop_along_m", pa.float64()), ("ground_roll_m", pa.float64()), ("rollout_max_cross_m", pa.float64()),
     ]
 )  # fmt: skip
 

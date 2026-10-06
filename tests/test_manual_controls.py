@@ -174,3 +174,17 @@ def test_server_routes_flaps_and_trim_to_the_physics(tmp_path):
     assert rows[-2]["cmd_pitch_trim_norm"] == pytest.approx(0.2)
     assert math.degrees(rows[-1]["flap_pos_rad"]) == pytest.approx(10.0, abs=0.5)
     assert error["type"] == "error" and "stormy" in error["message"]
+
+
+def test_human_brakes_act_while_held_and_release_when_input_stops():
+    clock = FakeClock()
+    pilot = HumanPolicy(clock)
+    names = (*BASE_ACTIONS, "brake")
+    pilot.reset({"trim": Controls(throttle=0.0), "action_names": names})
+    pilot.set_input(0.0, 0.0, 0.0, 0.0, brake=0.8)
+    assert pilot(None, {})[4] == pytest.approx(2 * 0.8 - 1)  # brake held
+    pilot.set_input(0.0, 0.0, 0.0, 0.0)
+    assert pilot(None, {})[4] == pytest.approx(-1.0)  # omitted = released
+    pilot.set_input(0.0, 0.0, 0.0, 0.0, brake=1.0)
+    clock.t = STALE_AFTER_S + 1.0
+    assert pilot(None, {})[4] == pytest.approx(-1.0)  # input stopped: released

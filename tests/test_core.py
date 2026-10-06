@@ -91,3 +91,51 @@ def test_contacts_parked_and_tail_strike_geometry(cruise):
     cg, agl = (f["inertia/cg-x-in"], f["inertia/cg-y-in"], f["inertia/cg-z-in"]), f["position/h-agl-ft"] * 12
     strike = next(d for d in range(0, 30) if point_height_in(tail, cg, 0.0, math.radians(d), agl) <= 0)
     assert 8 <= strike <= 15
+
+
+# --- On the ground: resting start, brakes, nosewheel steering --------------------------------
+
+
+def _ground(speed_mps=0.0, **controls):
+    from flightsim.core import Controls
+
+    core = JSBSimCore("c172p", 1 / 120)
+    u = Controls(**controls)
+    return core, u, core.reset_on_ground(math.radians(90), controls=u, speed_mps=speed_mps)
+
+
+def test_reset_on_ground_rests_on_the_wheels_with_the_engine_idling():
+    core, u, s = _ground(throttle=0.0, brake=1.0)
+    assert all(core.contacts()[w] for w in ("NOSE", "LEFT_MAIN", "RIGHT_MAIN"))
+    assert s.engine_rpm < 900 and abs(s.v_down_mps) < 0.01
+    for _ in range(240):
+        s = core.step(u)
+    assert math.hypot(s.v_north_mps, s.v_east_mps) < 0.05  # held by the brakes
+
+
+def test_rolling_start_keeps_its_speed_and_heading():
+    core, _, s = _ground(speed_mps=25.0)
+    assert math.hypot(s.v_north_mps, s.v_east_mps) == pytest.approx(25.0, abs=0.01)
+    assert s.psi_rad == pytest.approx(math.radians(90), abs=1e-3)
+    assert all(core.contacts()[w] for w in ("NOSE", "LEFT_MAIN", "RIGHT_MAIN"))
+    assert s.engine_rpm < 900  # the engine idled while the aircraft settled at rest
+
+
+def test_brakes_stop_the_roll_and_the_pedals_steer_the_nosewheel():
+    """The c172p model does not link the nosewheel to the rudder; the core does (rudder + =
+    nose left, so it turns the nose left on the ground)."""
+
+    def roll(**controls):
+        core, u, s = _ground(speed_mps=15.0, **controls)
+        for _ in range(120 * 3):
+            s = core.step(u)
+        return s
+
+    free, braked = roll(), roll(brake=1.0)
+    assert math.hypot(braked.v_north_mps, braked.v_east_mps) < math.hypot(free.v_north_mps, free.v_east_mps) - 5.0
+    left = roll(rudder=0.5)
+    assert core_heading_change(left) < -math.radians(10)  # nose left
+
+
+def core_heading_change(s) -> float:
+    return math.atan2(math.sin(s.psi_rad - math.radians(90)), math.cos(s.psi_rad - math.radians(90)))

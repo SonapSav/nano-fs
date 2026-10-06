@@ -2,9 +2,9 @@
 
 Inputs arrive asynchronously (from the browser) and are sampled by the environment at
 its fixed decision rate: the latest input is held until the next decision. If inputs
-stop arriving, the stick and pedals return to centre (trim); throttle, flaps and pitch
-trim hold their positions. Flaps and pitch trim only matter if the task's action set
-includes them; otherwise they stay at trim.
+stop arriving, the stick and pedals return to centre (trim) and the brakes release;
+throttle, flaps and pitch trim hold their positions. Flaps, pitch trim and brake only
+matter if the task's action set includes them; otherwise they stay at trim.
 """
 
 import math
@@ -32,6 +32,7 @@ class HumanPolicy:
         self._throttle = 0.0
         self._flaps = 0.0
         self._pitch_trim = 0.0
+        self._brake = 0.0
         self._received_at = -math.inf
 
     def reset(self, info: dict) -> None:
@@ -41,16 +42,17 @@ class HumanPolicy:
         self._throttle = float(self._trim.throttle)
         self._flaps = float(self._trim.flaps)
         self._pitch_trim = float(self._trim.pitch_trim)
+        self._brake = 0.0
         self._received_at = -math.inf
 
     def set_input(
         self, elevator: float, aileron: float, rudder: float, throttle: float,
-        flaps: float | None = None, pitch_trim: float | None = None,
+        flaps: float | None = None, pitch_trim: float | None = None, brake: float | None = None,
     ) -> None:  # fmt: skip
-        """Stick and pedals relative to trim (0 = centred); throttle and flaps absolute in
-        [0, 1]; pitch trim absolute in [-1, 1] (positive = nose down). Omitted flaps or
-        pitch trim keep their current value."""
-        values = [v for v in (elevator, aileron, rudder, throttle, flaps, pitch_trim) if v is not None]
+        """Stick and pedals relative to trim (0 = centred); throttle, flaps and brake
+        absolute in [0, 1]; pitch trim absolute in [-1, 1] (positive = nose down). Omitted
+        flaps or pitch trim keep their current value; an omitted brake is released."""
+        values = [v for v in (elevator, aileron, rudder, throttle, flaps, pitch_trim, brake) if v is not None]
         if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in values):
             raise ValueError("inputs must be finite numbers")
         clip = lambda v, lo, hi: max(lo, min(hi, float(v)))  # noqa: E731
@@ -60,6 +62,7 @@ class HumanPolicy:
             self._flaps = clip(flaps, 0, 1)
         if pitch_trim is not None:
             self._pitch_trim = clip(pitch_trim, -1, 1)
+        self._brake = 0.0 if brake is None else clip(brake, 0, 1)
         self._received_at = self._clock()
 
     def __call__(self, obs: np.ndarray, info: dict) -> np.ndarray:
@@ -69,5 +72,6 @@ class HumanPolicy:
         u = replace(
             t, elevator=t.elevator + e, aileron=t.aileron + a, rudder=t.rudder + r,
             throttle=self._throttle, flaps=self._flaps, pitch_trim=self._pitch_trim,
+            brake=0.0 if stale else self._brake,
         )  # fmt: skip
         return np.clip(controls_to_action(u, self._names), -1.0, 1.0)

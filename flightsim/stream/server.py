@@ -118,7 +118,7 @@ class Session:
             if isinstance(self.source, ManualSource) and self.task and not self.task.done():
                 self.source.pilot.set_input(
                     msg["elevator"], msg["aileron"], msg["rudder"], msg["throttle"],
-                    msg.get("flaps"), msg.get("pitch_trim"),
+                    msg.get("flaps"), msg.get("pitch_trim"), msg.get("brake"),
                 )  # fmt: skip
         elif kind == "pause":
             self.paused.set()

@@ -78,3 +78,18 @@ def test_float_columns_use_byte_stream_split_and_read_back_exactly(short_run, tm
     assert "BYTE_STREAM_SPLIT" not in enc["run_id"]
     table, _ = read_log(path)
     assert table.column("alt_msl_m").to_pylist() == [s.alt_msl_m for s in result.states]
+
+
+def test_version_1_logs_read_with_the_brake_released(tmp_path, short_run):
+    """Schema 2 added cmd_brake_norm; version 1 logs (no brakes) read as brake 0."""
+    cfg, result = short_run
+    path = write_log(tmp_path / "run.parquet", result, cfg.provenance)
+    table = pq.read_table(path)
+    v1 = table.drop_columns(["cmd_brake_norm"])
+    meta = dict(v1.schema.metadata)
+    meta[S.META_SCHEMA_VERSION.encode()] = b"1"
+    pq.write_table(v1.replace_schema_metadata(meta), path)
+    read, _ = read_log(path)
+    assert read.schema.remove_metadata() == SCHEMA
+    assert read.column("cmd_brake_norm").to_pylist() == [0.0] * (read.num_rows - 1) + [None]
+    assert read.column("alt_msl_m").to_pylist() == table.column("alt_msl_m").to_pylist()

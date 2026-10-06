@@ -22,6 +22,7 @@ class Controls:
     mixture: float = 1.0  # [0, 1]
     flaps: float = 0.0  # [0, 1], fraction of full flap travel
     pitch_trim: float = 0.0  # [-1, 1], added to elevator by the flight control system
+    brake: float = 0.0  # [0, 1], both main wheel (toe) brakes together
 
 
 @dataclass(frozen=True)

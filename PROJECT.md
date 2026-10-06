@@ -260,11 +260,20 @@ owner before work can start.
   and peak EGT mixtures are far apart (unlike a real engine); fine for fuel flow.
 - [ ] The model's empty-aircraft CG is aft of a typical 172P: the forward CG limit at
   2400 lb needs about 40 lb fuel and 860 lb in the front seats.
+- [ ] Ground checks (added 2026-10-06, POH at 2400 lb, sea level, 15 C): takeoff ground
+  roll 968 ft vs 892 (+8.5%, passes) and lift-off 52.6 KCAS vs 51 KIAS (passes), with a
+  "slightly tail low" elevator of -0.2 chosen as the technique. Two known deviations:
+  - Static RPM 2538 vs 2300-2420 (Section 2): about 120 RPM high.
+  - Landing ground roll with maximum braking from 51 KCAS: 370 ft vs 540 (31% short).
+    The model's full brakes give ~0.3 g (main gear static friction 0.8); the POH roll
+    implies ~0.2 g. Autopilot/RL braking well below full is unaffected; a tuned model
+    could lower the brake friction.
 
 ### Wind and atmosphere (from step 6)
 
-- [ ] Low-altitude turbulence model (MIL-F-8785C 3.7.3, below 1000-2000 ft) and wind
-  shear (3.7.3.2). Needed for takeoff and landing.
+- [x] Low-altitude turbulence model (MIL-F-8785C 3.7.3, below 1000-2000 ft) and wind
+  shear (3.7.3.2), 2026-10-06 (see "Crosswind landings"). Vector shear (direction change
+  with height) is not modelled.
 - [ ] Discrete gusts (MIL-F-8785C 3.7.1.3).
 - [ ] Gust angular rates (only translational gusts are modelled).
 - [ ] Severe turbulence is defined in the windy config (6.4 m/s) but has probability 0.
@@ -348,8 +357,8 @@ owner before work can start.
 
 - [x] Flaps and pitch trim joined the manual tasks' action set on 2026-10-04 (see
   "Manual flight hardware"); autopilot and RL tasks keep four controls.
-- [ ] Mixture and brakes are still held at trim; brakes (and probably mixture) belong
-  to the takeoff/landing item.
+- [x] Brakes joined the controls on 2026-10-06 (log schema 2, `cmd_brake_norm`; see
+  "Brakes and rollout"). Mixture is still held at trim.
 
 ### Manual flight hardware
 

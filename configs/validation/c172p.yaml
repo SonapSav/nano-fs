@@ -73,6 +73,34 @@ phugoid_flight_test:
   zeta_tolerance: 0.05
   period_known_deviation: "model phugoid 27.8 s, about 21% shorter than the ~35 s flight test; damping matches"
 
+ground:
+  source: poh
+  # Sea level, standard temperature (15 C: halfway between the POH's 10 C and 20 C
+  # columns), paved level dry runway, zero wind, 2400 lb.
+  weight_lb: 2400
+  cg_in: 43.4
+  fuel_lb: 370
+  static_rpm:
+    ref: Section 2, Powerplant Limitations (full throttle, carburetor heat off, mixture leaned to maximum RPM; the model's maximum is at full rich)
+    min: 2300
+    max: 2420
+    known_deviation: "model 2538 RPM, 118 RPM above the range (propeller/engine model)"
+  takeoff:
+    ref: Figure 5-5 short field (flaps 10, full throttle before brake release; 10 C 860 ft, 20 C 925 ft); Section 4 Short Field Takeoff
+    flaps_deg: 10
+    elevator: -0.2        # "slightly tail low": back pressure that lifts the nosewheel at ~30 KCAS (a technique choice)
+    hold_s: 10            # brakes held at full throttle until the RPM settles
+    ground_roll_ft: 892
+    tolerance_pct: 15
+    liftoff_kias: 51      # model CAS compared (no airspeed position error modelled)
+    liftoff_tolerance_kt: 3
+  landing:
+    ref: Figure 5-11 short field (flaps 30, power off, maximum braking; 10 C 530 ft, 20 C 550 ft)
+    touchdown_kcas: 51    # not stated by the POH: 1.1 x the flaps 30 stall speed (46 KCAS, Figure 5-3)
+    ground_roll_ft: 540
+    tolerance_pct: 15
+    known_deviation: "model 370 ft, 31% short: the model's full brakes decelerate at ~0.3 g (main gear friction 0.8), the POH roll implies ~0.2 g"
+
 flying_qualities:
   source: mil
   ref: Category B (cruise) flight phase; Tables IV, VI, VII, VIII and 3.2.1.2

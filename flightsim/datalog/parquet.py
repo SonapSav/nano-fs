@@ -59,10 +59,16 @@ def write_log(path: str | Path, result: RunResult, cfg: Provenance) -> Path:
 
 
 def read_log(path: str | Path) -> tuple[pa.Table, dict[str, str]]:
-    """Return the table and its flightsim metadata; refuses logs from another schema version."""
+    """Return the table (in the current schema) and its flightsim metadata; refuses logs
+    from unknown schema versions. Version 1 logs had no brakes, so they are read with
+    brake command 0 (null on the last row, like every command)."""
     table = pq.read_table(path)
     meta = {k.decode(): v.decode() for k, v in (table.schema.metadata or {}).items() if k.startswith(b"flightsim.")}
     version = int(meta.get(S.META_SCHEMA_VERSION, "0"))
-    if version != S.SCHEMA_VERSION:
-        raise ValueError(f"{path}: log schema version {version}, expected {S.SCHEMA_VERSION}")
+    if version not in S.READABLE_VERSIONS:
+        raise ValueError(f"{path}: log schema version {version}, expected one of {S.READABLE_VERSIONS}")
+    if version == 1:
+        n = table.num_rows
+        brake = pa.array([0.0] * (n - 1) + [None] if n else [], pa.float64())
+        table = table.append_column(S.SCHEMA.field("cmd_brake_norm"), brake)
     return table, meta

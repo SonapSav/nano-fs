@@ -34,7 +34,12 @@ flare:
   k_steer: -4.0              # rudder per rad heading error on the rollout (rudder + = nose left)
   # Crosswind: de-crab with rudder and hold the centreline with a wing low
   decrab_height_m: 8.0       # ~26 ft wheel height
-  k_align: -6.0              # rudder per rad heading error from the runway (rudder + = nose left)
+  k_align: -10.0             # rudder per rad heading error from the runway (rudder + = nose left); a 15 kt crosswind needs ~11 deg sideslip
   k_yaw_damp: 2.0            # rudder per rad/s yaw rate
   max_wing_low_deg: 8
   k_bank_decrab: 8.0         # aileron per rad bank error while de-crabbed (sideslip rolls the wing away from the wind)
+  ki_wing_low: 0.5           # rad bank per (rad track error x s) while de-crabbed: the wing low without a standing drift
+rollout:
+  nose_lower_rate_deg_s: 2.0  # POH: lower the nosewheel gently
+  brake: 0.5                 # once the nosewheel is down (POH normal landing: minimum required)
+  k_aileron: 3.0             # aileron per rad sideslip (into the wind)

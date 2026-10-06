@@ -2,4 +2,4 @@
 # to the pilot's controls. Used by the viewer's "Fly an approach" mode.
 base: approach_landing.yaml
 
-actions: [elevator, aileron, rudder, throttle, flaps, pitch_trim]
+actions: [elevator, aileron, rudder, throttle, flaps, pitch_trim, brake]

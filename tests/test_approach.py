@@ -20,8 +20,8 @@ def _env(**overrides):
     return make_env(load_env_config(CONFIG, overrides))
 
 
-def _pilot(env, info, flare_gain=8.0, idle_from_start=False):
-    """A simple test pilot: centreline and glide path tracking, then a flare at 6 m."""
+def _pilot(env, info, flare_gain=8.0, idle_from_start=False, brake=0.5):
+    """A simple test pilot: centreline and glide path tracking, a flare at 6 m, brakes on the ground."""
     trim, s = info["trim"], info["state"]
     _, cross = env.runway_coords(s)
     hdg_err = math.atan2(math.sin(env.cfg.approach.runway_heading_rad - s.psi_rad), math.cos(env.cfg.approach.runway_heading_rad - s.psi_rad))
@@ -33,7 +33,8 @@ def _pilot(env, info, flare_gain=8.0, idle_from_start=False):
         bank, throttle = 0.0, 0.0
         elevator = -flare_gain * (math.radians(6.0) - s.theta_rad) + 1.0 * s.q_radps
     aileron = trim.aileron + 1.5 * (bank - s.phi_rad) - 0.3 * s.p_radps
-    u = replace(trim, elevator=max(-1.0, min(1.0, elevator)), aileron=max(-1.0, min(1.0, aileron)), throttle=throttle)
+    brake = brake if env.touchdown is not None else 0.0
+    u = replace(trim, elevator=max(-1.0, min(1.0, elevator)), aileron=max(-1.0, min(1.0, aileron)), throttle=throttle, brake=brake)
     return controls_to_action(u, env.action_names)
 
 
@@ -49,7 +50,7 @@ def _fly(env, seed, **pilot):
 
 def test_config_selects_the_approach_task():
     env = _env()
-    assert isinstance(env, ApproachLandingEnv) and env.observation_space.shape == (20,)
+    assert isinstance(env, ApproachLandingEnv) and env.observation_space.shape == (21,)  # 16 + the previous 5 actions
     assert env.cfg.terrain == "procedural"
 
 
@@ -147,7 +148,7 @@ def test_approach_geometry_reaches_the_viewer_live_and_in_replays(tmp_path):
     from flightsim.stream.sources import LiveSource, ReplaySource
 
     cfg = load_env_config(CONFIG, {"episode_s": 2.0})
-    live = LiveSource(cfg, None, 0, policy=type("P", (), {"name": "x", "reset": lambda s, i: None, "__call__": lambda s, o, i: np.zeros(4, np.float32)})())
+    live = LiveSource(cfg, None, 0, policy=type("P", (), {"name": "x", "reset": lambda s, i: None, "__call__": lambda s, o, i: np.zeros(len(i["action_names"]), np.float32)})())
     assert live.approach["threshold_east_m"] == -500.0 and live.approach["glide_path_deg"] == pytest.approx(3.0)
     assert live.approach["aim_point_m"] == 250.0 and live.approach["elevation_m"] == pytest.approx(0.0, abs=1e-9)
     list(live.frames())
@@ -262,3 +263,37 @@ def test_landing_still_crabbed_is_a_side_load():
     env = _fly_autopilot(1009, decrab_height_m=0.0)
     assert env.landing_summary()["failure"] == "side_load"
     assert abs(env.landing_summary()["touchdown"]["drift_deg"]) > 5
+
+
+# --- Rollout to a stop ----------------------------------------------------------------------
+
+
+def test_landing_ends_stopped_on_the_runway():
+    _, terminated, truncated, info = _fly(_env(), 0)
+    ro = info["landing"]["rollout"]
+    assert truncated and not terminated and ro is not None
+    assert info["state"].v_north_mps ** 2 + info["state"].v_east_mps ** 2 < (2 * KT) ** 2
+    assert 0 < ro["stop_along_m"] < 1000 and ro["ground_roll_m"] > 50 and abs(ro["stop_cross_m"]) < 15
+
+
+def test_no_brakes_runs_off_the_end():
+    _, terminated, _, info = _fly(_env(), 0, brake=0.0)
+    assert terminated and info["termination_reason"] in ("overrun", "no_stop")
+
+
+def test_without_a_rollout_block_landing_ends_once_settled():
+    _, terminated, truncated, info = _fly(_env(**{"approach.rollout": None}), 0, brake=0.0)
+    assert truncated and not terminated and info["landing"]["landed"] and info["landing"]["rollout"] is None
+
+
+def test_approach_autopilot_brakes_to_a_stop_near_the_centreline():
+    from flightsim.control.approach import load_approach_gains
+    from flightsim.envs.evaluate import run_episode
+    from flightsim.envs.policies import ApproachPolicy
+
+    cfg = load_env_config(CONFIG)
+    env = make_env(cfg)
+    run_episode(env, ApproachPolicy(load_approach_gains(ROOT / "configs" / "approach_autopilot.yaml"), cfg.control_rate_hz), 0)
+    s = env.landing_summary()
+    assert s["landed"] and s["rollout"]["max_cross_m"] < 2.0
+    assert 150 < s["rollout"]["ground_roll_m"] < 350  # half brakes from ~53 KCAS (calm seeds: 250-271 m)

@@ -1,4 +1,4 @@
-"""Log schema, version 1. The single definition of what a flight log contains.
+"""Log schema, version 2 (version 1 plus the brake command). The single definition of what a flight log contains.
 
 Do not rename columns or change units without bumping SCHEMA_VERSION.
 Columns are listed explicitly (not derived from State) so a change to the
@@ -10,7 +10,8 @@ produced from it; the final row's commands are null.
 
 import pyarrow as pa
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+READABLE_VERSIONS = (1, 2)  # read_log upgrades version 1 (see datalog.parquet)
 
 RUN_COLUMNS = (
     pa.field("step", pa.int64(), nullable=False),
@@ -43,6 +44,7 @@ COMMAND_COLUMNS = {
     "mixture": "cmd_mixture_norm",
     "flaps": "cmd_flaps_norm",
     "pitch_trim": "cmd_pitch_trim_norm",
+    "brake": "cmd_brake_norm",  # added in version 2
 }
 
 SCHEMA = pa.schema(

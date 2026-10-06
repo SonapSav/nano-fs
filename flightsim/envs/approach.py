@@ -5,10 +5,14 @@ path (randomized per seed: offset left/right and up/down, airspeed, heading), tr
 steady descent in landing configuration. The pilot (or agent) follows the glide path and
 centreline, then lands main wheels first in the touchdown zone. The episode ends:
 
-  landed     all three wheels down for `settle_s` (or `max_ground_s` after first contact):
-             truncated, with a landing bonus minus touchdown quality costs
+  landed     with a `rollout` block: stopped on the runway (ground speed below
+             `stop_speed_kt`); otherwise all three wheels down for `settle_s` (or
+             `max_ground_s` after first contact). Truncated, with a landing bonus minus
+             touchdown quality costs
   failed     terminated with `failure_penalty`, reason one of:
-               undershoot, off_runway, hard_landing, nose_first, wing_low (at touchdown);
+               undershoot, off_runway, hard_landing, nose_first, wing_low, side_load (at
+               touchdown); off_runway, overrun (past the runway end), no_stop (still
+               rolling `max_rollout_s` after the first contact) on the rollout;
                tail_strike, wingtip_strike, nose_strike (structure touches the ground);
                lost_approach (too far off the glide path or centreline); bank, alpha,
                load_factor (the base envelope, while airborne)
@@ -203,6 +207,9 @@ class ApproachLandingEnv(AltitudeHeadingHoldEnv):
         self._all_down_s = 0.0
         self._airborne_after_touch_s = 0.0
         self._landed = False
+        self.nose_wheel_down = False
+        self.rollout: dict | None = None  # full-stop task: where and when the aircraft stopped
+        self._rollout_max_cross_m = 0.0
         self._prev_sim_state = self._state
 
     def _sim_step(self, u: Controls) -> State:
@@ -260,16 +267,31 @@ class ApproachLandingEnv(AltitudeHeadingHoldEnv):
                     self._fail("wing_low")
                 elif abs(math.radians(self.touchdown["drift_deg"])) > a.max_drift_rad:
                     self._fail("side_load")
+            elif along > a.runway_length_m:
+                self._fail("overrun")
             elif not on_runway:
                 self._fail("off_runway")
+            self._rollout_max_cross_m = max(self._rollout_max_cross_m, abs(cross))
             if self._airborne_after_touch_s >= BOUNCE_S:
                 self.bounces += 1
             self._airborne_after_touch_s = 0.0
         elif self.touchdown is not None:
             self._airborne_after_touch_s += dt
+        self.nose_wheel_down = contacts["NOSE"]
         self._all_down_s = self._all_down_s + dt if all(wheels) else 0.0
-        if self.touchdown is not None and (self._all_down_s >= a.settle_s or s.t_s - self.touchdown["t_s"] >= a.max_ground_s):
+        if self.touchdown is None or self._landed:
+            return
+        if a.stop_speed_mps is None:
+            if self._all_down_s >= a.settle_s or s.t_s - self.touchdown["t_s"] >= a.max_ground_s:
+                self._landed = True
+        elif all(wheels) and math.hypot(s.v_north_mps, s.v_east_mps) < a.stop_speed_mps:
             self._landed = True
+            self.rollout = {
+                "t_s": s.t_s, "stop_along_m": along, "stop_cross_m": cross,
+                "ground_roll_m": along - self.touchdown["along_m"], "max_cross_m": self._rollout_max_cross_m,
+            }  # fmt: skip
+        elif s.t_s - self.touchdown["t_s"] >= a.max_ground_s:
+            self._fail("no_stop")
 
     # --- Task definition -------------------------------------------------------------
 
@@ -374,6 +396,7 @@ class ApproachLandingEnv(AltitudeHeadingHoldEnv):
         info = super()._info()
         info["approach"] = self._geometry  # runway and glide path, for controllers and displays
         info["touched_down"] = self.touchdown is not None
+        info["nose_wheel_down"] = self.nose_wheel_down
         return info
 
     def landing_summary(self) -> dict:
@@ -382,5 +405,5 @@ class ApproachLandingEnv(AltitudeHeadingHoldEnv):
             "glide_path_dev_m": self.glide_path_deviation_m(), "centreline_dev_m": cross,
             "distance_to_threshold_m": -along, "touchdown": self.touchdown, "bounces": self.bounces,
             "landed": self._landed and self.failure is None, "failure": self.failure,
-            "touchdown_cost": self.touchdown_cost(),
+            "touchdown_cost": self.touchdown_cost(), "rollout": self.rollout,
         }  # fmt: skip

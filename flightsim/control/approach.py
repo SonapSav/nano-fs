@@ -10,8 +10,9 @@ Phases (latched in order):
             level, descent rate commanded proportional to wheel height (an exponential
             flare, sink = height / tau), so the aircraft rounds out and touches down main
             wheels first.
-  rollout   after touchdown: nose held up gently, wings level, rudder (nosewheel) keeps
-            the centreline.
+  rollout   after touchdown: throttle idle, the nose lowered gently, aileron into the
+            wind, the pedals (rudder and nosewheel steering) keep the centreline; once the
+            nosewheel is down, the brakes stop the aircraft.
 
 All from the full `State` plus the runway geometry the approach task provides
 (`envs.approach.approach_geometry`). `dt_s` is the controller's update period.
@@ -69,6 +70,11 @@ class ApproachGains:
     max_wing_low_rad: float  # bank limit while de-crabbed (to stop the drift), and on the ground
     max_alpha_rad: float  # stall protection: the pitch command keeps alpha below this
     k_bank_decrab: float  # aileron per rad bank error while de-crabbed (the sideslip rolls the wing away from the wind)
+    ki_wing_low: float  # rad bank per (rad track error * s) while de-crabbed (holds the wing low without a standing drift)
+    # Rollout
+    nose_lower_rate_rad_s: float  # after touchdown the pitch command falls this fast (lower the nose gently)
+    rollout_brake: float  # brake command once the nosewheel is down (POH normal landing: minimum required)
+    k_rollout_aileron: float  # aileron per rad sideslip on the ground (+: into the wind)
 
 
 def approach_gains_from_raw(raw: dict) -> ApproachGains:
@@ -109,6 +115,10 @@ def approach_gains_from_raw(raw: dict) -> ApproachGains:
         max_wing_low_rad=rad(fl["max_wing_low_deg"]),
         max_alpha_rad=rad(raw.get("max_alpha_deg", 90.0)),
         k_bank_decrab=float(fl.get("k_bank_decrab", lat["k_bank"])),
+        ki_wing_low=float(fl.get("ki_wing_low", 0.0)),
+        nose_lower_rate_rad_s=rad(raw.get("rollout", {}).get("nose_lower_rate_deg_s", 0.0)),
+        rollout_brake=float(raw.get("rollout", {}).get("brake", 0.0)),
+        k_rollout_aileron=float(raw.get("rollout", {}).get("k_aileron", 0.0)),
     )
 
 
@@ -136,13 +146,15 @@ class ApproachAutopilot:
         self._flare_theta = -math.inf  # the flare's pitch command never decreases
         self._i_pitch = 0.0
         self._i_cross = 0.0
+        self._wing_low = 0.0  # integral part of the wing-low bank while de-crabbed
+        self._rollout_theta: float | None = None  # rollout: the falling pitch command
 
     def runway_coords(self, s: State) -> tuple[float, float]:
         g = self.geo
         dn, de = s.lat_rad * R_EARTH_M - g["threshold_north_m"], s.lon_rad * R_EARTH_M - g["threshold_east_m"]
         return dn * self._along[0] + de * self._along[1], dn * self._right[0] + de * self._right[1]
 
-    def __call__(self, s: State, touched_down: bool) -> Controls:
+    def __call__(self, s: State, touched_down: bool, nose_wheel_down: bool = False) -> Controls:
         g, trim, dt = self.g, self.trim, self.dt_s
         along, cross = self.runway_coords(s)
         wheels_m = s.alt_agl_m - g.wheel_height_m
@@ -158,23 +170,39 @@ class ApproachAutopilot:
         track_cmd = self._rwy + math.atan2(-(cross + g.ki_cross * self._i_cross), g.intercept_m)  # aim at the centreline ahead
 
         if self.phase == "rollout":
-            # Nose gently up, ailerons into the drift, nosewheel steering onto the centreline.
-            elevator = trim.elevator + g.k_pitch * (s.theta_rad - g.rollout_pitch_rad) + g.k_pitch_rate * s.q_radps
-            bank_cmd = clamp(g.k_track * wrap_angle_rad(track_cmd - track), -g.max_wing_low_rad, g.max_wing_low_rad)
-            aileron = trim.aileron + g.k_bank_decrab * (bank_cmd - s.phi_rad) - g.k_roll_rate * s.p_radps
+            # Lower the nose gently (the pitch command falls from the touchdown attitude),
+            # aileron into the wind, pedals (rudder and nosewheel) onto the centreline, and
+            # brakes once the nosewheel is down.
+            if self._rollout_theta is None:
+                self._rollout_theta = max(s.theta_rad, g.rollout_pitch_rad)
+            if g.nose_lower_rate_rad_s > 0:
+                self._rollout_theta = max(-0.1, self._rollout_theta - g.nose_lower_rate_rad_s * dt)
+            else:
+                self._rollout_theta = g.rollout_pitch_rad
+            elevator = trim.elevator + g.k_pitch * (s.theta_rad - self._rollout_theta) + g.k_pitch_rate * s.q_radps
+            aileron = trim.aileron + g.k_rollout_aileron * s.beta_rad
+            if g.k_rollout_aileron == 0.0:  # wings level against the drift (before rollout tuning)
+                bank_cmd = clamp(g.k_track * wrap_angle_rad(track_cmd - track), -g.max_wing_low_rad, g.max_wing_low_rad)
+                aileron = trim.aileron + g.k_bank_decrab * (bank_cmd - s.phi_rad) - g.k_roll_rate * s.p_radps
             rudder = trim.rudder + g.k_steer * wrap_angle_rad(track_cmd - s.psi_rad) + g.k_yaw_damp * s.r_radps
-            return replace(trim, elevator=clamp(elevator, -1, 1), aileron=clamp(aileron, -1, 1), rudder=clamp(rudder, -1, 1), throttle=0.0)
+            brake = g.rollout_brake if nose_wheel_down else 0.0
+            return replace(trim, elevator=clamp(elevator, -1, 1), aileron=clamp(aileron, -1, 1), rudder=clamp(rudder, -1, 1), throttle=0.0, brake=brake)
 
         # Lateral: the track onto the centreline. Close to the ground the rudder lines the
         # nose up with the runway (de-crab) and the bank into the wind stops the drift.
         decrab = wheels_m < g.decrab_height_m
         if decrab:
+            # Sideslip: the rudder lines the nose up with the runway, and the bank into the
+            # wind (proportional plus integral on the track) stops the drift.
             max_bank = g.max_wing_low_rad
             rudder = trim.rudder + g.k_align * wrap_angle_rad(self._rwy - s.psi_rad) + g.k_yaw_damp * s.r_radps
         else:
             max_bank = g.max_bank_rad if self.phase == "approach" else math.radians(3.0)
             rudder = trim.rudder
-        bank_cmd = clamp(g.k_track * wrap_angle_rad(track_cmd - track), -max_bank, max_bank)
+        track_err = wrap_angle_rad(track_cmd - track)
+        if decrab:
+            self._wing_low = clamp(self._wing_low + g.ki_wing_low * track_err * dt, -max_bank, max_bank)
+        bank_cmd = clamp(g.k_track * track_err + (self._wing_low if decrab else 0.0), -max_bank, max_bank)
         k_bank = g.k_bank_decrab if decrab else g.k_bank
         aileron = trim.aileron + k_bank * (bank_cmd - s.phi_rad) - g.k_roll_rate * s.p_radps
 

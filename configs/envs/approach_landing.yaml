@@ -10,6 +10,7 @@
 base: altitude_heading_hold.yaml   # aircraft, rates, loading; its cruise targets are unused here
 terrain: procedural
 episode_s: 300
+actions: [elevator, aileron, rudder, throttle, brake]  # flaps and pitch trim held at the start values
 
 approach:
   runway: {threshold_north_m: 0, threshold_east_m: -500, heading_deg: 90, length_m: 1000, width_m: 30}
@@ -32,8 +33,11 @@ approach:
     max_drift_deg: 5            # project choice: crab (track - heading) at touchdown, a sideways load on the gear
     lost_vertical_m: 120        # this far off the glide path or centreline: approach lost
     lost_lateral_m: 400
-  settle_s: 2
+  settle_s: 2                   # (without a rollout block: landed once all wheels are down this long)
   max_ground_s: 10
+  rollout:                      # landed = stopped on the runway
+    stop_speed_kt: 2
+    max_rollout_s: 90           # after the first contact
   reward:                       # per decision while airborne: -(sum of w * min((error/scale)^2, clip))
     vertical_scale_m: 10
     lateral_scale_m: 20

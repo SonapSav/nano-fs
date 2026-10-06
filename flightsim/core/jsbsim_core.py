@@ -9,7 +9,7 @@ import hashlib
 from functools import cache
 import math
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import jsbsim
@@ -34,7 +34,13 @@ _CONTROL_PROPS = {
     "mixture": "fcs/mixture-cmd-norm",
     "flaps": "fcs/flap-cmd-norm",
     "pitch_trim": "fcs/pitch-trim-cmd-norm",
+    "brake": "fcs/left-brake-cmd-norm",  # also written to the right brake (_apply)
 }
+_RIGHT_BRAKE = "fcs/right-brake-cmd-norm"
+# Nosewheel steering. The pedals move the rudder and the nosewheel together (as in the
+# C172), but the c172p model does not link them: rudder-cmd-norm leaves the steering at 0.
+# steer-cmd-norm +1 turns the nose right (10 deg), rudder + is nose left, hence the sign.
+_STEER = "fcs/steer-cmd-norm"
 
 
 # JSBSim linearization state name -> (State field name, factor to SI)
@@ -186,6 +192,52 @@ class JSBSimCore:
         self._step_count = 0
         return self.state()
 
+    def reset_on_ground(
+        self, heading_rad: float, loading: Loading = Loading(), controls: Controls = Controls(),
+        ground_elevation_m: float = 0.0, lat_rad: float = 0.0, lon_rad: float = 0.0,
+        speed_mps: float = 0.0, settle_s: float = 10.0,
+    ) -> State:  # fmt: skip
+        """Start resting on the wheels (calm air), engine idling, then apply `controls`.
+
+        JSBSim starts the engine at about 2470 RPM whatever the throttle, so the aircraft
+        first sits for `settle_s` with the brakes set, the throttle closed and the stick
+        and pedals neutral while the engine spins down to idle. With `speed_mps` > 0 it then restarts rolling along
+        `heading_rad` at that ground speed, keeping the engine state (run_ic does not reset
+        it). JSBSim's ground trim puts the gear in equilibrium both times; it fails at speed
+        with the brakes set, so they are released first."""
+        fdm = self._fdm
+        idle = replace(controls, elevator=0.0, aileron=0.0, rudder=0.0, throttle=0.0, brake=1.0)
+        self.reset(InitialConditions(ground_elevation_m + 1.4, 0.0, heading_rad, lat_rad, lon_rad), loading, idle, ground_elevation_m)
+        self._ground_trim()
+        for _ in range(round(settle_s / self.dt_s)):
+            self.step(idle)
+        if speed_mps > 0.0:
+            rest = self.state()
+            self._apply(replace(idle, brake=0.0))
+            fdm["ic/h-sl-ft"] = rest.alt_msl_m / FT_TO_M
+            fdm["ic/lat-geod-rad"] = rest.lat_rad
+            fdm["ic/long-gc-rad"] = rest.lon_rad
+            fdm["ic/vw-mag-fps"] = 0.0
+            fdm["ic/phi-rad"] = 0.0
+            fdm["ic/theta-rad"] = rest.theta_rad
+            fdm["ic/psi-true-rad"] = heading_rad
+            fdm["ic/vn-fps"] = speed_mps * math.cos(heading_rad) / FT_TO_M
+            fdm["ic/ve-fps"] = speed_mps * math.sin(heading_rad) / FT_TO_M
+            fdm["ic/vd-fps"] = 0.0
+            fdm["ic/p-rad_sec"] = fdm["ic/q-rad_sec"] = fdm["ic/r-rad_sec"] = 0.0
+            if not fdm.run_ic():
+                raise RuntimeError("JSBSim run_ic failed")
+            self._ground_trim()
+        self._apply(controls)
+        self._step_count = 0
+        return self.state()
+
+    def _ground_trim(self) -> None:
+        try:
+            self._fdm["simulation/do_simple_trim"] = 2  # JSBSim tGround: altitude and pitch on the gear
+        except jsbsim.TrimFailureError as e:
+            raise TrimError(f"ground trim: {e}") from e
+
     def add_steady_wind(self, wind_north_mps: float, wind_east_mps: float) -> State:
         """After `trim` in calm air: restart in a steady wind with the same air-relative state
         (position, attitude, controls; ground velocity = air velocity + wind). The engine
@@ -252,6 +304,8 @@ class JSBSimCore:
     def _apply(self, controls: Controls) -> None:
         for name, prop in _CONTROL_PROPS.items():
             self._fdm[prop] = getattr(controls, name)
+        self._fdm[_RIGHT_BRAKE] = controls.brake
+        self._fdm[_STEER] = -controls.rudder
 
     def engine(self) -> EngineStatus:
         """Fuel flow (mass, so independent of the model's fuel density) and EGT."""

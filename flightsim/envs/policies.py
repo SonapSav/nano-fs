@@ -88,4 +88,4 @@ class ApproachPolicy:
         self._names = info["action_names"]
 
     def __call__(self, obs: np.ndarray, info: dict) -> np.ndarray:
-        return controls_to_action(self._autopilot(info["state"], info["touched_down"]), self._names)
+        return controls_to_action(self._autopilot(info["state"], info["touched_down"], info.get("nose_wheel_down", False)), self._names)
