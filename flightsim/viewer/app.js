@@ -447,7 +447,8 @@ function showApproachRows(kind) {
   if (w) {
     const kt = (v) => Math.round(Math.abs(v) * 1.943844);
     const cross = kt(w.crosswind_mps) ? `, ${kt(w.crosswind_mps)} kt crosswind from the ${w.crosswind_mps > 0 ? "right" : "left"}` : "";
-    $("r-wind").textContent = `${String(Math.round(w.from_deg) % 360).padStart(3, "0")}° ${kt(w.u20_mps)} kt${cross}`;
+    const gust = w.gust_factor_mps && kt(w.gust_factor_mps) ? `G${kt(w.u20_mps + w.gust_factor_mps)}` : ""; // METAR style, e.g. 17G23
+    $("r-wind").textContent = `${String(Math.round(w.from_deg) % 360).padStart(3, "0")}° ${kt(w.u20_mps)}${gust} kt${cross}`;
   }
 }
 

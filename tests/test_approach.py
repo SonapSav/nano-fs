@@ -297,3 +297,23 @@ def test_approach_autopilot_brakes_to_a_stop_near_the_centreline():
     s = env.landing_summary()
     assert s["landed"] and s["rollout"]["max_cross_m"] < 2.0
     assert 150 < s["rollout"]["ground_roll_m"] < 350  # half brakes from ~53 KCAS (calm seeds: 250-271 m)
+
+
+def test_wind_report_and_half_gust_factor_on_the_approach_speed():
+    """The autopilot flies the approach speed plus half the reported gust factor (FAA-H-8083-3C
+    ch. 9); the report carries the mean wind and gust factor, not the gusts."""
+    from flightsim.control.approach import ApproachAutopilot, load_approach_gains
+    from flightsim.envs.runway import wind_report
+
+    calm = make_env(load_env_config(CONFIG))
+    assert calm.reset(seed=0)[1]["wind_report"] is None
+    env = make_env(load_env_config(CROSSWIND))
+    _, info = env.reset(seed=1009)
+    report = info["wind_report"]
+    assert report == wind_report(env.approach_wind) and report["gust_factor_mps"] > 0
+    assert set(report) == {"u20_mps", "from_deg", "gust_factor_mps"}
+    gains = load_approach_gains(ROOT / "configs" / "approach_autopilot.yaml")
+    ap = ApproachAutopilot(gains, info["approach"], info["trim"], info["trim_state"], 0.05, report)
+    expected_kt = gains.target_kias + min(gains.max_gust_additive_kt, 0.5 * report["gust_factor_mps"] / KT)
+    assert ap.target_cas_mps == pytest.approx(expected_kt * KT)
+    assert ApproachAutopilot(gains, info["approach"], info["trim"], info["trim_state"], 0.05).target_cas_mps == pytest.approx(65 * KT)

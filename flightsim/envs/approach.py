@@ -36,7 +36,7 @@ from flightsim.control.heading_hold import wrap_angle_rad
 from flightsim.core import Controls, InitialConditions, State
 from flightsim.envs.altitude_heading import AltitudeHeadingHoldEnv, load_factor
 from flightsim.envs.config import FPM_TO_MPS, KT_TO_MPS, EnvConfig
-from flightsim.envs.runway import STRIKES, WHEELS, LowAltitudeGusts, Runway, draw_low_altitude_wind
+from flightsim.envs.runway import STRIKES, WHEELS, LowAltitudeGusts, Runway, draw_low_altitude_wind, wind_report
 from flightsim.world import ground_elevation_m
 from flightsim.world.terrain import R_EARTH_M
 
@@ -343,6 +343,8 @@ class ApproachLandingEnv(AltitudeHeadingHoldEnv):
         """Runway, glide path and this episode's wind (null when calm), for displays."""
         w = self.approach_wind
         wind = None if w is None else {k: w[k] for k in ("u20_mps", "from_deg", "headwind_mps", "crosswind_mps", "turbulence")}
+        if wind is not None:
+            wind["gust_factor_mps"] = wind_report(w)["gust_factor_mps"]
         return {**self._geometry, "wind": wind}
 
     def conditions(self) -> dict:
@@ -359,6 +361,7 @@ class ApproachLandingEnv(AltitudeHeadingHoldEnv):
         info["approach"] = self._geometry  # runway and glide path, for controllers and displays
         info["touched_down"] = self.touchdown is not None
         info["nose_wheel_down"] = self.nose_wheel_down
+        info["wind_report"] = wind_report(self.approach_wind)
         return info
 
     def landing_summary(self) -> dict:

@@ -1,6 +1,8 @@
 # Approach autopilot gains (flightsim/control/approach.py) for the approach and landing
 # task. Tuned on c172p, flaps 30, 65 KIAS, 20 Hz, on tuning seeds 1000-1099.
 target_kias: 65              # POH 60-70 KIAS with flaps down
+gust_additive: 0.5          # FAA-H-8083-3C ch. 9: approach speed plus one-half the gust factor (from the wind report)
+max_gust_additive_kt: 10
 max_alpha_deg: 11            # stall protection (model CLmax at 16 deg; the task ends at 14)
 vertical:
   k_glide_path: 0.15         # m/s more descent per m above the glide path
@@ -30,6 +32,8 @@ flare:
   k_pitch: 6.0               # elevator per rad pitch error in the flare
   ki_pitch: 3.0
   throttle_cut_s: 0.5        # close the throttle at the start of the flare
+  touchdown_pitch_deg: 5.0   # flare attitude floor rising to this at the ground: main wheels first even from a fast, nose-low flare
+  touchdown_pitch_shape: 1.5 # the floor rises late: (height lost / flare height)^1.5 (linear floats calm landings past the zone)
   rollout_pitch_deg: 2
   k_steer: -4.0              # rudder per rad heading error on the rollout (rudder + = nose left)
   # Crosswind: de-crab with rudder and hold the centreline with a wing low

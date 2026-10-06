@@ -9,7 +9,7 @@ import math
 
 import numpy as np
 
-from flightsim.atmosphere.turbulence import LowAltitudeTurbulence, to_ned, wind_at_height_mps
+from flightsim.atmosphere.turbulence import LowAltitudeTurbulence, low_altitude_parameters, to_ned, wind_at_height_mps
 from flightsim.core import State
 from flightsim.envs.config import KT_TO_MPS
 from flightsim.world.terrain import R_EARTH_M
@@ -59,6 +59,21 @@ def draw_low_altitude_wind(cfg: dict | None, runway_heading_rad: float, rng: np.
         "to_north": -math.cos(from_rad), "to_east": -math.sin(from_rad),
         "turbulence": bool(cfg.get("turbulence", False)), "turbulence_seed": int(rng.integers(2**63)),
     }  # fmt: skip
+
+
+GUST_PEAK_SIGMAS = 3.0  # project choice: a reported gust is the mean wind plus 3 sigma of the along-wind turbulence
+REPORT_HEIGHT_M = 20 * 0.3048
+
+
+def wind_report(w: dict | None) -> dict | None:
+    """What a pilot is told about the wind (as ATIS would): the mean wind at 20 ft, its
+    direction, and the gust factor (peak gust minus mean), not the gusts themselves.
+    None when calm."""
+    if w is None:
+        return None
+    (sigma_u, _, _), _ = low_altitude_parameters(w["u20_mps"], REPORT_HEIGHT_M)
+    gust = GUST_PEAK_SIGMAS * sigma_u if w["turbulence"] else 0.0
+    return {"u20_mps": w["u20_mps"], "from_deg": w["from_deg"], "gust_factor_mps": gust}
 
 
 class LowAltitudeGusts:

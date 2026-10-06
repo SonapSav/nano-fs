@@ -33,6 +33,8 @@ KT_TO_MPS = 1852.0 / 3600.0
 @dataclass(frozen=True)
 class ApproachGains:
     target_kias: float
+    gust_additive: float  # fraction of the reported gust factor added to the target speed (FAA AFH: one half)
+    max_gust_additive_kt: float
     # Vertical
     k_glide_path: float  # (m/s descent) per m above the glide path
     max_vs_correction_mps: float
@@ -61,6 +63,8 @@ class ApproachGains:
     k_pitch_flare: float  # elevator per rad pitch error in the flare (slow, high-alpha flight)
     ki_pitch_flare: float  # elevator per (rad * s)
     throttle_cut_s: float  # throttle ramps to idle over this time in the flare
+    touchdown_pitch_rad: float | None  # the flare's pitch rises at least to this by the ground (main wheels first)
+    touchdown_pitch_shape: float  # floor = start + (touchdown - start) * (height lost / flare height)^shape
     rollout_pitch_rad: float
     k_steer: float  # rudder per rad heading error on the ground (negative: rudder + = nose left)
     # Crosswind: de-crab (align the nose with the runway) and wing low (bank into the wind)
@@ -82,6 +86,8 @@ def approach_gains_from_raw(raw: dict) -> ApproachGains:
     rad = math.radians
     return ApproachGains(
         target_kias=float(raw["target_kias"]),
+        gust_additive=float(raw.get("gust_additive", 0.0)),
+        max_gust_additive_kt=float(raw.get("max_gust_additive_kt", 0.0)),
         k_glide_path=float(v["k_glide_path"]),
         max_vs_correction_mps=float(v["max_vs_correction_mps"]),
         k_vs=float(v["k_vs"]),
@@ -107,6 +113,8 @@ def approach_gains_from_raw(raw: dict) -> ApproachGains:
         k_pitch_flare=float(fl["k_pitch"]),
         ki_pitch_flare=float(fl["ki_pitch"]),
         throttle_cut_s=float(fl["throttle_cut_s"]),
+        touchdown_pitch_rad=rad(fl["touchdown_pitch_deg"]) if "touchdown_pitch_deg" in fl else None,
+        touchdown_pitch_shape=float(fl.get("touchdown_pitch_shape", 1.0)),
         rollout_pitch_rad=rad(fl["rollout_pitch_deg"]),
         k_steer=float(fl["k_steer"]),
         decrab_height_m=float(fl["decrab_height_m"]),
@@ -131,8 +139,13 @@ def clamp(v: float, lo: float, hi: float) -> float:
 
 
 class ApproachAutopilot:
-    def __init__(self, gains: ApproachGains, geometry: dict, trim: Controls, trim_state: State, dt_s: float):
+    def __init__(
+        self, gains: ApproachGains, geometry: dict, trim: Controls, trim_state: State, dt_s: float, wind_report: dict | None = None
+    ):
         self.g, self.geo, self.trim, self.dt_s = gains, geometry, trim, dt_s
+        # Approach speed plus a fraction of the reported gust factor (FAA-H-8083-3C ch. 9).
+        gust_kt = (wind_report or {}).get("gust_factor_mps", 0.0) / KT_TO_MPS
+        self.target_cas_mps = (gains.target_kias + min(gains.max_gust_additive_kt, gains.gust_additive * gust_kt)) * KT_TO_MPS
         self.theta_ref = trim_state.theta_rad  # trimmed descent attitude
         h = math.radians(geometry["heading_deg"])
         self._rwy = h
@@ -209,7 +222,7 @@ class ApproachAutopilot:
         if self.phase == "approach":
             gp_dev = s.alt_msl_m - (self.geo["elevation_m"] + max(0.0, self.geo["aim_point_m"] - along) * self._tan_gp)
             vs_cmd = -ground_speed * self._tan_gp - clamp(g.k_glide_path * gp_dev, -g.max_vs_correction_mps, g.max_vs_correction_mps)
-            speed_err = g.target_kias * KT_TO_MPS - s.cas_mps
+            speed_err = self.target_cas_mps - s.cas_mps
             self._i_speed = clamp(self._i_speed + speed_err * dt, -0.3 / max(g.ki_speed, 1e-9), 0.3 / max(g.ki_speed, 1e-9))
             throttle = clamp(trim.throttle + g.k_speed * speed_err + g.ki_speed * self._i_speed, 0.0, 1.0)
             pitch_hi = self.theta_ref + g.max_pitch_offset_rad
@@ -218,10 +231,16 @@ class ApproachAutopilot:
             vs_cmd = -max(g.flare_min_sink_mps, max(0.0, wheels_m) / g.flare_tau_s)
             throttle = clamp(trim.throttle * (1.0 - self._flare_s / g.throttle_cut_s), 0.0, 1.0)
             if self._flare_theta == -math.inf:
-                self._flare_theta = s.theta_rad
+                self._flare_theta = self._flare_start_theta = s.theta_rad
             target = clamp(s.theta_rad + g.k_flare * (vs_cmd - climb), -1.0, g.flare_max_pitch_rad)
             step = g.flare_pitch_rate_rad_s * dt
             self._flare_theta = max(self._flare_theta, min(target, self._flare_theta + step))
+            if g.touchdown_pitch_rad is not None:
+                # Attitude floor: from the flare-start pitch to the touchdown attitude as the
+                # wheels come down, so a fast or nose-low flare still lands main wheels first.
+                frac = clamp(1.0 - wheels_m / g.flare_height_m, 0.0, 1.0) ** g.touchdown_pitch_shape
+                start = min(self._flare_start_theta, g.touchdown_pitch_rad)
+                self._flare_theta = max(self._flare_theta, start + (g.touchdown_pitch_rad - start) * frac)
         vs_err = vs_cmd - climb
         if self.phase == "approach":
             self._i_vs = clamp(self._i_vs + vs_err * dt, -0.1 / max(g.ki_vs, 1e-9), 0.1 / max(g.ki_vs, 1e-9))

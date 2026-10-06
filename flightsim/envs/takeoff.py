@@ -30,7 +30,7 @@ from flightsim.control.heading_hold import wrap_angle_rad
 from flightsim.core import Controls, InitialConditions, State
 from flightsim.envs.altitude_heading import AltitudeHeadingHoldEnv, load_factor
 from flightsim.envs.config import EnvConfig
-from flightsim.envs.runway import STRIKES, WHEELS, LowAltitudeGusts, Runway, draw_low_altitude_wind
+from flightsim.envs.runway import STRIKES, WHEELS, LowAltitudeGusts, Runway, draw_low_altitude_wind, wind_report
 from flightsim.world import ground_elevation_m
 from flightsim.world.terrain import R_EARTH_M
 
@@ -261,6 +261,8 @@ class TakeoffEnv(AltitudeHeadingHoldEnv):
         """Runway and this episode's wind (null when calm), for displays."""
         w = self.takeoff_wind
         wind = None if w is None else {k: w[k] for k in ("u20_mps", "from_deg", "headwind_mps", "crosswind_mps", "turbulence")}
+        if wind is not None:
+            wind["gust_factor_mps"] = wind_report(w)["gust_factor_mps"]
         return {**self._geometry, "wind": wind}
 
     def conditions(self) -> dict:
@@ -276,6 +278,7 @@ class TakeoffEnv(AltitudeHeadingHoldEnv):
         info = super()._info()
         info["runway"] = self._geometry  # for controllers and displays
         info["on_ground"] = self.on_ground
+        info["wind_report"] = wind_report(self.takeoff_wind)
         return info
 
     def takeoff_summary(self) -> dict:

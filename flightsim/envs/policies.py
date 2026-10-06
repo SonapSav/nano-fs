@@ -85,7 +85,9 @@ class ApproachPolicy:
     def reset(self, info: dict) -> None:
         if "approach" not in info:
             raise ValueError("the approach autopilot needs the approach task")
-        self._autopilot = ApproachAutopilot(self.gains, info["approach"], info["trim"], info["trim_state"], self.dt_s)
+        self._autopilot = ApproachAutopilot(
+            self.gains, info["approach"], info["trim"], info["trim_state"], self.dt_s, info.get("wind_report")
+        )
         self._names = info["action_names"]
 
     def __call__(self, obs: np.ndarray, info: dict) -> np.ndarray:
