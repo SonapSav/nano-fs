@@ -155,7 +155,8 @@ owner before work can start.
 - [ ] **Tuned aircraft model** to close the step 2 deviations, as a separate copy of
   `c172p` (see "Aircraft model fidelity"). Decided 2026-10-04: deviations accepted for
   now, tuning is a possible later step.
-- [ ] **Takeoff, approach and landing.** Decided 2026-10-05: approach and landing first.
+- [x] **Takeoff, approach and landing** (done 2026-10-06: approach, crosswind, brakes and
+  rollout, takeoff, gust allowance, circuit). Decided 2026-10-05: approach and landing first.
   - [x] **Approach and landing task** (2026-10-05): `flightsim/envs/approach.py`,
     `configs/envs/approach_landing.yaml` (autopilot/RL: 4 controls, flaps held at 30 deg)
     and `manual_approach.yaml` (adds flaps and pitch trim; "Fly an approach to runway 09"
@@ -534,11 +535,12 @@ owner before work can start.
      the aircraft (lakes are solid at their surface, -0.5 m); `alt_agl_m` in the logs and
      the "ground" termination follow the terrain; the gear rests on hillsides (tested).
      Cost ~25 us per step. Existing configs stay flat for now; scenarios will use it.
-  2. **Landing cues:** aircraft shadow on the ground (~1 h); PAPI lights for a 3 deg
+  2. [x] **Landing cues** (2026-10-05/06: shadow, PAPI, windsock, runway edge stripes and
+     lights, glide-path gates, pattern ribbon). Planned as: aircraft shadow on the ground (~1 h); PAPI lights for a 3 deg
      glide path (~2 h; also a reference for an approach autopilot); windsock driven by
      the wind model (~1 h); runway edge markings, touchdown zone, approach light bar
      (~1-2 h).
-  3. **Close-up ground detail** (grass/soil texture below ~50 m, ~2-3 h) and a
+  3. [ ] **Close-up ground detail** (grass/soil texture below ~50 m, ~2-3 h) and a
      **quality setting** low/medium/high (view distance, tree density, shadows; ~2 h;
      the dev machine has integrated graphics).
   Later, as a cruise/navigation package: clouds (~half a day, could follow the
