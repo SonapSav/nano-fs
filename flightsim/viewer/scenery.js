@@ -1,6 +1,7 @@
 // Sky, sun, water and the airfield. Visual only (see terrain.js for the height model).
 
 import * as THREE from "three";
+import { addGroundDetail } from "./groundDetail.js";
 import { Sky } from "three/addons/objects/Sky.js";
 import { AIRFIELD } from "./terrain.js";
 
@@ -99,8 +100,10 @@ export function addAirfield(scene) {
     return m;
   };
   // Runway 09/27 along x (east-west); markings texture u runs west -> east.
-  flat(widthM, lengthM, new THREE.MeshLambertMaterial({ map: runwayTexture() }), x, z, 0.15);
-  const asphalt = new THREE.MeshLambertMaterial({ color: 0x45474a });
+  // Asphalt grain close up (the runway is the main height reference in the flare).
+  const grain = { strength: 0.25, tint: 0, fadeEndM: 250 };
+  flat(widthM, lengthM, addGroundDetail(new THREE.MeshLambertMaterial({ map: runwayTexture() }), grain), x, z, 0.15);
+  const asphalt = addGroundDetail(new THREE.MeshLambertMaterial({ color: 0x45474a }), grain);
   flat(15, lengthM, asphalt, x, z - 120, 0.12); // parallel taxiway, north side
   for (const dx of [-lengthM / 2 + 40, 0, lengthM / 2 - 40]) flat(105, 15, asphalt, x + dx, z - 67, 0.11); // connectors
   flat(80, 220, asphalt, x, z - 175, 0.12); // apron

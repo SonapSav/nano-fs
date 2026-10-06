@@ -3,7 +3,7 @@
 // as stick/pedal/throttle values that the server applies as policy actions.
 
 import { FlightScene } from "./scene.js";
-import { drawAll, units } from "./gauges.js";
+import { drawAll, indicatedKt, units } from "./gauges.js";
 import { HANDLED_KEYS, PilotInput } from "./input.js";
 import { AXES, CONTROLS, DEFAULTS, MAX_CALIBRATION_SPREAD, MAX_CENTRE, controlValue, defaultProfile, detectAxis, saveSettings } from "./stick.js";
 import { groupLogs } from "./flightlist.js";
@@ -62,7 +62,26 @@ const INPUT_SEND_HZ = 30;
 const VIEW_HINT = "Drag to look around, scroll to zoom, space to pause, C for cockpit view, M for sound";
 const FLY_HINT = "Arrows pitch and roll; Z/X rudder and nosewheel; W/S throttle; F/V flaps; T/G trim; B brakes; hold a key to build it up, Shift for full deflection. Gamepad: LB/RB flaps, D-pad trim, B brakes";
 
-const scene = new FlightScene($("view"));
+// Graphics quality (terrain.js QUALITY), remembered in this browser only.
+const QUALITY_KEY = "flightsim.quality";
+const savedQuality = (() => {
+  try {
+    return localStorage.getItem(QUALITY_KEY);
+  } catch {
+    return null;
+  }
+})();
+const initialQuality = ["low", "medium", "high"].includes(savedQuality) ? savedQuality : "high";
+const scene = new FlightScene($("view"), initialQuality);
+$("quality").value = initialQuality;
+$("quality").addEventListener("change", (e) => {
+  scene.setQuality(e.target.value);
+  try {
+    localStorage.setItem(QUALITY_KEY, e.target.value);
+  } catch {
+    // storage unavailable (private window): the choice lasts for this page only
+  }
+});
 const pilot = new PilotInput();
 let ws = null;
 let session = null; // hello message of the current playback
@@ -244,13 +263,13 @@ function handle(msg) {
       if (msg.reason === "landed") {
         const td = msg.landing.touchdown;
         const zone = td.in_zone ? "in the touchdown zone" : `${Math.round(td.along_m)} m past the threshold (zone 100-400 m)`;
-        say(`Landed ${zone}, ${Math.round(td.sink_mps * 196.85)} ft/min, ${Math.round(td.cas_mps * 1.94384)} kt, ` +
+        say(`Landed ${zone}, ${Math.round(td.sink_mps * 196.85)} ft/min, ${Math.round(td.cas_mps * 1.94384)} KCAS, ` +
           `${Math.abs(td.cross_m).toFixed(1)} m ${td.cross_m >= 0 ? "right" : "left"} of the centreline${msg.landing.bounces ? `, ${msg.landing.bounces} bounce(s)` : ""}` +
           (msg.landing.rollout ? `; stopped after a ${Math.round(msg.landing.rollout.ground_roll_m)} m ground roll, ${Math.round(msg.landing.rollout.stop_along_m)} m down the runway` : "") +
           ". Press Play to go again.");
       } else if (msg.reason === "climbed") {
         const lo = msg.takeoff.liftoff, ff = msg.takeoff.fifty_ft;
-        say(`Climbed to 1000 ft. Lift-off at ${Math.round(lo.cas_mps * 1.94384)} kt after a ${Math.round(lo.ground_roll_m)} m ground roll` +
+        say(`Climbed to 1000 ft. Lift-off at ${Math.round(lo.cas_mps * 1.94384)} KCAS after a ${Math.round(lo.ground_roll_m)} m ground roll` +
           (ff ? `, 50 ft after ${Math.round(ff.distance_m)} m` : "") + ". Press Play to go again.");
       } else if (msg.reason === "finished") say("Flight finished. Press Play to go again.");
       else if (msg.reason.startsWith("terminated:")) {
@@ -483,7 +502,7 @@ function updateReadout(row) {
     const tk = session.takeoff;
     if (row) {
       const d = approachDeviations(row, { ...tk, aim_point_m: 0, glide_path_deg: 0 });
-      const kt = row.cas_mps * units.MPS_TO_KT, height = row.alt_msl_m - tk.elevation_m;
+      const kt = indicatedKt(row), height = row.alt_msl_m - tk.elevation_m;
       const airborne = height > 3;
       readout.talt.textContent = !airborne ? `rotate at ${ROTATE_KT} kt`
         : Math.abs(kt - CLIMB_KT) < 3 ? "on speed" : `${Math.round(Math.abs(kt - CLIMB_KT))} kt ${kt > CLIMB_KT ? "fast" : "slow"}`;
@@ -499,7 +518,8 @@ function updateReadout(row) {
       // A circuit: the glide path only means something on final (near the centreline, heading in).
       const towardRunway = Math.cos(row.psi_rad - (a.heading_deg * Math.PI) / 180) > 0.8;
       if (row.alt_msl_m - a.elevation_m > 200) circuitClimbed = true;
-      const onFinal = a.task !== "circuit" || (circuitClimbed && Math.abs(d.cross) < 300 && towardRunway);
+      // (before the threshold also counts: a replay may jump straight to final)
+      const onFinal = a.task !== "circuit" || ((circuitClimbed || d.along < 0) && Math.abs(d.cross) < 300 && towardRunway);
       readout.talt.textContent = !onFinal ? "in the pattern" : Math.abs(ft) < 10 ? "on path" : `${Math.abs(ft)} ft ${ft > 0 ? "high" : "low"}`;
       readout.thdg.textContent = Math.abs(d.cross) < 2 ? "on centreline" : `${Math.abs(d.cross).toFixed(0)} m ${d.cross > 0 ? "right" : "left"}`;
       $("r-dist").textContent = !onFinal ? "–" : d.along < 0 ? `${(-d.along / 1852).toFixed(2)} nm` : "over the runway";
@@ -512,14 +532,14 @@ function updateReadout(row) {
   if (!a) readout.talt.textContent = t ? `${Math.round(t.alt_msl_m * units.M_TO_FT).toLocaleString("en-US")} ft` : "–";
   readout.hdg.textContent = row ? `${String(Math.round(deg360(row.psi_rad)) % 360).padStart(3, "0")}°` : "–";
   if (!a) readout.thdg.textContent = t ? `${String(Math.round(deg360(t.heading_rad)) % 360).padStart(3, "0")}°` : "–";
-  readout.kias.textContent = row ? `${(row.cas_mps * units.MPS_TO_KT).toFixed(0)} kt` : "–";
+  readout.kias.textContent = row ? `${indicatedKt(row).toFixed(0)} kt` : "–";
   readout.aoa.textContent = row ? `${(row.alpha_rad * units.DEG).toFixed(1)}°` : "–";
   readout.g.textContent = row ? `${(-row.az_mps2 / units.G).toFixed(2)} g` : "–";
   if (row) {
     const flapDeg = row.flap_pos_rad * units.DEG;
     // POH 1981 C172P Figure 2-1: 110 KIAS with 10 deg flaps, 85 KIAS beyond.
     const vfe = flapDeg <= 0.5 ? Infinity : flapDeg <= 10.5 ? 110 : 85;
-    const over = row.cas_mps * units.MPS_TO_KT > vfe;
+    const over = indicatedKt(row) > vfe; // the POH limits are KIAS
     readout.flaps.textContent = `${Math.round(flapDeg)}°${over ? ` over ${vfe} kt limit` : ""}`;
     readout.flaps.classList.toggle("warn", over);
     const trim = row.cmd_pitch_trim_norm;

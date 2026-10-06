@@ -560,9 +560,14 @@ owner before work can start.
      glide path (~2 h; also a reference for an approach autopilot); windsock driven by
      the wind model (~1 h); runway edge markings, touchdown zone, approach light bar
      (~1-2 h).
-  3. [ ] **Close-up ground detail** (grass/soil texture below ~50 m, ~2-3 h) and a
-     **quality setting** low/medium/high (view distance, tree density, shadows; ~2 h;
-     the dev machine has integrated graphics).
+  3. [x] **Close-up ground detail and quality setting** (2026-10-06): procedural detail
+     noise in the ground shaders (`viewer/groundDetail.js`: ~0.7/2.7/11 m wavelengths and
+     drier patches, +/-40% on grass, +/-25% asphalt grain on the runway and taxiways,
+     fading out by 250-350 m; no image files). Toolbar "Quality" low/medium/high
+     (remembered per browser): terrain view distance and mesh resolution, trees per near
+     tile, haze, pixel ratio, ground detail (off on low). High is the earlier setting.
+     The circuit's pattern ribbon now omits upwind and final (they sat in the line of
+     sight near the ground; final has the gates).
   Later, as a cruise/navigation package: clouds (~half a day, could follow the
   conditions); roads, rivers, towns (~1 day); smooth forest edges and trees/houses
   beyond the nearest 3 x 3 tiles (~half a day); time of day and visibility as config
@@ -572,8 +577,9 @@ owner before work can start.
   or after the replay ended), or arrow keys on it (5 s; up/down 30 s; Home/End).
   Protocol: `seek` message and `start_s` on replay play. Fixed on the way: a second
   play on the same connection streamed unpaced (saved demos checked, not affected).
-- [ ] Replays show no altitude/heading targets (the replay source sends none); the
-  targets could be recomputed from the logged config and seed.
+- [x] Replays show the altitude/heading targets (2026-10-06): the replay source resets the
+  logged task with its seed once and takes the targets, approach and takeoff information
+  from it (logs whose config no longer loads replay without them).
 - [x] Flight list grouped and filterable (2026-10-05): "Your flights" (newest first, seed,
   length, date), other recorded flights, one group per batch (by seed, pilot); 50 per
   group, a filter box (seed number or text) appears from 20 recorded flights. Log
@@ -581,8 +587,10 @@ owner before work can start.
   listed off the event loop: 2,000 batch logs take 0.66 s the first time.
 - [x] Font vendored (2026-10-05): Barlow Condensed 400/500/600, latin subset, SIL OFL 1.1
   (`flightsim/viewer/vendor/fonts/`). The viewer loads nothing from the internet (tested).
-- [ ] Airspeed indicator shows calibrated airspeed as indicated (no position or
-  instrument error modelled).
+- [x] Airspeed indicator shows indicated airspeed (2026-10-06): calibrated airspeed
+  through the POH airspeed calibration (Figure 5-1, normal static source, flaps 0/10/30,
+  interpolated). The readout says IAS; flap limit warnings use KIAS as the POH does;
+  takeoff/landing messages report the task's KCAS.
 - [x] Viewer network exposure (decided 2026-10-04): keep the Docker viewer published on
   all host interfaces, reachable from the local network.
 

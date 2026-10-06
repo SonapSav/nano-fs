@@ -43,34 +43,35 @@ class Source:
         raise NotImplementedError
 
 
-def _logged_takeoff(meta: dict, seed: int | None) -> dict | None:
-    """Runway and wind of a takeoff log (None for other tasks or unreadable configs)."""
+def _logged_episode(meta: dict, seed: int | None):
+    """The task environment of a log, reset with its seed (None if the config cannot be
+    read, e.g. logs from older code). Replays use it for what the log does not carry:
+    targets, runway and wind."""
     try:
         raw = json.loads(meta.get("flightsim.config_json", "null"))
-        if not raw or "takeoff" not in raw or seed is None:
+        if not raw or seed is None:
             return None
         env = make_env(env_config_from_raw(raw))
         env.reset(seed=seed)
-        return env.runway_info()
+        return env
     except (ValueError, KeyError, TypeError):
         return None
 
 
-def _logged_approach(meta: dict, seed: int | None) -> dict | None:
-    """Approach geometry and wind from a log's config and seed (None for other tasks or
-    unreadable configs). The wind is drawn per seed, so the episode is reset to get it."""
+def _logged_approach(meta: dict, seed: int | None, env=None) -> dict | None:
+    """Approach geometry and wind of an approach (or circuit) log, None for other tasks."""
     try:
         raw = json.loads(meta.get("flightsim.config_json", "null"))
-        if not raw or "approach" not in raw:
-            return None
-        cfg = env_config_from_raw(raw)
-        if seed is None:
-            return {**approach_geometry(cfg), "wind": None}
-        env = make_env(cfg)
-        env.reset(seed=seed)
-        return env.approach_info()
-    except (ValueError, KeyError, TypeError):
+    except ValueError:
         return None
+    if not raw or "approach" not in raw:
+        return None
+    if env is None:
+        try:
+            return {**approach_geometry(env_config_from_raw(raw)), "wind": None}
+        except (ValueError, KeyError, TypeError):
+            return None
+    return env.approach_info()
 
 
 class ReplaySource(Source):
@@ -82,8 +83,12 @@ class ReplaySource(Source):
         duration = self._times[-1] if self._rows else 0.0
         rate = (len(self._rows) - 1) / duration if duration > 0 else 0.0
         super().__init__("replay", meta["flightsim.run_id"], meta["flightsim.aircraft"], round(rate, 6), duration, None, meta)
-        self.approach = _logged_approach(meta, self._rows[0]["seed"] if self._rows else None)
-        self.takeoff = _logged_takeoff(meta, self._rows[0]["seed"] if self._rows else None)
+        env = _logged_episode(meta, self._rows[0]["seed"] if self._rows else None)
+        self.approach = _logged_approach(meta, self._rows[0]["seed"] if self._rows else None, env)
+        self.takeoff = env.runway_info() if env is not None and hasattr(env, "runway_info") else None
+        if env is not None:
+            t = env.targets
+            self.targets = {"alt_msl_m": t.alt_msl_m, "heading_rad": t.heading_rad, "tas_mps": t.tas_mps}
 
     def seek(self, t_s: float) -> None:
         """Continue from the first row at or after t_s (clamped to the log), also while

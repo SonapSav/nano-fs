@@ -7,6 +7,7 @@
 // every flight sees the same world. World frame: x = east, y = up, z = south (metres).
 
 import * as THREE from "three";
+import { addGroundDetail } from "./groundDetail.js";
 
 export const WORLD_SEED = 172;
 export const TILE_SIZE_M = 4000;
@@ -132,7 +133,7 @@ float fieldHash(vec2 c) { return fract(sin(dot(c, vec2(12.9898, 78.233))) * 4375
 }`,
       );
   };
-  return material;
+  return addGroundDetail(material); // close-up texture on top of the patchwork
 }
 
 // --- Tiles ----------------------------------------------------------------------------
@@ -212,7 +213,7 @@ function buildTileObjects(tx, tz, shared) {
   const up = new THREE.Vector3(0, 1, 0);
 
   const trees = [];
-  for (let k = 0; k < 2500 && trees.length < 900; k++) {
+  for (let k = 0; k < 2500 && trees.length < shared.maxTrees; k++) {
     const x = x0 + rnd() * TILE_SIZE_M, z = z0 + rnd() * TILE_SIZE_M, h = height(x, z);
     if (isForest(x, z, h)) trees.push([x, h, z, 0.7 + rnd() * 0.7]);
   }
@@ -252,15 +253,32 @@ function buildTileObjects(tx, tz, shared) {
 
 // --- Streaming manager ----------------------------------------------------------------
 
-const RINGS = [
-  { maxRing: 1, segments: 96, objects: true }, // the 3 x 3 tiles around the aircraft
-  { maxRing: 2, segments: 48, objects: false },
-  { maxRing: 5, segments: 16, objects: false }, // out to ~22 km, hidden in haze beyond
-];
+// Quality presets: terrain rings (tile mesh resolution and how far tiles reach), trees per
+// near tile, haze distances, pixel ratio and the close-up ground detail. "high" is the
+// original setting.
+export const QUALITY = {
+  low: {
+    rings: [{ maxRing: 1, segments: 48, objects: true }, { maxRing: 3, segments: 12, objects: false }],
+    maxTrees: 250, fog: [5000, 12000], pixelRatio: 1, groundDetail: 0,
+  },
+  medium: {
+    rings: [{ maxRing: 1, segments: 64, objects: true }, { maxRing: 2, segments: 32, objects: false }, { maxRing: 4, segments: 12, objects: false }],
+    maxTrees: 550, fog: [7000, 17000], pixelRatio: 1.5, groundDetail: 1,
+  },
+  high: {
+    rings: [
+      { maxRing: 1, segments: 96, objects: true }, // the 3 x 3 tiles around the aircraft
+      { maxRing: 2, segments: 48, objects: false },
+      { maxRing: 5, segments: 16, objects: false }, // out to ~22 km, hidden in haze beyond
+    ],
+    maxTrees: 900, fog: [9000, 21000], pixelRatio: 2, groundDetail: 1,
+  },
+}; // fmt: skip
 
 export class Terrain {
-  constructor(scene) {
+  constructor(scene, quality = "high") {
     this.scene = scene;
+    this.rings = QUALITY[quality].rings;
     this.tiles = new Map(); // key -> { mesh, objects, segments }
     this.queue = [];
     this.material = fieldMaterial();
@@ -275,17 +293,27 @@ export class Terrain {
         return g;
       })(),
       roofMat: new THREE.MeshLambertMaterial({ color: 0x8f3b2f }),
+      maxTrees: QUALITY[quality].maxTrees,
     };
+    this.centre = null;
+  }
+
+  // Rebuild every tile for a quality preset (QUALITY).
+  setQuality(quality) {
+    this.rings = QUALITY[quality].rings;
+    this.shared.maxTrees = QUALITY[quality].maxTrees;
+    for (const key of [...this.tiles.keys()]) this._drop(key);
+    this.queue = [];
     this.centre = null;
   }
 
   _wanted(cx, cz) {
     const wanted = new Map();
-    const R = RINGS[RINGS.length - 1].maxRing;
+    const R = this.rings[this.rings.length - 1].maxRing;
     for (let dz = -R; dz <= R; dz++) {
       for (let dx = -R; dx <= R; dx++) {
         const ring = Math.max(Math.abs(dx), Math.abs(dz));
-        const spec = RINGS.find((r) => ring <= r.maxRing);
+        const spec = this.rings.find((r) => ring <= r.maxRing);
         wanted.set(`${cx + dx},${cz + dz}`, { tx: cx + dx, tz: cz + dz, ring, ...spec });
       }
     }

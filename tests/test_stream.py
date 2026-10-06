@@ -339,3 +339,20 @@ def test_replay_seeking(logged_episode, env_cfg, gains):
     assert 4.0 < out["after_resume"] < 4.2
     assert out["start"] == pytest.approx(5.0, abs=1 / 120 + 1e-9)
     assert "only possible during a replay" in out["live_error"]
+
+
+def test_replays_carry_the_logged_episode_targets(tmp_path):
+    """Logs do not store the altitude/heading targets; replays rebuild them from the logged
+    config and seed, so the viewer shows the same bugs as during the live flight."""
+    from flightsim.control.autopilot import load_autopilot_gains
+    from flightsim.datalog import write_log
+    from flightsim.envs import load_env_config
+    from flightsim.stream.sources import LiveSource, ReplaySource
+
+    root = Path(__file__).parent.parent
+    cfg = load_env_config(root / "configs" / "envs" / "altitude_heading_hold.yaml", {"episode_s": 2.0})
+    live = LiveSource(cfg, load_autopilot_gains(root / "configs" / "autopilot.yaml"), 7)
+    list(live.frames())
+    path = write_log(tmp_path / "r.parquet", live._env.episode_result(), live._env.provenance())
+    replay = ReplaySource(path)
+    assert replay.targets == live.targets and replay.approach is None and replay.takeoff is None

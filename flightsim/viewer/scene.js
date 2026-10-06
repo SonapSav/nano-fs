@@ -7,7 +7,8 @@
 
 import * as THREE from "three";
 import { Papi, Windsock, addAirfield, addGroundFallback, addRunwayLights, addSky } from "./scenery.js";
-import { Terrain, WATER_LEVEL_M, height as terrainHeight } from "./terrain.js";
+import { QUALITY, Terrain, WATER_LEVEL_M, height as terrainHeight } from "./terrain.js";
+import { groundDetailStrength } from "./groundDetail.js";
 import { buildC172 } from "./aircraft.js";
 import { buildPattern } from "./pattern.js";
 
@@ -53,11 +54,12 @@ function buildShadow() {
 }
 
 export class FlightScene {
-  constructor(container) {
+  constructor(container, quality = "high") {
     this.container = container;
+    this.quality = quality;
     // Logarithmic depth: from 0.5 m to 100+ km without distant surfaces flickering.
     this.renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, QUALITY[quality].pixelRatio));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping; // the physical sky is HDR
     this.renderer.toneMappingExposure = 0.55;
     container.prepend(this.renderer.domElement);
@@ -69,7 +71,8 @@ export class FlightScene {
     addRunwayLights(this.scene);
     this.papi = new Papi(this.scene);
     this.windsock = new Windsock(this.scene);
-    this.terrain = new Terrain(this.scene);
+    this.terrain = new Terrain(this.scene, quality);
+    this._applyQuality(quality);
 
     this.model = buildC172();
     this.aircraft = this.model.group;
@@ -142,6 +145,23 @@ export class FlightScene {
 
   // Approach task geometry (stream hello "approach"), or null: draws the glide path from
   // the aim point back 5 nm along the extended centreline.
+  // Quality preset (terrain.js QUALITY): low / medium / high.
+  setQuality(quality) {
+    if (!(quality in QUALITY) || quality === this.quality) return;
+    this.quality = quality;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, QUALITY[quality].pixelRatio));
+    this.terrain.setQuality(quality);
+    this._applyQuality(quality);
+    this.resize();
+  }
+
+  _applyQuality(quality) {
+    const q = QUALITY[quality];
+    groundDetailStrength.value = q.groundDetail;
+    this.scene.fog.near = q.fog[0];
+    this.scene.fog.far = q.fog[1];
+  }
+
   setApproach(a) {
     this.approach = a;
     const w = a?.wind;

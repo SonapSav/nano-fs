@@ -20,7 +20,35 @@ const C = {
   pointer: "#f2a33a",
 };
 
-// POH Figure 2-2, KIAS. The model has no position error, so CAS is shown as IAS.
+// Airspeed calibration, POH Figure 5-1 (normal static source): [KIAS, KCAS] per flap
+// setting. The model flies in calibrated airspeed; the instrument shows indicated.
+const ASI_CALIBRATION = {
+  0: [[50, 56], [60, 62], [70, 70], [80, 79], [90, 89], [100, 98], [110, 107], [120, 117], [130, 126], [140, 135], [150, 145], [160, 154]],
+  10: [[40, 49], [50, 55], [60, 62], [70, 70], [80, 79], [90, 89], [100, 98], [110, 108]],
+  30: [[40, 47], [50, 53], [60, 61], [70, 70], [80, 80], [85, 84]],
+};
+
+function kiasFromKcas(kcas, table) {
+  // Beyond the table: the offset at its nearest end.
+  if (kcas <= table[0][1]) return kcas + table[0][0] - table[0][1];
+  for (let i = 1; i < table.length; i++) {
+    const [i0, c0] = table[i - 1], [i1, c1] = table[i];
+    if (kcas <= c1) return i0 + ((kcas - c0) / (c1 - c0)) * (i1 - i0);
+  }
+  const [il, cl] = table[table.length - 1];
+  return kcas + il - cl;
+}
+
+// Indicated airspeed (kt) for a frame: calibrated airspeed through the POH calibration,
+// interpolated between the flap settings.
+export function indicatedKt(row) {
+  const kcas = row.cas_mps * MPS_TO_KT, flap = Math.max(0, row.flap_pos_rad * DEG);
+  const [lo, hi, f] = flap <= 10 ? [0, 10, flap / 10] : [10, 30, Math.min(1, (flap - 10) / 20)];
+  const kias = kiasFromKcas(kcas, ASI_CALIBRATION[lo]) * (1 - f) + kiasFromKcas(kcas, ASI_CALIBRATION[hi]) * f;
+  return Math.max(0, kias);
+}
+
+// POH Figure 2-2, KIAS.
 const ASI = { white: [33, 85], green: [44, 127], yellow: [127, 158], red: 158, min: 30, max: 170 };
 // POH Section 2: sea-level green arc and red line.
 const TACH = { green: [2100, 2450], red: 2700, max: 3500 };
@@ -139,8 +167,7 @@ export function drawAirspeed(canvas, row) {
   text(ctx, "Airspeed", 100, 132, 13, C.dim);
   text(ctx, "knots", 100, 146, 13, C.dim);
   if (!row) return;
-  const kt = row.cas_mps * MPS_TO_KT;
-  needle(ctx, A(kt), 80);
+  needle(ctx, A(indicatedKt(row)), 80);
 }
 
 export function drawAttitude(canvas, row) {

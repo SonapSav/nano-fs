@@ -53,7 +53,7 @@ def test_pattern_legs_follow_the_autopilot_geometry(drawn):
     assert out["markers"]["abeam"] == [0, -d, top]  # abeam the threshold
     assert out["markers"]["base"] == pytest.approx([-d, -d, (2 * d + a["aim_point_m"]) * tan])  # 45 deg
     assert pts[-1] == [a["aim_point_m"], 0, 0]
-    assert out["children"] == 3  # ribbon and two markers
+    assert out["children"] == 3  # ribbon (crosswind, downwind, base) and two markers
 
 
 def test_server_sends_the_pattern_only_for_circuits():
