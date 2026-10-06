@@ -47,6 +47,13 @@ class ServerConfig:
     circuit_env_cfg: EnvConfig | None = None  # circuit task flown by the circuit autopilot
     circuit_gains: CircuitGains | None = None
 
+    def pattern_info(self) -> dict | None:
+        """The circuit autopilot's traffic pattern, for drawing (null without one)."""
+        if self.circuit_gains is None:
+            return None
+        p = self.circuit_gains.pattern
+        return {"height_m": p.pattern_height_m, "crosswind_below_m": p.crosswind_below_m, "downwind_offset_m": p.downwind_offset_m}
+
     def autopilot(self, name: str):
         if name == "pid":
             return PIDPolicy(self.gains, self.env_cfg.control_rate_hz)
@@ -187,6 +194,7 @@ class Session:
             "aircraft": source.aircraft, "sim_rate_hz": source.sim_rate_hz, "frame_rate_hz": self.cfg.frame_rate_hz,
             "duration_s": source.duration_s, "targets": source.targets, "meta": source.meta,
             "pilot": source.pilot_name, "approach": source.approach, "takeoff": source.takeoff,
+            "pattern": self.cfg.pattern_info() if (source.approach or {}).get("task") == "circuit" else None,
         }))  # fmt: skip
         frame_dt = 1.0 / self.cfg.frame_rate_hz
         next_t = None

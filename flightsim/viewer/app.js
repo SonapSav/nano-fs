@@ -199,6 +199,7 @@ function handle(msg) {
       scene.reset();
       scene.setTargets(msg.targets);
       scene.setApproach(msg.approach ?? null);
+      scene.setPattern(msg.pattern ?? null);
       circuitClimbed = false;
       if (msg.takeoff) scene.windsock.setWind(msg.takeoff.wind?.from_deg ?? 0, (msg.takeoff.wind?.u20_mps ?? 0) * 1.943844);
       showApproachRows(msg.approach ? "approach" : msg.takeoff ? "takeoff" : null);

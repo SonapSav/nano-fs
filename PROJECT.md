@@ -303,8 +303,12 @@ owner before work can start.
       landing failures side load 17, nose first 13, hard landing 8, stall 6.
     - Viewer: "Fly a circuit" (calm, crosswind) and "Watch the circuit autopilot"; the
       glide path and threshold readouts show only on final.
-    - Possible next: show the pattern legs in the viewer; RL on the circuit would need
-      a tracking reward (the task has none).
+    - Possible next: RL on the circuit would need a tracking reward (the task has none).
+  - [x] **Pattern legs in the viewer** (2026-10-06): circuit flights (live, manual,
+    replay) get the circuit autopilot's pattern in the stream hello (`pattern`); the
+    viewer (`viewer/pattern.js`) draws upwind (to an indicative crosswind turn 600 m past
+    the runway end), crosswind, downwind at 1000 ft, the 3 deg profile descent and base,
+    and final as a magenta ribbon, with rings abeam the threshold and at the base turn.
 
 ### Second aircraft
 

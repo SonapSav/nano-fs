@@ -9,6 +9,7 @@ import * as THREE from "three";
 import { Papi, Windsock, addAirfield, addGroundFallback, addRunwayLights, addSky } from "./scenery.js";
 import { Terrain, WATER_LEVEL_M, height as terrainHeight } from "./terrain.js";
 import { buildC172 } from "./aircraft.js";
+import { buildPattern } from "./pattern.js";
 
 const R_EARTH = 6371000;
 const TRAIL_POINTS = 4000;
@@ -98,6 +99,9 @@ export class FlightScene {
     this.glidePath.visible = false;
     this.scene.add(this.glidePath);
     this.approach = null;
+    // Circuit: the traffic pattern legs (setPattern).
+    this.pattern = new THREE.Group();
+    this.scene.add(this.pattern);
 
     this.shadow = buildShadow();
     this.scene.add(this.shadow);
@@ -167,6 +171,12 @@ export class FlightScene {
       this.glidePath.add(gate);
     }
     this.targetLine.visible = false;
+  }
+
+  // Circuit: draw the pattern legs (null clears them). Needs the runway from setApproach.
+  setPattern(p) {
+    this.pattern.clear();
+    if (p && this.approach) this.pattern.add(buildPattern(this.approach, p));
   }
 
   // The aircraft's shadow: its outline cast along the sun onto the ground below, fading

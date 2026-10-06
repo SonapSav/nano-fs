@@ -9,7 +9,9 @@ Server -> client messages (JSON):
    "sim_rate_hz", "frame_rate_hz", "duration_s" (null if unknown), "targets" (or null),
    "meta" (log metadata, replay only), "pilot" ("pid" | "lqr" | "human"; null for replay),
    "approach" (approach task: runway and glide path, see envs.approach.approach_geometry; else null),
-   "takeoff" (takeoff task: runway and wind, see envs.takeoff.TakeoffEnv.runway_info; else null)}
+   "takeoff" (takeoff task: runway and wind, see envs.takeoff.TakeoffEnv.runway_info; else null),
+   "pattern" (circuit task: the circuit autopilot's pattern height, crosswind turn margin and
+              downwind offset, for drawing; else null)}
   {"type": "frame", "row": {<log column>: value, ...}}
   {"type": "end", "reason": "finished" | "landed" | "climbed" | "stopped" | "terminated:<why>",
    "landing"?: {...}, "takeoff"?: {...}}
