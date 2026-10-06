@@ -191,6 +191,26 @@ owner before work can start.
     model. The weaker low-speed thrust shows as 3 crosswind takeoff tail strikes (rotation
     with less acceleration in gusts) and a few more circuit side loads. RL models in
     `data/rl/` were trained on c172p.
+  - [x] **Crosswind tuning pass on c172p_tuned** (2026-10-06, commit `605b36c`):
+    - Crosswind takeoff tail strikes: JSBSim's fully braked gear rocks a parked aircraft
+      in a crosswind until it sits on its tail, so some episodes started tail down. The
+      parked start now settles calm on full brakes, then ramps the wind over 5 s with the
+      brakes at 0.3. One in 1000 still strikes at breakaway (~10 kt; tyre friction kick).
+    - Flare: float relief (the pitch command eases down at 2 deg/s, not below 3 deg,
+      while sinking slower than 0.15 m/s), flare pitch gain 6 -> 10, throttle closed over
+      2 s. Floats in strong crosswinds had left the rudder too weak as the speed decayed.
+    - Seeds 0-999:
+
+      | Evaluation | before (`01e684a`) | after (batch) |
+      |---|---|---|
+      | Approach calm | 1000/1000 | 1000/1000 (`fea02d313133`; touchdown 382-392 m, 93 fpm) |
+      | Approach crosswind | 953 | **978** (`6b4e9e4f30cd`; side load 14, nose first 6, stall 2) |
+      | Takeoff crosswind | 997 | **999** (`f6e273b00434`; 1 tail strike at breakaway) |
+      | Circuit calm | 1000/1000 | 1000/1000 (`b6f9654938be`) |
+      | Circuit crosswind | 939 | **981** (`e57d60e2256b`; side load 17, nose first 2) |
+
+    - Remaining: side loads in 12-15 kt crosswinds (rudder authority at touchdown speed;
+      less flap would help but the approach task holds flaps at 30).
 - [x] **Takeoff, approach and landing** (done 2026-10-06: approach, crosswind, brakes and
   rollout, takeoff, gust allowance, circuit). Decided 2026-10-05: approach and landing first.
   - [x] **Approach and landing task** (2026-10-05): `flightsim/envs/approach.py`,
