@@ -6,6 +6,7 @@
 // covers, the flat-earth approximation is far below anything visible.
 
 import * as THREE from "three";
+import { DEFAULT_ORBIT, RECENTRE_S, recentreView } from "./view.js";
 import { Papi, Windsock, addAirfield, addAirfieldDetail, addGroundFallback, addRunwayLights } from "./scenery.js";
 import { SkyController, TIMES } from "./sky.js";
 import { CloudField } from "./clouds.js";
@@ -30,7 +31,6 @@ const BODY_FROM_CAMERA = new THREE.Matrix4().makeBasis(
   new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), new THREE.Vector3(-1, 0, 0),
 );
 
-const CHASE_DISTANCE_M = 22; // default chase camera distance (the aircraft is 8.2 m long, 10.9 m span)
 
 // Top view of the C172 (span 10.9 m, length 8.2 m), nose toward -z, as a shadow.
 function buildShadow() {
@@ -117,7 +117,8 @@ export class FlightScene {
     this.scene.add(this.shadow);
 
     this.camera = new THREE.PerspectiveCamera(60, 1, 0.5, 120000);
-    this.orbit = { azimuth: 0, elevation: 0.18, distance: CHASE_DISTANCE_M };
+    this.orbit = { ...DEFAULT_ORBIT };
+    this.recentre = null;
     this._bindPointer();
     this.reset();
     new ResizeObserver(() => this.resize()).observe(container);
@@ -286,13 +287,21 @@ export class FlightScene {
   }
 
   // Back to the default view: chase camera behind at its usual height and distance,
-  // cockpit head straight ahead (after dragging to look around or zooming).
+  // cockpit head straight ahead (after dragging to look around or zooming), as a short
+  // eased move (view.js).
   resetView() {
-    this.orbit = { azimuth: 0, elevation: 0.18, distance: CHASE_DISTANCE_M };
-    this.head = { yaw: 0, pitch: 0 };
+    this.recentre = { t0: performance.now(), from: { orbit: { ...this.orbit }, head: { ...this.head } } };
+  }
+
+  _stepRecentre() {
+    if (!this.recentre) return;
+    const k = Math.min(1, (performance.now() - this.recentre.t0) / (RECENTRE_S * 1000));
+    ({ orbit: this.orbit, head: this.head } = recentreView(this.recentre.from, k));
+    if (k >= 1) this.recentre = null;
   }
 
   render() {
+    this._stepRecentre();
     this.papi.update(new THREE.Vector3().copy(EYE_BODY).applyMatrix4(this.aircraft.matrix)); // as the pilot sees them
     if (this.view === "cockpit") {
       // Eye fixed in the aircraft; the camera rotates with it, plus the pilot's head turn.
@@ -331,6 +340,7 @@ export class FlightScene {
     const el = this.renderer.domElement;
     let drag = null;
     el.addEventListener("pointerdown", (e) => {
+      this.recentre = null; // the pilot takes the view back
       drag = { x: e.clientX, y: e.clientY };
       el.setPointerCapture(e.pointerId);
     });
@@ -351,6 +361,7 @@ export class FlightScene {
     el.addEventListener("wheel", (e) => {
       e.preventDefault();
       if (this.view === "cockpit") return;
+      this.recentre = null;
       this.orbit.distance = Math.max(8, Math.min(3000, this.orbit.distance * Math.exp(e.deltaY * 0.001)));
     }, { passive: false });
   }
