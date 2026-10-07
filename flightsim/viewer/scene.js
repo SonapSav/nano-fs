@@ -32,28 +32,48 @@ const BODY_FROM_CAMERA = new THREE.Matrix4().makeBasis(
 );
 
 
-// Top view of the C172 (span 10.9 m, length 8.2 m), nose toward -z, as a shadow.
-function buildShadow() {
-  const c = document.createElement("canvas");
-  c.width = c.height = 256;
-  const g = c.getContext("2d"), m = 256 / 12; // 12 m across
-  g.fillStyle = "#000";
-  const rect = (cx, cy, w, h) => g.fillRect(128 + (cx - w / 2) * m, 128 + (cy - h / 2) * m, w * m, h * m);
-  g.beginPath();
-  g.ellipse(128, 128 + 0.4 * m, 0.6 * m, 4.1 * m, 0, 0, Math.PI * 2); // fuselage, nose up (toward -z)
-  g.fill();
-  rect(0, -0.9, 10.9, 1.5); // wing
-  rect(0, 3.6, 3.4, 1.1); // tailplane
-  const tex = new THREE.CanvasTexture(c);
-  const plane = new THREE.Mesh(
-    new THREE.PlaneGeometry(12, 12),
-    new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.42, depthWrite: false, color: 0x000000, alphaTest: 0.01 }),
+// The aircraft's shadow: its real shape. The model's solid parts are merged once (in body
+// axes). Every frame the merged shape is flattened onto the ground plane under the
+// aircraft along the sun (a parallel projection, see updateShadow), so the outline follows
+// the attitude, the heading and the sun's direction. The flattened shape is drawn white
+// into a small mask image from straight above, and the mask darkens a patch of ground:
+// overlapping parts (wing over fuselage, both wing skins) darken once.
+const SHADOW_MASK_PX = 512;
+
+function buildShadow(model) {
+  model.group.updateMatrixWorld(true);
+  const toBody = new THREE.Matrix4().copy(model.group.matrixWorld).invert();
+  const m = new THREE.Matrix4(), v = new THREE.Vector3(), pos = [];
+  const visible = (o) => {
+    for (let n = o; n && n !== model.group; n = n.parent) if (!n.visible) return false;
+    return true;
+  };
+  model.group.traverse((o) => {
+    if (!o.isMesh || o.isInstancedMesh || o.material.transparent || !visible(o)) return; // no glass, glows, propeller disc
+    m.multiplyMatrices(toBody, o.matrixWorld);
+    const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry;
+    const a = g.attributes.position;
+    for (let i = 0; i < a.count; i++) {
+      v.fromBufferAttribute(a, i).applyMatrix4(m);
+      pos.push(v.x, v.y, v.z);
+    }
+  });
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  const flat = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }));
+  flat.matrixAutoUpdate = false;
+  flat.frustumCulled = false; // its matrix flattens it: the bounding sphere does not apply
+  const maskScene = new THREE.Scene();
+  maskScene.add(flat);
+  const target = new THREE.WebGLRenderTarget(SHADOW_MASK_PX, SHADOW_MASK_PX, { depthBuffer: false });
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
+  camera.up.set(0, 0, -1); // north up in the mask, as on the ground patch
+  const patch = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: target.texture, transparent: true, opacity: 0.5, depthWrite: false }),
   );
-  plane.rotation.x = -Math.PI / 2;
-  const group = new THREE.Group();
-  group.add(plane);
-  group.visible = false;
-  return group;
+  patch.visible = false;
+  return { flat, maskScene, target, camera, patch };
 }
 
 export class FlightScene {
@@ -113,8 +133,9 @@ export class FlightScene {
     this.pattern = new THREE.Group();
     this.scene.add(this.pattern);
 
-    this.shadow = buildShadow();
-    this.scene.add(this.shadow);
+    this.shadow = buildShadow(this.model);
+    this.scene.add(this.shadow.patch);
+    this.shadowFlatten = new THREE.Matrix4();
 
     this.camera = new THREE.PerspectiveCamera(60, 1, 0.5, 120000);
     this.orbit = { ...DEFAULT_ORBIT };
@@ -175,6 +196,7 @@ export class FlightScene {
     old.forceContextLoss();
     this.renderer = r;
     this.skyLight.renderer = r;
+    this.shadowMaskDirty = true; // the mask texture lived in the old context
     this._bindPointer();
     this.resize();
   }
@@ -237,15 +259,48 @@ export class FlightScene {
   // The aircraft's shadow: its outline cast along the sun onto the ground below, fading
   // out with height (the strongest height cue close to the ground).
   updateShadow() {
-    const p = this.position, s = this.sunDir;
-    const ground = Math.max(terrainHeight(p.x, p.z), WATER_LEVEL_M);
+    const p = this.position, s = this.sunDir, sh = this.shadow;
+    // The ground where the sun's ray through the aircraft meets it (two steps on hills).
+    let ground = Math.max(terrainHeight(p.x, p.z), WATER_LEVEL_M);
+    let t = (p.y - ground) / s.y;
+    ground = Math.max(terrainHeight(p.x - s.x * t, p.z - s.z * t), WATER_LEVEL_M);
     const agl = p.y - ground;
-    this.shadow.visible = agl < 200;
-    if (!this.shadow.visible) return;
-    const t = (p.y - ground) / s.y;
-    this.shadow.position.set(p.x - s.x * t, ground + 0.25, p.z - s.z * t);
-    this.shadow.rotation.y = -(this.heading ?? 0);
-    this.shadow.children[0].material.opacity = 0.42 * Math.max(0, 1 - agl / 200);
+    sh.patch.visible = agl < 200 && s.y > 0.02;
+    if (!sh.patch.visible) return;
+    // Flatten onto the plane y = h along the sun: (x, y, z) -> (x - sx/sy (y - h), h, z - sz/sy (y - h)).
+    // 25 cm up: above the runway and taxiway surfaces (drawn at 0.12-0.15 m).
+    const h = ground + 0.25, kx = s.x / s.y, kz = s.z / s.y;
+    this.shadowFlatten.set(1, -kx, 0, kx * h, 0, 0, 0, h, 0, -kz, 1, kz * h, 0, 0, 0, 1);
+    sh.flat.matrix.multiplyMatrices(this.shadowFlatten, this.aircraft.matrix);
+    sh.flat.matrixWorld.copy(sh.flat.matrix);
+    // Patch and mask camera: centred on the shadow, wide enough for the span (11 m) and the
+    // stretch of a low sun (the aircraft is ~3 m tall), at most 60 m.
+    t = (p.y - h) / s.y;
+    const cx = p.x - s.x * t, cz = p.z - s.z * t;
+    const size = Math.min(60, 14 + 3.2 / Math.max(0.05, s.y / Math.hypot(s.x, s.z)));
+    sh.patch.position.set(cx, h, cz);
+    sh.patch.scale.set(size, 1, size);
+    sh.camera.left = sh.camera.bottom = -size / 2;
+    sh.camera.right = sh.camera.top = size / 2;
+    sh.camera.position.set(cx, h + 100, cz);
+    sh.camera.lookAt(cx, h, cz);
+    sh.camera.updateProjectionMatrix();
+    sh.patch.material.opacity = 0.5 * Math.max(0, 1 - agl / 200);
+    this.shadowMaskDirty = true;
+  }
+
+  // Draw the shadow mask (before the frame; only when the aircraft or the sun moved).
+  _renderShadowMask() {
+    if (!this.shadowMaskDirty || !this.shadow.patch.visible) return;
+    this.shadowMaskDirty = false;
+    const r = this.renderer, sh = this.shadow;
+    const clear = r.getClearColor(new THREE.Color()), alpha = r.getClearAlpha();
+    r.setRenderTarget(sh.target);
+    r.setClearColor(0x000000, 1);
+    r.clear(true, false, false);
+    r.render(sh.maskScene, sh.camera);
+    r.setRenderTarget(null);
+    r.setClearColor(clear, alpha);
   }
 
   update(row) {
@@ -326,6 +381,7 @@ export class FlightScene {
 
   render() {
     this._stepRecentre();
+    this._renderShadowMask();
     this.papi.update(new THREE.Vector3().copy(EYE_BODY).applyMatrix4(this.aircraft.matrix)); // as the pilot sees them
     if (this.view === "cockpit") {
       // Eye fixed in the aircraft; the camera rotates with it, plus the pilot's head turn.

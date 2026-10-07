@@ -588,6 +588,14 @@ owner before work can start.
 
 ### Viewer
 
+- [x] **The aircraft's real shadow** (2026-10-07): the old shadow was a hand-drawn top-view
+  outline on a square, turned only with the heading. Now the model's solid parts are
+  merged once and flattened each frame onto the ground under the aircraft along the sun
+  (a parallel projection: true outline for any attitude, heading and time of day), drawn
+  white into a 512 px mask from straight above, and the mask darkens a ground patch
+  (opacity 0.5, fading out by 200 m above the ground). The mask avoids double darkening
+  where parts overlap without needing a stencil buffer (a stencil version drew nothing
+  in headless Chromium). 25 cm above the ground, over the runway surface (0.15 m).
 - [x] **Flights drawer and Settings** (2026-10-07). The toolbar keeps what is used in
   flight: Flights (with the chosen flight's name), Play / Pause / Stop, speed, progress,
   cockpit view, HUD, instruments window, Settings, Stick settings. The **Flights** drawer
