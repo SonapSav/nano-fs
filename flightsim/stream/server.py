@@ -9,8 +9,9 @@ import asyncio
 import json
 import mimetypes
 import time
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Awaitable, Callable
+from concurrent.futures import ProcessPoolExecutor
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from websockets.asyncio.server import ServerConnection, serve
@@ -25,6 +26,7 @@ from flightsim.control.circuit import CircuitGains
 from flightsim.control.takeoff import TakeoffGains
 from flightsim.envs.policies import ApproachPolicy, CircuitPolicy, LQRPolicy, PIDPolicy, TakeoffPolicy
 from flightsim.stream.protocol import PROTOCOL_VERSION, encode
+from flightsim.stream.results import ResultCache, flight_result
 from flightsim.stream.sources import LiveSource, ManualSource, ReplaySource, Source, list_logs
 
 VIEWER_DIR = Path(__file__).resolve().parent.parent / "viewer"
@@ -46,6 +48,15 @@ class ServerConfig:
     takeoff_gains: TakeoffGains | None = None
     circuit_env_cfg: EnvConfig | None = None  # circuit task flown by the circuit autopilot
     circuit_gains: CircuitGains | None = None
+    # Past flight results (stream/results.py): computed in the background for logs outside
+    # batches and sent with the log list. Off by default (tests); the viewer server turns it on.
+    flight_results: bool = False
+    _results: "ResultWorker | None" = field(default=None, init=False, repr=False)
+
+    def results(self) -> "ResultWorker":
+        if self._results is None:
+            self._results = ResultWorker(ResultCache(self.data_dir))
+        return self._results
 
     def pattern_info(self) -> dict | None:
         """The circuit autopilot's traffic pattern, for drawing (null without one)."""
@@ -81,6 +92,48 @@ def _static_response(path: str) -> Response:
     body = file.read_bytes()
     headers = Headers([("Content-Type", ctype), ("Content-Length", str(len(body))), ("Cache-Control", "no-cache")])
     return Response(200, "OK", headers, body)
+
+
+class ResultWorker:
+    """Computes past flight results one at a time in a separate process (re-flying a log
+    takes ~2 s of CPU; a process keeps it off a live flight's thread), newest first, and
+    tells the listening sessions every few seconds and when done."""
+
+    NOTIFY_S = 3.0
+
+    def __init__(self, cache: ResultCache):
+        self.cache = cache
+        self.pending: list[str] = []
+        self.listeners: set[Callable[[], Awaitable[None]]] = set()
+        self.task: asyncio.Task | None = None
+        self.pool: ProcessPoolExecutor | None = None
+
+    def request(self, rel_paths: list[str], listener: Callable[[], Awaitable[None]]) -> None:
+        self.listeners.add(listener)
+        for rel in rel_paths:
+            if rel not in self.pending:
+                self.pending.append(rel)
+        if self.pending and (self.task is None or self.task.done()):
+            self.task = asyncio.create_task(self._run())
+
+    async def _run(self) -> None:
+        loop = asyncio.get_running_loop()
+        self.pool = self.pool or ProcessPoolExecutor(max_workers=1)
+        told = time.monotonic()
+        while self.pending:
+            rel = self.pending.pop(0)
+            try:
+                result = await loop.run_in_executor(self.pool, flight_result, str(self.cache.data_dir / rel))
+            except Exception as e:  # the worker process failed
+                result = {"outcome": "unknown", "why": f"worker: {type(e).__name__}"}
+            self.cache.put(rel, result)
+            if not self.pending or time.monotonic() - told > self.NOTIFY_S:
+                told = time.monotonic()
+                for listener in list(self.listeners):
+                    try:
+                        await listener()
+                    except Exception:  # the session is gone
+                        self.listeners.discard(listener)
 
 
 class Session:
@@ -122,8 +175,7 @@ class Session:
     async def handle(self, msg: dict) -> None:
         kind = msg.get("type")
         if kind == "list":
-            logs = await asyncio.to_thread(list_logs, self.cfg.data_dir)  # can take a while for big batches
-            await self.ws.send(encode({"type": "logs", "logs": logs}))
+            await self._send_logs(request_results=True)
         elif kind == "preview":
             # The starting state of a flight, without starting it: built like "play", only
             # the hello and the first frame are sent. Ignored during a flight; a newer
@@ -178,6 +230,29 @@ class Session:
             await self.stop()
         else:
             raise ValueError(f"unknown message type {kind!r}")
+
+    async def _send_logs(self, request_results: bool = False) -> None:
+        """The log list, with past flight results where known; asks for the missing ones
+        (logs outside batches), and is sent again as they come in."""
+        logs = await asyncio.to_thread(list_logs, self.cfg.data_dir)  # can take a while for big batches
+        if self.cfg.flight_results:
+            worker = self.cfg.results()
+            missing = []
+            for log in sorted(logs, key=lambda l: -l["mtime"]):
+                if log["group"].startswith("batch/"):
+                    continue
+                result = worker.cache.get(log["path"])
+                if result is None:
+                    missing.append(log["path"])
+                else:
+                    log["result"] = result
+            if missing and request_results:
+                worker.request(missing, self._send_logs)
+        await self.ws.send(encode({"type": "logs", "logs": logs}))
+
+    def close(self) -> None:
+        if self.cfg.flight_results and self.cfg._results is not None:
+            self.cfg._results.listeners.discard(self._send_logs)
 
     def _clamp(self, speed) -> float:
         limit = min(MAX_SPEED, self.source.max_speed if isinstance(self.source, LiveSource) else MAX_SPEED)
@@ -268,6 +343,7 @@ def make_handler(cfg: ServerConfig):
         except ConnectionClosed:
             pass
         finally:
+            session.close()
             if session.task:
                 session.task.cancel()
 

@@ -14,17 +14,48 @@ function fmtDate(epochS) {
   return `${d.toLocaleString("en-US", { month: "short" })} ${d.getDate()}, ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
+// What a past flight's result says (stream/results.py; the task's failure reasons).
+const FAILURES = {
+  nose_first: "Nose wheel first", wing_low: "Wing low at touchdown", hard_landing: "Hard landing", off_runway: "Ran off the runway",
+  undershoot: "Short of the runway", side_load: "Touched down crabbed", tail_strike: "Tail strike", wingtip_strike: "Wingtip strike",
+  nose_strike: "Nose strike", lost_approach: "Lost the approach", overrun: "Ran off the end", no_stop: "Did not stop in time",
+  no_liftoff: "No lift-off", sank_back: "Sank back after lift-off", lost: "Off the centreline", alpha: "Stalled",
+  bank: "Bank limit", load_factor: "Load limit",
+};
+
+// {text, kind: "good" | "bad" | "plain"} for a result, or null (unknown or not computed yet).
+export function resultText(r) {
+  if (!r || r.outcome === "unknown") return null;
+  const td = r.touchdown;
+  const where = td ? ` ${Math.round(td.along_m)} m, ${td.sink_fpm} fpm` : "";
+  switch (r.outcome) {
+    case "landed":
+      return { text: `Landed${where}${r.bounces ? `, ${r.bounces} bounce${r.bounces > 1 ? "s" : ""}` : ""}`, kind: "good" };
+    case "climbed":
+      return { text: "Climbed out", kind: "good" };
+    case "completed":
+      return { text: "Completed", kind: "good" };
+    case "failed":
+      return { text: `${FAILURES[r.reason] ?? r.reason.replace(/_/g, " ")}${where}`, kind: "bad" };
+    case "stopped":
+      return { text: td ? `Stopped after touchdown${where}` : "Stopped early", kind: "plain" };
+    default:
+      return null;
+  }
+}
+
 // Title and detail line of a past flight in the Flights drawer: the task (with wind) and
 // seed, duration, date and HUD use; logs without a known task have no title.
 export function itemText(log) {
-  if (!log.task) return { title: null, detail: optionLabel(log) };
+  const result = resultText(log.result);
+  if (!log.task) return { title: null, detail: optionLabel(log), result };
   const title = `${TASK_TITLES[log.task] ?? log.task}${log.windy ? " in wind" : ""}`;
   const who = log.pilot && log.pilot !== "human" ? log.pilot.toUpperCase() : null;
   const parts = [`Seed ${log.seed ?? "?"}`, fmtDuration(log.duration_s)];
   if (log.group === "demos") parts.push(fmtDate(log.mtime));
   if (who) parts.push(who);
   if (log.hud) parts.push("HUD");
-  return { title, detail: parts.join(" · ") };
+  return { title, detail: parts.join(" · "), result };
 }
 
 export function optionLabel(log) {
@@ -50,7 +81,7 @@ export function matches(log, query) {
   const seed = /^s?(\d+)$/.exec(q);
   if (seed) return log.seed === Number(seed[1]);
   const t = itemText(log);
-  return log.path.toLowerCase().includes(q) || optionLabel(log).toLowerCase().includes(q) || (t.title ?? "").toLowerCase().includes(q) || t.detail.toLowerCase().includes(q);
+  return [log.path, optionLabel(log), t.title ?? "", t.detail, t.result?.text ?? ""].some((x) => x.toLowerCase().includes(q));
 }
 
 // [{label, options: [{value, label}], more}] in display order; `more` counts matching

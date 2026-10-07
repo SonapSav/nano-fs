@@ -146,7 +146,7 @@ let selection = MANUAL; // the chosen flight: a scenario value or a log path
 let selectionTitle = SCENARIO_TITLES[MANUAL];
 
 // A list item: a button with a title and a detail line, selected when it is the choice.
-function flightItem(value, title, detail) {
+function flightItem(value, title, detail, result = null) {
   const b = document.createElement("button");
   b.type = "button";
   b.className = "flight-item";
@@ -154,6 +154,7 @@ function flightItem(value, title, detail) {
   b.dataset.value = value;
   b.append(Object.assign(document.createElement("span"), { className: "title", textContent: title }));
   if (detail) b.append(Object.assign(document.createElement("span"), { className: "detail", textContent: detail }));
+  if (result) b.append(Object.assign(document.createElement("span"), { className: `result ${result.kind}`, textContent: result.text }));
   b.addEventListener("click", () => selectFlight(value, title));
   b.addEventListener("dblclick", () => {
     selectFlight(value, title);
@@ -164,6 +165,7 @@ function flightItem(value, title, detail) {
 
 function populateSources(logs = allLogs) {
   allLogs = logs;
+  const focused = document.activeElement?.classList.contains("flight-item") ? document.activeElement.dataset.value : null; // kept across a refresh
   $("list-fly").replaceChildren(...SCENARIOS_FLY.map(([v, t, d]) => flightItem(v, t, d)));
   $("list-watch").replaceChildren(...SCENARIOS_WATCH.map(([v, t, d]) => flightItem(v, t, d)));
   const past = $("list-past");
@@ -174,11 +176,12 @@ function populateSources(logs = allLogs) {
     const list = Object.assign(document.createElement("div"), { className: "flight-list" });
     list.setAttribute("role", "listbox");
     list.setAttribute("aria-label", g.label);
-    for (const o of g.options) list.append(flightItem(o.value, o.title ?? o.label, o.title ? o.detail : ""));
+    for (const o of g.options) list.append(flightItem(o.value, o.title ?? o.label, o.title ? o.detail : "", o.result));
     past.append(list);
     if (g.more) past.append(Object.assign(document.createElement("div"), { className: "more", textContent: `… ${g.more} more: filter by seed to find them` }));
   }
   if (!groups.length) past.append(Object.assign(document.createElement("div"), { className: "more", textContent: sourceFilter.value ? "No flights match the filter." : "No recorded flights yet." }));
+  if (focused) [...drawer.querySelectorAll(".flight-item")].find((i) => i.dataset.value === focused && i.offsetParent !== null)?.focus();
   updateSourceOptions();
 }
 

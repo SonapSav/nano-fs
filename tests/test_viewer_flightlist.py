@@ -41,6 +41,13 @@ def test_flight_menu_groups_caps_and_filters():
       text: f.groupLogs(logs, "local"),
       task: f.itemText({{ path: "demos/y.parquet", group: "demos", seed: 3, duration_s: 195, pilot: "human", mtime: 1000, task: "approach", windy: true, hud: true }}),
       taskBatch: f.itemText({{ path: "batch/b/logs/y.parquet", group: "batch/b", seed: 4, duration_s: 60, pilot: "circuit", mtime: 1, task: "circuit", windy: false, hud: null }}),
+      results: [
+        {{ outcome: "landed", touchdown: {{ along_m: 127.4, sink_fpm: 98 }}, bounces: 0 }},
+        {{ outcome: "failed", reason: "nose_first", touchdown: {{ along_m: 63.6, sink_fpm: 493 }} }},
+        {{ outcome: "failed", reason: "alpha" }},
+        {{ outcome: "stopped" }}, {{ outcome: "climbed" }}, {{ outcome: "unknown", why: "x" }}, null,
+      ].map(f.resultText),
+      byResult: f.groupLogs([...logs, {{ path: "demos/z.parquet", group: "demos", seed: 1, duration_s: 9, pilot: "human", mtime: 9, task: "approach", windy: false, hud: false, result: {{ outcome: "failed", reason: "alpha" }} }}], "stalled"),
       byTask: f.groupLogs([...logs, {{ path: "demos/y.parquet", group: "demos", seed: 3, duration_s: 195, pilot: "human", mtime: 1000, task: "takeoff", windy: false, hud: false }}], "takeoff"),
     }};
     console.log(JSON.stringify(out));
@@ -63,8 +70,15 @@ def test_flight_menu_groups_caps_and_filters():
     # Past flights in the drawer: the task as the title, then seed, duration, date, pilot, HUD.
     assert out["task"]["title"] == "Approach and landing in wind"
     assert out["task"]["detail"].startswith("Seed 3 · 3:15 · ") and out["task"]["detail"].endswith(" · HUD")
-    assert out["taskBatch"] == {"title": "Circuit", "detail": "Seed 4 · 1:00 · CIRCUIT"}
+    assert out["taskBatch"] == {"title": "Circuit", "detail": "Seed 4 · 1:00 · CIRCUIT", "result": None}
     assert [o["value"] for g in out["byTask"] for o in g["options"]] == ["demos/y.parquet"]  # filter by task name
+    # Results: a short line, good (green) or bad (amber); filterable.
+    landed, nose, stall, stopped, climbed, unknown, none = out["results"]
+    assert landed == {"text": "Landed 127 m, 98 fpm", "kind": "good"}
+    assert nose == {"text": "Nose wheel first 64 m, 493 fpm", "kind": "bad"}
+    assert stall == {"text": "Stalled", "kind": "bad"} and stopped["text"] == "Stopped early" and climbed["kind"] == "good"
+    assert unknown is None and none is None
+    assert [o["value"] for g in out["byResult"] for o in g["options"]] == ["demos/z.parquet"]
 
 
 def test_list_logs_summarizes_and_caches(tmp_path, monkeypatch):

@@ -23,8 +23,13 @@ Server -> client messages (JSON):
       landing: the approach task's result (touchdown point, sink rate, ...), approach only
       takeoff: the takeoff task's result (lift-off, 50 ft point, ...), takeoff only
   {"type": "logs", "logs": [{"path", "group", "run_id", "aircraft", "rows", "duration_s", "seed",
-                             "pilot", "mtime"}, ...]}
+                             "pilot", "mtime", "task", "windy", "hud", "result"?}, ...]}
       group: "demos", "batch/<id>" or the top directory under the data dir.
+      task: "free" | "approach" | "takeoff" | "circuit" (null if unknown); windy: flew in
+      wind; hud: the HUD was in view at some time (null: not recorded).
+      result (when the server computes results and has it; never for batches): what the
+      task decided, from re-flying the log (stream/results.py). Sent again, with more
+      results, while they are being computed.
   {"type": "error", "message"}
   {"type": "saved", "path"}   (a manual flight was written as a demonstration log)
 

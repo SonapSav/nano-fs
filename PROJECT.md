@@ -600,8 +600,16 @@ owner before work can start.
   carries `task`, `windy` and `hud` (from each log's config and pilot aids metadata).
   **Settings** dialog: sound and volume, sky overrides, quality, frame rate readout and
   the performance test. Stick settings stay separate.
-  - [ ] Past flight results in the list (landed / failure, touchdown numbers): needs the
-    server to re-fly each log once and cache the result (owner: later).
+  - [x] Past flight results (2026-10-07): the viewer server re-flies each log outside the
+    batches once (`stream/results.py`: config + seed + recorded commands, open loop; the
+    re-flight must reproduce the log, else "unknown") in a separate process (~2 s per
+    approach, newest first), caches the result in `data/cache/flight_results.json` (by
+    path, size, mtime and RESULTS_VERSION) and sends the list again as results come in.
+    The drawer shows a result line: "Landed 127 m, 98 fpm" (green), the failure in words
+    with the touchdown point and sink rate (amber), "Climbed out", "Completed", "Stopped
+    early"; the filter matches it too. `--no-flight-results` turns it off. First run over
+    the owner's 63 flights: 3 landed, 1 climbed, 21 completed, 23 failed, 13 stopped, 2
+    unknown (early logs from an older config format).
 - [x] **Smooth motion and a performance readout** (2026-10-07). Stutter reported. Measured:
   the server's frames arrive every 33 ms median (29-38 ms, occasionally 68 ms) and were
   drawn as they came, so at 60 Hz each pose stayed 1-3 refreshes (judder); crossing a

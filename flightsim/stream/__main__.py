@@ -18,6 +18,7 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1", help="use 0.0.0.0 inside Docker")
     parser.add_argument("--port", type=int, default=8686)
     parser.add_argument("--data-dir", default="data", help="logs available for replay")
+    parser.add_argument("--no-flight-results", action="store_true", help="do not re-fly past flights for their results")
     parser.add_argument("--env-config", default="configs/envs/altitude_heading_hold.yaml")
     parser.add_argument("--autopilot", default="configs/autopilot.yaml")
     parser.add_argument("--lqr", default="configs/lqr.yaml", help="LQR autopilot config")
@@ -60,6 +61,7 @@ def main() -> None:
         takeoff_gains=load_takeoff_gains(args.takeoff_autopilot),
         circuit_env_cfg=load_env_config(args.circuit_config),
         circuit_gains=circuit_gains_from_raw(load_circuit_raw(args.circuit_autopilot)),
+        flight_results=not args.no_flight_results,
     )
     # Design the LQR gain schedule now (or load it from data/cache/lqr), so the first
     # "watch the LQR" flight starts at once; designing takes ~15 s.
