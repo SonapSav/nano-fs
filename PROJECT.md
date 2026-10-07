@@ -580,7 +580,7 @@ owner before work can start.
   the owner's request, 2026-10-04). A white triangle at the bottom edge of the view points
   up at the aircraft's straight-ahead direction; it follows the nose when the head is
   turned and hides when the nose direction is out of view.
-- [ ] **Scenery plan** (discussed 2026-10-05; do together with takeoff/landing, in this
+- [x] **Scenery plan** (done 2026-10-07) (discussed 2026-10-05; do together with takeoff/landing, in this
   order, about 2 days for 1-3):
   1. [x] **Terrain height in the physics** (2026-10-05). `flightsim/world/terrain.py` is a
      bit-identical port of terrain.js `height()` (2,000 points compared with Node; the
