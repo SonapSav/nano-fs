@@ -564,9 +564,15 @@ owner before work can start.
     only from rest and never a mapped stick axis or a lever). Standard pads default to
     the old layout (bumpers, D-pad, B, triggers); profiles saved before get those
     defaults. Unbound functions stay on the keyboard. Tested (Node unit tests).
-  - [ ] Check in the browser with the real device: axes and buttons mapped, a flight
-    flown, feel (sensitivity/expo) adjusted if needed. Do not hard-code axis indices:
-    they vary by browser and OS.
+  - [x] Real device in Firefox (2026-10-07): mapped as stick X/Y = axes 0/1 (pitch
+    inverted, as standard pads), lever = axis 2 (inverted), rocker = axis 4 (rudder),
+    hat Y = axis 6 (flaps), buttons 4/5 = trim, trigger (0) = brakes. First flight (an
+    approach, `5aa41798fe84-s0-m38caaa07`): every mapped control registered and the
+    pitch sense is right (the pilot pushed as the nose rose).
+  - [ ] Feel: in that flight the power stayed at 70-75%, the speed built from 65 to 110 kt
+    and the pitch oscillated (~8 s period, ~50 stick reversals/min); judge sensitivity
+    and expo after a few more flights. Do not hard-code axis indices: they vary by
+    browser and OS.
 
 ### Viewer
 
