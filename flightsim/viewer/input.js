@@ -46,7 +46,7 @@ export class PilotInput {
     this.value = { elevator: 0, aileron: 0, rudder: 0, throttle: 0, flaps: 0, pitch_trim: 0, brake: 0 };
     this.gamepadName = null;
     this._padPrev = {};
-    this.stick = loadSettings(); // per-axis sensitivity and expo (stick.js)
+    this.stick = loadSettings(); // per-device axes, buttons and feel (stick.js)
   }
 
   reset(throttle, flaps = 0, pitchTrim = 0) {
@@ -95,6 +95,13 @@ export class PilotInput {
     return this.pad ? profileFor(this.stick, this.pad) : null;
   }
 
+  // The current device's feel (sensitivity, expo, dead zone); without a gamepad the
+  // template for new devices.
+  feel() {
+    const p = this.profile();
+    return p ? p.feel : this.stick;
+  }
+
   // Mapped sticks (roll, pitch, rudder) that read outside the dead zone after
   // calibration: [{axis, value}]. With hands off, this is uncorrected drift.
   offCentre() {
@@ -102,7 +109,7 @@ export class PilotInput {
     const profile = this.profile();
     return ["roll", "pitch", "rudder"]
       .map((axis) => ({ axis, value: controlValue(profile, this.rawAxes, axis) }))
-      .filter((a) => a.value !== null && Math.abs(a.value) >= this.stick.deadzone);
+      .filter((a) => a.value !== null && Math.abs(a.value) >= this.feel().deadzone);
   }
 
   // Advance by dt seconds and return the current input.
@@ -130,14 +137,15 @@ export class PilotInput {
       // yoke, right stick X = rudder). Calibrated centre first, then the dead zone, then
       // the response curve. A deflected stick overrides the keys.
       const profile = this.profile();
+      const feel = profile.feel;
       const get = (c) => {
         const v = controlValue(profile, pad.axes, c);
-        return v === null ? 0 : deadzone(v, this.stick.deadzone);
+        return v === null ? 0 : deadzone(v, feel.deadzone);
       };
       const [roll, pitch, yaw] = [get("roll"), get("pitch"), get("rudder")];
-      if (roll) this.value.aileron = shape(roll, this.stick.roll);
-      if (pitch) this.value.elevator = shape(pitch, this.stick.pitch);
-      if (yaw) this.value.rudder = -shape(yaw, this.stick.rudder); // right pedal: nose right = negative rudder
+      if (roll) this.value.aileron = shape(roll, feel.roll);
+      if (pitch) this.value.elevator = shape(pitch, feel.pitch);
+      if (yaw) this.value.rudder = -shape(yaw, feel.rudder); // right pedal: nose right = negative rudder
       lever = controlValue(profile, pad.axes, "throttle");
       // Buttons as bound in Stick settings (defaults for standard gamepads: triggers =
       // throttle, bumpers = flaps, D-pad = trim, B = brakes).

@@ -5,7 +5,7 @@
 import { FlightScene } from "./scene.js";
 import { drawAll, indicatedKt, units } from "./gauges.js";
 import { HANDLED_KEYS, PilotInput } from "./input.js";
-import { AXES, BUTTONS, CONTROLS, DEFAULTS, MAX_CALIBRATION_SPREAD, MAX_CENTRE, buttonValue, controlValue, defaultProfile, detectAxis, detectButton, saveSettings } from "./stick.js";
+import { AXES, BUTTONS, CONTROLS, DEFAULTS, MAX_CALIBRATION_SPREAD, MAX_CENTRE, buttonValue, controlValue, copyFeel, defaultProfile, detectAxis, detectButton, saveSettings } from "./stick.js";
 import { groupLogs } from "./flightlist.js";
 import { FlightSound } from "./sound.js";
 
@@ -568,10 +568,15 @@ function frame() {
 }
 
 // Stick settings dialog: edits pilot.stick in place, applies immediately, saves per browser.
+// The feel (sensitivity, expo, dead zone) is the connected device's own.
 const AXIS_LABELS = { pitch: "Pitch", roll: "Roll", rudder: "Rudder" };
+const padName = (pad) => pad.id.replace(/\s*\(.*$/, "");
 function renderStickRows() {
   const rows = $("stick-rows");
   rows.replaceChildren();
+  const pad = pilot.readPad();
+  const feel = pilot.feel();
+  $("stick-feel-device").textContent = pad ? `Feel for ${padName(pad)}: each controller keeps its own.` : "No gamepad connected: these are the starting values for new controllers.";
   for (const axis of AXES) {
     const row = document.createElement("div");
     row.className = "stick-row";
@@ -581,13 +586,13 @@ function renderStickRows() {
       const lab = document.createElement("label");
       lab.htmlFor = id;
       const input = Object.assign(document.createElement("input"), { type: "range", id, min, max: 1, step: 0.05 });
-      input.value = pilot.stick[axis][key];
+      input.value = feel[axis][key];
       input.setAttribute("aria-label", `${AXIS_LABELS[axis]} ${label.toLowerCase()}`);
       const out = document.createElement("output");
       out.htmlFor = id;
       out.textContent = Number(input.value).toFixed(2);
       input.addEventListener("input", () => {
-        pilot.stick[axis][key] = Number(input.value);
+        feel[axis][key] = Number(input.value);
         out.textContent = Number(input.value).toFixed(2);
         saveSettings(pilot.stick);
       });
@@ -600,12 +605,13 @@ function renderStickRows() {
 }
 function renderDeadzone() {
   const input = $("stick-deadzone");
-  input.value = pilot.stick.deadzone;
+  input.value = pilot.feel().deadzone;
   $("stick-deadzone-out").textContent = Number(input.value).toFixed(2);
 }
 $("stick-deadzone").addEventListener("input", (e) => {
-  pilot.stick.deadzone = Number(e.target.value);
-  $("stick-deadzone-out").textContent = pilot.stick.deadzone.toFixed(2);
+  const feel = pilot.feel();
+  feel.deadzone = Number(e.target.value);
+  $("stick-deadzone-out").textContent = feel.deadzone.toFixed(2);
   saveSettings(pilot.stick);
 });
 
@@ -626,7 +632,7 @@ function renderAxisRows() {
   rows.replaceChildren();
   const pad = pilot.readPad();
   $("stick-device").textContent = pad
-    ? `${pad.id.replace(/\s*\(.*$/, "")}${pad.mapping === "standard" ? "" : " (no standard layout: map its axes below)"}`
+    ? `${padName(pad)}${pad.mapping === "standard" ? "" : " (no standard layout: map its axes below)"}`
     : "No gamepad detected: press a button on it to connect.";
   if (!pad) return;
   const profile = pilot.profile();
@@ -774,7 +780,7 @@ function updateLive() {
   let drift = false;
   for (const span of document.querySelectorAll("#axis-rows .live")) {
     const v = controlValue(profile, pad.axes, span.dataset.control);
-    const off = span.dataset.control !== "throttle" && v !== null && Math.abs(v) >= pilot.stick.deadzone;
+    const off = span.dataset.control !== "throttle" && v !== null && Math.abs(v) >= pilot.feel().deadzone;
     drift ||= off;
     span.textContent = v === null ? "" : span.dataset.control === "throttle" ? `${Math.round(v * 100)}%` : signed(v, 2);
     span.style.color = off ? "#e2b93b" : "";
@@ -871,8 +877,11 @@ $("stick-open").addEventListener("click", () => {
   $("stick-dialog").showModal();
 });
 $("stick-reset").addEventListener("click", () => {
-  const devices = pilot.stick.devices; // reset the feel, keep each controller's axes, buttons and calibration
-  pilot.stick = { ...structuredClone(DEFAULTS), devices };
+  // Reset the feel of the connected controller (or, with none, the template for new ones);
+  // axes, buttons and calibration stay.
+  const pad = pilot.readPad();
+  if (pad) pilot.profile().feel = copyFeel(DEFAULTS);
+  else pilot.stick = { ...structuredClone(DEFAULTS), devices: pilot.stick.devices };
   saveSettings(pilot.stick);
   renderStickRows();
   renderDeadzone();

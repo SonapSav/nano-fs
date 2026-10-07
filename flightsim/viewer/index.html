@@ -203,6 +203,7 @@
     <form method="dialog">
       <h2 id="stick-title">Stick settings</h2>
       <p>For gamepads and joysticks. Sensitivity sets how far full stick moves the control; expo makes small movements around centre gentler.</p>
+      <p id="stick-feel-device"></p>
       <div id="stick-rows"></div>
       <div class="stick-row" id="deadzone-row">
         <span class="axis">Centre</span>
@@ -225,7 +226,7 @@
       <p>Unbound functions stay on the keyboard (F/V flaps, T/G trim, B brakes, W/S throttle). A hat switch shows up as two axes: bind its directions with Detect.</p>
       <div id="button-rows"></div>
       <div class="dialog-buttons">
-        <button type="button" id="stick-reset">Reset to defaults</button>
+        <button type="button" id="stick-reset">Reset feel to defaults</button>
         <button value="done">Done</button>
       </div>
     </form>

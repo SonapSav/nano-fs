@@ -56,6 +56,12 @@ hotas.buttons[0] = btn(true); out.brake = run(1.0).brake;
 const xbox = { id: "Xbox", mapping: "standard", connected: true, axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => btn(false)) };
 pads = [xbox]; p.reset(0.5); xbox.buttons[12] = btn(true);
 out.stdTrim = run(1.0).pitch_trim;
+// Feel per device: full stick right gives the device's own sensitivity.
+p.stick.devices.Xbox.feel.roll = { sensitivity: 0.7, expo: 0 };
+p.stick.devices.HOTAS.feel = { ...p.stick.devices.HOTAS.feel, roll: { sensitivity: 1, expo: 0 } };
+Object.assign(p.stick.devices.HOTAS.map, { roll: { axis: 0, invert: false } });
+xbox.axes[0] = 1; out.rollXbox = run(0.2).aileron; xbox.axes[0] = 0;
+pads = [hotas]; p.reset(0.5); hotas.axes[0] = 1; out.rollHotas = run(0.2).aileron;
 console.log(JSON.stringify(out));
 """ % (json.dumps((VIEWER / "input.js").as_uri()), json.dumps((VIEWER / "stick.js").as_uri()))
 
@@ -92,3 +98,7 @@ def test_joystick_buttons_as_bound(out):
     assert out["trim"] == pytest.approx(-0.15, abs=0.01)  # hat up bound to nose-up trim, 0.15/s
     assert out["brake"] == pytest.approx(1.0, abs=0.01)
     assert out["stdTrim"] == pytest.approx(0.15, abs=0.01)  # standard D-pad up = nose down
+
+
+def test_feel_is_per_device(out):
+    assert out["rollXbox"] == pytest.approx(0.7) and out["rollHotas"] == pytest.approx(1.0)

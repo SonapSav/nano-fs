@@ -1,6 +1,7 @@
 """Gamepad settings (flightsim/viewer/stick.js), run with Node when available: per-device
 axis mapping, inversion, centre calibration, throttle lever, axis detection, device
-choice, migration of the earlier settings, and button bindings (buttons or hat axes)."""
+choice, migration of the earlier settings, button bindings (buttons or hat axes) and the
+feel (sensitivity, expo, dead zone) per device."""
 
 import json
 import shutil
@@ -74,6 +75,15 @@ const back = s.loadSettings();
 out.saved = back.devices.HOTAS.buttons;
 s.saveSettings({ ...st, devices: { HOTAS: { ...h, buttons: { brake: { axis: 1, dir: 2 } } } } });
 out.badBindingRejected = Object.keys(s.loadSettings().devices).length === 0;
+// Feel per device: an older profile gets a copy of the shared feel; devices then differ.
+const fs = { ...structuredClone(s.DEFAULTS), pitch: { sensitivity: 0.4, expo: 0.6 }, devices: { Xbox: { map: s.defaultProfile(true).map, centre: {} } } };
+const xf = s.profileFor(fs, xbox).feel, hf = s.profileFor(fs, hotas).feel;
+hf.pitch.sensitivity = 0.8; hf.roll = { sensitivity: 1, expo: 0.2 }; hf.deadzone = 0.05;
+out.feel = { xbox: xf, hotas: hf, template: { pitch: fs.pitch, deadzone: fs.deadzone } };
+s.saveSettings(fs);
+out.feelSaved = s.loadSettings().devices.HOTAS.feel;
+s.saveSettings({ ...fs, devices: { HOTAS: { ...fs.devices.HOTAS, feel: { ...hf, deadzone: 0.9 } } } });
+out.badFeelRejected = Object.keys(s.loadSettings().devices).length === 0;
 console.log(JSON.stringify(out));
 """ % json.dumps((VIEWER / "stick.js").as_uri())
 
@@ -145,3 +155,12 @@ def test_button_bindings_saved_and_old_profiles_filled(out):
     assert out["saved"]["trim_nose_down"] == {"axis": 6, "dir": -1}
     assert out["saved"]["brake"] == {"button": 0} and out["saved"]["flaps_up"] is None
     assert out["badBindingRejected"]
+
+
+def test_feel_per_device(out):
+    f = out["feel"]
+    assert f["xbox"]["pitch"] == {"sensitivity": 0.4, "expo": 0.6}  # copied from the shared feel
+    assert f["hotas"]["pitch"] == {"sensitivity": 0.8, "expo": 0.6} and f["hotas"]["roll"] == {"sensitivity": 1, "expo": 0.2}
+    assert f["template"] == {"pitch": {"sensitivity": 0.4, "expo": 0.6}, "deadzone": 0.08}  # untouched by device edits
+    assert out["feelSaved"]["deadzone"] == 0.05 and out["feelSaved"]["roll"]["sensitivity"] == 1
+    assert out["badFeelRejected"]

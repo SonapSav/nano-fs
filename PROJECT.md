@@ -569,6 +569,14 @@ owner before work can start.
     hat Y = axis 6 (flaps), buttons 4/5 = trim, trigger (0) = brakes. First flight (an
     approach, `5aa41798fe84-s0-m38caaa07`): every mapped control registered and the
     pitch sense is right (the pilot pushed as the nose rose).
+  - [x] **Feel per device** (2026-10-07): sensitivity, expo and dead zone are now kept
+    per controller (the Xbox thumbsticks and the HOTAS want different settings); the
+    shared values become the template for new devices, and existing profiles start
+    from a copy of them. The dialog names the device being edited; "Reset feel to
+    defaults" resets only that device. Tested (Node unit tests, headless browser).
+    The surfaces looked still in the HOTAS flights because the feel limited them
+    (19:05 flight: elevator -2.7..+4.2 deg, ailerons +/-4.8 deg, of -28..+23 and
+    -20..+15); suggested HOTAS start: pitch 0.8 / expo 0.3, roll 1.0 / expo 0.2.
   - [ ] Feel: in that flight the power stayed at 70-75%, the speed built from 65 to 110 kt
     and the pitch oscillated (~8 s period, ~50 stick reversals/min); judge sensitivity
     and expo after a few more flights. Do not hard-code axis indices: they vary by

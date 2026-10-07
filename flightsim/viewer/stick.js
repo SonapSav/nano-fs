@@ -1,9 +1,12 @@
 // Gamepad and joystick settings, remembered in this browser.
 //
-// Response per control (shared by all devices):
+// Feel per control:
 //   response = sensitivity * ((1 - expo) * x + expo * x^3)
 // Sensitivity scales full deflection; expo softens small movements around centre while
-// keeping full travel at the ends. Applies to sticks, not to the keyboard.
+// keeping full travel at the ends; plus a dead zone. Applies to sticks, not to the
+// keyboard. Each device has its own feel (a short-throw thumbstick and a long joystick
+// want different settings); the top-level feel is the template for new devices (and is
+// edited when no device is connected).
 //
 // Per device (keyed by the browser's gamepad id): which axis drives each control and
 // whether it is inverted, and the measured rest position of each axis. Mapped values
@@ -23,7 +26,7 @@ export const DEFAULTS = {
   roll: { sensitivity: 0.7, expo: 0.3 },
   rudder: { sensitivity: 0.7, expo: 0.3 },
   deadzone: 0.08, // stick movement around centre that is ignored (covers stick drift)
-  devices: {}, // gamepad id -> { map: {control: {axis, invert}}, centre: {axis: rest value}, buttons: {function: binding} }
+  devices: {}, // gamepad id -> { map: {control: {axis, invert}}, centre: {axis: rest value}, buttons: {function: binding}, feel }
 };
 const STORAGE_KEY = "flightsim.stick.v3";
 const OLD_KEY = "flightsim.stick.v2"; // before per-device axis mapping (2026-10-05)
@@ -128,12 +131,19 @@ export function detectAxis(baseline, samples) {
   return { axis: best.axis, invert: best.delta < 0 };
 }
 
-// The device's profile, creating the default one if it has none yet.
-// Profiles saved before button mapping (2026-10-07) get the default buttons.
+// The feel part of the settings (top level or a device's), as a copy.
+export function copyFeel(f) {
+  return { pitch: { ...f.pitch }, roll: { ...f.roll }, rudder: { ...f.rudder }, deadzone: f.deadzone };
+}
+
+// The device's profile, creating the default one if it has none yet. Profiles saved before
+// button mapping (2026-10-07) get the default buttons; before per-device feel (2026-10-07)
+// a copy of the top-level feel (the feel then shared by all devices).
 export function profileFor(settings, pad) {
   if (!settings.devices[pad.id]) settings.devices[pad.id] = defaultProfile(pad.mapping === "standard");
   const p = settings.devices[pad.id];
   p.buttons = { ...defaultButtons(pad.mapping === "standard"), ...p.buttons };
+  p.feel ??= copyFeel(settings);
   return p;
 }
 
@@ -155,14 +165,21 @@ function validProfile(p) {
     p && typeof p === "object" && p.map && p.centre && typeof p.centre === "object" &&
     CONTROLS.every((c) => p.map[c] && (p.map[c].axis === null || Number.isInteger(p.map[c].axis)) && typeof p.map[c].invert === "boolean") &&
     Object.values(p.centre).every((c) => Number.isFinite(c) && Math.abs(c) < MAX_CENTRE) &&
-    (p.buttons === undefined || (p.buttons && typeof p.buttons === "object" && Object.values(p.buttons).every(validBinding)))
+    (p.buttons === undefined || (p.buttons && typeof p.buttons === "object" && Object.values(p.buttons).every(validBinding))) &&
+    (p.feel === undefined || validFeel(p.feel))
+  );
+}
+
+function validFeel(f) {
+  return (
+    AXES.every((a) => f?.[a] && finite01(f[a].sensitivity) && finite01(f[a].expo)) &&
+    Number.isFinite(f.deadzone) && f.deadzone >= 0 && f.deadzone < 0.5
   );
 }
 
 function valid(s) {
   return (
-    AXES.every((a) => s?.[a] && finite01(s[a].sensitivity) && finite01(s[a].expo)) &&
-    Number.isFinite(s.deadzone) && s.deadzone >= 0 && s.deadzone < 0.5 &&
+    validFeel(s) &&
     s.devices && typeof s.devices === "object" && Object.values(s.devices).every(validProfile)
   );
 }
