@@ -604,7 +604,13 @@ owner before work can start.
     time, nearest first, the next on each answer; stale answers dropped); without a
     worker (Node tests) the old in-frame path. The 121 tiles around the airfield come out
     identical to before (vertices, colours, normals, trees, houses, landmarks).
-  - [ ] Measure on the owner's machine (Firefox, integrated GPU) with P; candidates if
+  - [x] Performance test (2026-10-07): with the readout on (P), "Performance test" holds
+    the approach start (seed 0) and measures fps in the cockpit and chase views with, in
+    turn, no logarithmic depth, no antialiasing (both by rebuilding the renderer), no
+    field / river shading (`terrainEffects` uniform), no close-up texture, no clouds,
+    pixel ratio 1, and all off; results in a dialog to copy (`bench.js`). Owner reported
+    ~40 fps with dropouts on both High and Medium (2026-10-07), pointing at per-pixel cost.
+  - [ ] Measure on the owner's machine (Firefox, integrated GPU) with P and the test; candidates if
     the GPU is the limit: `logarithmicDepthBuffer` (costly per pixel), pixel ratio 2 on
     High, ~340 draw calls / ~240k triangles per frame.
 - [x] **HUD in the cockpit view** (2026-10-07, phase 1; an option, not fitted to a real

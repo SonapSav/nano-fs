@@ -17,12 +17,17 @@ export { AIRFIELD, TILE_SIZE_M, VILLAGE_CELL_M, WATER_LEVEL_M, WORLD_SEED, heigh
 // Field crops; the patchwork itself is drawn per pixel in the terrain shader (fieldMaterial).
 const FIELD_COLOURS = [0x7c8b55, 0x8e9a5a, 0x6f8248, 0xa59b62, 0x8b8a4e, 0x74874d, 0x9aa56a].map((c) => new THREE.Color(c));
 
+// Field patchwork and rivers on (1) or off (0, the plain land colour): a switch for the
+// performance test (bench.js).
+export const terrainEffects = { value: 1.0 };
+
 // Lambert material plus a per-pixel field patchwork: ~450 m cells on a slightly rotated
 // grid, one crop colour per cell, darker hedgerows along the edges. Crisp at any range.
 function fieldMaterial() {
   const material = new THREE.MeshLambertMaterial({ vertexColors: true });
   material.onBeforeCompile = (shader) => {
     shader.uniforms.fieldColours = { value: FIELD_COLOURS };
+    shader.uniforms.terrainEffects = terrainEffects;
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nattribute float fieldness;\nvarying float vFieldness;\nvarying vec2 vWorldXZ;\nvarying float vHeight;")
       .replace("#include <begin_vertex>", "#include <begin_vertex>\nvFieldness = fieldness;\nvWorldXZ = (modelMatrix * vec4(position, 1.0)).xz;\nvHeight = position.y;");
@@ -31,6 +36,7 @@ function fieldMaterial() {
         "#include <common>",
         `#include <common>
 uniform vec3 fieldColours[${FIELD_COLOURS.length}];
+uniform float terrainEffects;
 varying float vFieldness;
 varying vec2 vWorldXZ;
 varying float vHeight;
@@ -46,7 +52,7 @@ float rvField(vec2 xz) { vec2 p = xz / 3200.0 + 41.0; return 0.65 * rvNoise(p) +
       .replace(
         "#include <color_fragment>",
         `#include <color_fragment>
-{
+if (terrainEffects > 0.5) {
   vec2 uv = vec2(vWorldXZ.x * 0.97 + vWorldXZ.y * 0.24, vWorldXZ.y * 0.97 - vWorldXZ.x * 0.24) / 450.0;
   vec2 cell = floor(uv);
   int k = int(fieldHash(cell) * ${FIELD_COLOURS.length}.0);
@@ -57,7 +63,7 @@ float rvField(vec2 xz) { vec2 p = xz / 3200.0 + 41.0; return 0.65 * rvNoise(p) +
   crop *= mix(0.72, 1.0, smoothstep(2.0, 7.0, edge)); // hedgerow
   diffuseColor.rgb = mix(diffuseColor.rgb, crop, clamp(vFieldness, 0.0, 1.0));
 }
-{
+if (terrainEffects > 0.5) {
   // River on the valley floors (dry land at ~0 m): the 0.5 contour of rvField, its width
   // kept in metres by dividing by the field's gradient; grassy banks either side.
   float valley = (1.0 - smoothstep(0.4, 2.0, vHeight)) * smoothstep(1800.0, 2400.0, length(vWorldXZ)); // not on the airfield

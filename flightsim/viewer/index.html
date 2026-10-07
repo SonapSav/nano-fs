@@ -96,6 +96,8 @@
   #stick-live .drift { color: #e2b93b; }
   .calibrate { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 10px; }
   #stick-calibrate-status { color: var(--dim); }
+  #bench-dialog { max-width: min(60em, calc(100vw - 32px)); }
+  #bench-out { font: 13px/1.35 ui-monospace, monospace; white-space: pre; overflow-x: auto; color: var(--marking); background: rgba(0, 0, 0, .25); padding: 8px; }
   .dialog-buttons { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; }
 
   @media (max-width: 760px) {
@@ -130,6 +132,7 @@
     <button id="sound-toggle" type="button" aria-pressed="true">Sound on</button>
     <input id="sound-volume" type="range" min="0" max="1" step="0.05" aria-label="Sound volume">
     <button id="stick-open" type="button">Stick settings</button>
+    <button id="bench" type="button" hidden title="Measure the frame rate with the costly features switched off one at a time (about a minute)">Performance test</button>
     <button id="panel-window" type="button" title="Open the instruments in their own window, e.g. full screen (F11) on a second monitor">Instruments window</button>
     <button id="sky-open" type="button">Sky</button>
     <label for="quality">Quality</label>
@@ -178,6 +181,18 @@
       <div id="button-rows"></div>
       <div class="dialog-buttons">
         <button type="button" id="stick-reset">Reset feel to defaults</button>
+        <button value="done">Done</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="bench-dialog" aria-labelledby="bench-title">
+    <form method="dialog">
+      <h2 id="bench-title">Performance test</h2>
+      <p>Frames per second on a fixed view, with each feature switched off in turn. Copy the results and send them over.</p>
+      <pre id="bench-out"></pre>
+      <div class="dialog-buttons">
+        <button type="button" id="bench-copy">Copy</button>
         <button value="done">Done</button>
       </div>
     </form>

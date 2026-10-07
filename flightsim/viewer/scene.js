@@ -162,6 +162,23 @@ export class FlightScene {
     this.clouds.set(clouds, cloud_seed);
   }
 
+  // A new renderer with other context options (the performance test, bench.js): edge
+  // smoothing and logarithmic depth can only be chosen when the WebGL context is created.
+  rebuildRenderer({ antialias = true, logDepth = true } = {}) {
+    const old = this.renderer;
+    const r = new THREE.WebGLRenderer({ antialias, logarithmicDepthBuffer: logDepth });
+    r.setPixelRatio(old.getPixelRatio());
+    r.toneMapping = old.toneMapping;
+    r.toneMappingExposure = old.toneMappingExposure;
+    old.domElement.replaceWith(r.domElement);
+    old.dispose();
+    old.forceContextLoss();
+    this.renderer = r;
+    this.skyLight.renderer = r;
+    this._bindPointer();
+    this.resize();
+  }
+
   // Quality preset (terrain.js QUALITY): low / medium / high.
   setQuality(quality) {
     if (!(quality in QUALITY) || quality === this.quality) return;

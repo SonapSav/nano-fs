@@ -6,6 +6,7 @@ import { FlightScene } from "./scene.js";
 import { CLIMB_KT, InstrumentPanel, PANEL_CHANNEL, PANEL_TIMEOUT_MS, ROTATE_KT } from "./panel.js";
 import { drawHud } from "./hud.js";
 import { FrameStats } from "./perf.js";
+import { benchReport, runBench } from "./bench.js";
 import { FrameBuffer } from "./smooth.js";
 import { HANDLED_KEYS, PilotInput } from "./input.js";
 import { AXES, BUTTONS, CONTROLS, DEFAULTS, MAX_CALIBRATION_SPREAD, MAX_CENTRE, buttonValue, controlValue, copyFeel, defaultProfile, detectAxis, detectButton, saveSettings } from "./stick.js";
@@ -606,6 +607,7 @@ $("panel-window").addEventListener("click", () => {
 const frameStats = new FrameStats(10000);
 function setPerf(on) {
   $("perf").hidden = !on;
+  $("bench").hidden = !on;
   try {
     localStorage.setItem("flightsim.perf", on ? "on" : "off");
   } catch {
@@ -628,6 +630,39 @@ function showPerf(now) {
     (s.msgMedianMs ? `flight data every ${s.msgMedianMs.toFixed(0)} ms (95% < ${s.msgP95Ms.toFixed(0)}, max ${s.msgMaxMs.toFixed(0)})\n` : "") +
     `${info.calls} draw calls, ${(info.triangles / 1000).toFixed(0)}k triangles, tiles to build ${scene.terrain.pending}`;
 }
+
+// Performance test (bench.js), from the readout: on the approach start, not during a flight.
+$("bench").addEventListener("click", async () => {
+  if (!els.stop.disabled) {
+    say("Stop the flight first, then run the performance test.");
+    return;
+  }
+  const buttons = [$("bench"), els.play];
+  buttons.forEach((b) => (b.disabled = true));
+  try {
+    els.source.value = MANUAL_APPROACH; // a fixed view: the approach start, seed 0
+    els.seed.value = "0";
+    updateSourceOptions();
+    await new Promise((r) => setTimeout(r, 2000)); // the preview arrives and the tiles build
+    const result = await runBench({ scene, setView, restoreClouds: applySky, progress: say });
+    const extra = `HUD ${hudOn ? "on" : "off"} (cockpit view); instruments window ${$("panel").hidden ? "open" : "closed"}`;
+    $("bench-out").textContent = benchReport(result) + "\n" + extra;
+    say("Performance test finished.");
+    $("bench-dialog").showModal();
+  } catch (e) {
+    say(`The performance test failed: ${e.message}`);
+  } finally {
+    buttons.forEach((b) => (b.disabled = false));
+  }
+});
+$("bench-copy").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("bench-out").textContent);
+    $("bench-copy").textContent = "Copied";
+  } catch {
+    getSelection().selectAllChildren($("bench-out")); // select it for copying by hand
+  }
+});
 
 const hudCanvas = $("hud");
 function drawHudLayer() {
