@@ -114,7 +114,7 @@ float box(vec2 p, vec2 lo, vec2 hi, float r) {
 // first, and a blue canton five stripes high with a white cross one stripe wide. Both
 // sides read as the flag (canton at the viewer's upper left): forward on the left side,
 // aft on the right. Painted on the fixed fin, clear of the leading edge and the rudder hinge.
-const FLAG = { x0: 235, x1: 254.5, z0: 57, z1: 70 };
+const FLAG = { x0: 237.9, x1: 251.6, z0: 59, z1: 68.1 }; // 9.1 x 13.65 in (23 x 35 cm)
 const FLAG_BLUE = 0x0d5eaf;
 
 function finMaterial(material) {
