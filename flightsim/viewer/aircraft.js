@@ -32,7 +32,7 @@ const STRIPE2 = 0xb3262e; // red pinstripe
 const GLASS = 0x1b2630;
 const REG_COLOUR = 0x1f2933;
 
-export const REGISTRATION = "SX-123"; // painted on both sides of the rear fuselage
+export const REGISTRATION = "SX-PAN"; // painted on both sides of the rear fuselage
 // Registration area on the tail cone (structural inches): letters about 10 in (25 cm)
 // high, aft of where the cheat line has swept up, so they sit clear below it.
 const REG = { x0: 160, x1: 218, z0: 25, z1: 35 };
