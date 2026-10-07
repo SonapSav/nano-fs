@@ -644,7 +644,12 @@ $("bench").addEventListener("click", async () => {
     els.seed.value = "0";
     updateSourceOptions();
     await new Promise((r) => setTimeout(r, 2000)); // the preview arrives and the tiles build
-    const result = await runBench({ scene, setView, restoreClouds: applySky, progress: say });
+    scriptTimes.length = 0;
+    benchActive = true;
+    const result = await runBench({
+      scene, setView, restoreClouds: applySky, progress: say, scriptTimes,
+      setHud: (on) => (benchHud = on), setPanel: (on) => { benchPanel = on; dirty = true; },
+    });
     const extra = `HUD ${hudOn ? "on" : "off"} (cockpit view); instruments window ${$("panel").hidden ? "open" : "closed"}`;
     $("bench-out").textContent = benchReport(result) + "\n" + extra;
     say("Performance test finished.");
@@ -652,6 +657,8 @@ $("bench").addEventListener("click", async () => {
   } catch (e) {
     say(`The performance test failed: ${e.message}`);
   } finally {
+    benchActive = false;
+    benchHud = benchPanel = true;
     buttons.forEach((b) => (b.disabled = false));
   }
 });
@@ -674,7 +681,7 @@ function drawHudLayer() {
   const ctx = hudCanvas.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
-  if (!hudInView() || !shown) return;
+  if (!hudInView() || !shown || !benchHud) return;
   drawHud(ctx, w, h, { camera: scene.camera, aircraftMatrix: scene.aircraft.matrix, row: shown, ...hudTask(shown) });
 }
 
@@ -703,7 +710,16 @@ let shown = null;
 let lastFrameAt = null;
 const playbackSpeed = () => (session?.source === "manual" ? 1 : Number(els.speed.value) || 1);
 
+let benchHud = true, benchPanel = true; // the performance test can switch these off
+let benchActive = false, benchDirtyAt = 0; // during the test: redraw the panel 30 times a second, as in flight
+const scriptTimes = []; // per-frame script time (ms), collected during the performance test
+
 function frame(now = performance.now()) {
+  const t0 = performance.now();
+  if (benchActive && now - benchDirtyAt >= 1000 / 30) {
+    benchDirtyAt = now;
+    dirty = true;
+  }
   frameStats.frame(now);
   showPerf(now);
   const dt = lastFrameAt === null ? 0 : Math.min(0.25, (now - lastFrameAt) / 1000);
@@ -714,7 +730,7 @@ function frame(now = performance.now()) {
     scene.update(shown);
   }
   if (dirty) {
-    panel.draw(latest);
+    if (benchPanel) panel.draw(latest);
     if (latest && session?.duration_s && !dragging) showPosition(latest.t_s);
     dirty = false;
   }
@@ -724,6 +740,7 @@ function frame(now = performance.now()) {
   const marker = $("boresight");
   marker.style.display = bx === null ? "none" : "block";
   if (bx !== null) marker.style.left = `${(bx * 100).toFixed(2)}%`;
+  if (scriptTimes.length < 5000) scriptTimes.push(performance.now() - t0);
   requestAnimationFrame(frame);
 }
 

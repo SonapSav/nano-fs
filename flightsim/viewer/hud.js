@@ -73,7 +73,7 @@ const pad3 = (deg) => String(Math.round(((deg % 360) + 360) % 360) % 360).padSta
 // its basis). Runway tasks: `runway` (the hello's approach or takeoff geometry),
 // `approach` (true to show the aim point and glide path reference), `speedBugs`
 // ([{kt, label}]). Returns false when the combiner is out of view (looking away).
-export function drawHud(ctx, w, h, { camera, aircraftMatrix, row, targets, runway = null, approach = false, speedBugs = [] }) {
+export function drawHud(ctx, w, h, { camera, aircraftMatrix, row, targets, runway = null, approach = false, speedBugs = [], shadow = true }) {
   const rot = new THREE.Matrix4().extractRotation(aircraftMatrix);
   const body = (az, el) => project(bodyVector(az, el).applyMatrix4(rot), camera, w, h);
   const F = HUD_FIELD;
@@ -93,8 +93,10 @@ export function drawHud(ctx, w, h, { camera, aircraftMatrix, row, targets, runwa
   ctx.strokeStyle = ctx.fillStyle = HUD_GREEN;
   ctx.lineWidth = lw;
   ctx.lineCap = "round";
-  ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
-  ctx.shadowBlur = 3;
+  if (shadow) {
+    ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+    ctx.shadowBlur = 3;
+  }
   ctx.font = `600 ${fs}px "Barlow Condensed", "Arial Narrow", sans-serif`;
   ctx.textBaseline = "middle";
   const line = (pts, dash = []) => {

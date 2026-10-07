@@ -610,6 +610,11 @@ owner before work can start.
     field / river shading (`terrainEffects` uniform), no close-up texture, no clouds,
     pixel ratio 1, and all off; results in a dialog to copy (`bench.js`). Owner reported
     ~40 fps with dropouts on both High and Medium (2026-10-07), pointing at per-pixel cost.
+  - First results (owner, Firefox 153, 144 Hz screen, 1920 x 522 view, 2026-10-07): chase
+    view a steady 144 fps; cockpit view ~71 fps (14 ms, just over one refresh) in every
+    case, High and Medium alike, so no graphics feature is the limit. The test now also
+    reports the viewer's script time per frame and switches off the HUD and the
+    instrument panel (redrawn 30 times a second during the test, as in flight).
   - [ ] Measure on the owner's machine (Firefox, integrated GPU) with P and the test; candidates if
     the GPU is the limit: `logarithmicDepthBuffer` (costly per pixel), pixel ratio 2 on
     High, ~340 draw calls / ~240k triangles per frame.
