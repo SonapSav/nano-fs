@@ -588,6 +588,17 @@ owner before work can start.
 
 ### Viewer
 
+- [x] **Instruments window** (2026-10-07): "Instruments window" opens `panel.html`, the
+  instrument panel alone and scaled to its window (e.g. full screen, F11, on a second
+  monitor). It mirrors the viewer window over a BroadcastChannel (same browser and
+  computer; no server or protocol change, consumer only); the viewer hides its own panel
+  while one is open (heartbeat, 3 s) and shows it again when it closes. Keys typed in the
+  instruments window are forwarded to the viewer (flying, R, C, M, space); the gamepad is
+  read by the viewer only. The panel code moved to `panel.js` (shared), styles to
+  `panel.css` / `theme.css`. Tested (served offline; headless browser with two pages:
+  mirroring, panel hiding, key forwarding). Keep the viewer window visible: browsers slow
+  down hidden windows. Later, if wanted: a server-side "watch" so the panel can run on
+  another device (tablet).
 - [x] **Preview the selected flight** (2026-10-07): choosing a flight (or changing the
   seed) shows where it starts, before Play: runway, glide path or pattern, sky, wind,
   instruments and the task instructions. Protocol: client `preview` (the fields of a

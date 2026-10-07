@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flight instruments</title>
+<link rel="stylesheet" href="./vendor/fonts/barlow-condensed.css">
+<link rel="stylesheet" href="./theme.css">
+<link rel="stylesheet" href="./panel.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--panel); color: var(--marking); font: 500 clamp(16px, 2.4vh, 30px)/1.35 var(--font);
+    display: grid; place-content: center; height: 100dvh; overflow: hidden;
+  }
+  /* Fill the window: gauges as large as height and width allow (four columns plus readouts). */
+  .panel { --g: min(42vh, calc((100vw - 16em) / 4.4)); border-top: 0; gap: 2.5vh 2vw; }
+  .panel .readout { min-width: 12em; }
+  .panel .run { font-size: 0.8em; }
+  #status { position: fixed; left: 16px; top: 12px; color: var(--dim); font-size: 16px; }
+  #status:empty { display: none; }
+</style>
+</head>
+<body>
+  <section id="panel" class="panel" aria-label="Instruments"></section>
+  <div id="status" role="status">Waiting for the flight viewer window…</div>
+  <script type="module" src="./panelwindow.js"></script>
+</body>
+</html>

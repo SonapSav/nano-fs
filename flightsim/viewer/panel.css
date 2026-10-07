@@ -1,0 +1,24 @@
+/* The instrument panel (panel.js), on the viewer page and in the instruments window. */
+.panel {
+  display: grid; gap: 12px 18px; padding: 12px 16px 14px;
+  grid-template-columns: repeat(3, var(--g)) auto var(--g);
+  grid-template-rows: repeat(2, var(--g));
+  --g: min(17vh, 150px);
+  justify-content: center; align-items: center;
+  border-top: 3px solid var(--panel-edge);
+}
+.panel .gauge { width: var(--g); height: var(--g); display: block; }
+.panel [data-g="tach"] { grid-column: 5; grid-row: 1; }
+.panel [data-g="controls"] { grid-column: 5; grid-row: 2; }
+.panel .readout {
+  grid-column: 4; grid-row: 1 / span 2; align-self: stretch;
+  display: flex; flex-direction: column; justify-content: center; gap: 6px;
+  min-width: 11em; padding: 0 6px; font-variant-numeric: tabular-nums;
+}
+.panel .readout dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: 2px 12px; }
+.panel .readout dt { color: var(--dim); }
+.panel .readout dd { margin: 0; text-align: right; }
+.panel .readout .target { color: var(--bug); }
+.panel .readout .warn { color: #e2b93b; font-weight: 600; }
+.panel .run { color: var(--dim); font-size: 14px; word-break: break-all; }
+.panel[hidden] { display: none; }

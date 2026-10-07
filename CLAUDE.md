@@ -96,6 +96,7 @@ flightsim/          # installable package (uv_build backend)
                     #   pattern.js: circuit traffic pattern drawing (from the stream's `pattern`)
                     #   sky.js / clouds.js: time of day, visibility, seeded clouds (from the stream's `visual`)
                     #   groundDetail.js: close-up ground texture (shader noise)
+                    #   panel.js / panel.html: instrument panel, also in its own window (BroadcastChannel mirror)
                     #   sound.js: synthesized engine, wind, stall horn, flap motor (Web Audio, driven by frames)
   analysis/         # mode identification, validation maneuvers, validation checks
   atmosphere/       # Dryden turbulence (MIL-F-8785C)

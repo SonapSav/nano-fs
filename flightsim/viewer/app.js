@@ -3,20 +3,19 @@
 // as stick/pedal/throttle values that the server applies as policy actions.
 
 import { FlightScene } from "./scene.js";
-import { drawAll, indicatedKt, units } from "./gauges.js";
+import { InstrumentPanel, PANEL_CHANNEL, PANEL_TIMEOUT_MS } from "./panel.js";
 import { HANDLED_KEYS, PilotInput } from "./input.js";
 import { AXES, BUTTONS, CONTROLS, DEFAULTS, MAX_CALIBRATION_SPREAD, MAX_CENTRE, buttonValue, controlValue, copyFeel, defaultProfile, detectAxis, detectButton, saveSettings } from "./stick.js";
 import { groupLogs } from "./flightlist.js";
 import { FlightSound } from "./sound.js";
 
 const $ = (id) => document.getElementById(id);
+const panel = new InstrumentPanel($("panel"));
 const els = {
   source: $("source"), seed: $("seed"), seedLabel: $("seed-label"), record: $("record"), recordLabel: $("record-label"),
   play: $("play"), pause: $("pause"), stop: $("stop"), speed: $("speed"), fill: $("progress-fill"), clock: $("clock"),
-  message: $("message"), run: $("run"), hint: $("hint"),
+  message: $("message"), hint: $("hint"),
 };
-const gauges = { asi: $("asi"), ai: $("ai"), alt: $("alt"), tc: $("tc"), hi: $("hi"), vsi: $("vsi"), tach: $("tach"), controls: $("controls") };
-const readout = { alt: $("r-alt"), talt: $("r-talt"), hdg: $("r-hdg"), thdg: $("r-thdg"), kias: $("r-kias"), aoa: $("r-aoa"), g: $("r-g"), flaps: $("r-flaps"), trim: $("r-trim"), brake: $("r-brake") };
 
 const LIVE = "live"; // PID autopilot
 const LIVE_LQR = "live_lqr";
@@ -98,7 +97,6 @@ let autoplay = params.get("autoplay") === "1";
 if (params.has("seed")) els.seed.value = params.get("seed");
 if (params.has("speed") && [...els.speed.options].some((o) => o.value === params.get("speed"))) els.speed.value = params.get("speed");
 const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-const deg360 = (rad) => ((rad * units.DEG) % 360 + 360) % 360;
 const flying = () => session?.source === "manual" && !els.stop.disabled;
 
 function say(text) {
@@ -214,11 +212,10 @@ function applyHello(msg) {
   scene.setApproach(msg.approach ?? null);
   scene.setPattern(msg.pattern ?? null);
   applySky();
-  circuitClimbed = false;
   if (msg.takeoff) scene.windsock.setWind(msg.takeoff.wind?.from_deg ?? 0, (msg.takeoff.wind?.u20_mps ?? 0) * 1.943844);
-  showApproachRows(msg.approach ? "approach" : msg.takeoff ? "takeoff" : null);
+  panel.setSession(msg);
   const pilotName = { pid: "PID", lqr: "LQR", approach: "Approach", takeoff: "Takeoff", circuit: "Circuit" }[msg.pilot ?? "pid"] ?? msg.pilot;
-  els.run.textContent = `${msg.source === "live" ? `${pilotName} autopilot` : { manual: "You are flying", replay: "Replay" }[msg.source]} ${msg.run_id}`;
+  panel.setRunText(`${msg.source === "live" ? `${pilotName} autopilot` : { manual: "You are flying", replay: "Replay" }[msg.source]} ${msg.run_id}`);
   say(msg.source === "manual"
     ? msg.approach?.task === "circuit"
       ? "Take off, climb straight ahead past the runway end, turn left at 700 ft, fly downwind at 1000 ft about 1 nm north, descend from abeam the threshold, turn base at 45 degrees and land on 09." + (msg.approach.wind ? " Crosswind and gusts." : "")
@@ -246,6 +243,7 @@ function handle(msg) {
       break;
     case "hello":
       applyHello(msg);
+      syncPanel();
       setPlaying(true);
       break;
     case "preview":
@@ -254,11 +252,12 @@ function handle(msg) {
       if (msg.id !== previewId || !els.stop.disabled) break;
       applyHello(msg.hello);
       if (msg.hello.source === "replay") lastReplay = els.source.value; // seeking on the bar starts it there
-      els.run.textContent = `Starting position of ${msg.hello.run_id}`;
+      panel.setRunText(`Starting position of ${msg.hello.run_id}`);
       say(`${els.message.textContent} Press Play to start.`.trim());
       latest = msg.row;
       scene.update(latest);
       dirty = true;
+      syncPanel();
       break;
     case "frame":
       // After a seek, start the trail at the new position (frames sent before the seek may still arrive).
@@ -279,6 +278,7 @@ function handle(msg) {
       }
       latest = msg.row;
       scene.update(latest);
+      tellPanel({ type: "frame", row: latest });
       if (!paused) sound.update(latest, { view: scene.view, distanceM: scene.orbit.distance });
       dirty = true;
       break;
@@ -488,8 +488,8 @@ try {
   // storage unavailable: start in the chase view
 }
 
-document.addEventListener("keydown", (e) => {
-  const inForm = ["INPUT", "SELECT", "BUTTON"].includes(document.activeElement?.tagName);
+// Keys, typed here or in the instruments window (forwarded; never "in a form" there).
+function keyDown(e, inForm) {
   if (e.code === "KeyM" && !inForm && !e.repeat) {
     toggleSound();
     return;
@@ -509,101 +509,50 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     pilot.keydown(e);
   }
-});
+}
+document.addEventListener("keydown", (e) => keyDown(e, ["INPUT", "SELECT", "BUTTON"].includes(document.activeElement?.tagName)));
 document.addEventListener("keyup", (e) => pilot.keyup(e));
 window.addEventListener("blur", () => pilot.releaseAll());
 window.addEventListener("resize", () => (dirty = true));
 
-// Approach and takeoff: deviations from the runway task replace the cruise targets.
-function showApproachRows(kind) {
-  const on = Boolean(kind);
-  $("l-talt").textContent = { approach: "Glide path", takeoff: "Climb speed" }[kind] ?? "Altitude target";
-  $("l-thdg").textContent = on ? "Centreline" : "Heading target";
-  $("l-dist").textContent = kind === "takeoff" ? "Runway left" : "To threshold";
-  $("l-dist").hidden = $("r-dist").hidden = !on;
-  const w = on ? (session?.approach ?? session?.takeoff)?.wind : null;
-  $("l-wind").hidden = $("r-wind").hidden = !w;
-  if (w) {
-    const kt = (v) => Math.round(Math.abs(v) * 1.943844);
-    const cross = kt(w.crosswind_mps) ? `, ${kt(w.crosswind_mps)} kt crosswind from the ${w.crosswind_mps > 0 ? "right" : "left"}` : "";
-    const gust = w.gust_factor_mps && kt(w.gust_factor_mps) ? `G${kt(w.u20_mps + w.gust_factor_mps)}` : ""; // METAR style, e.g. 17G23
-    $("r-wind").textContent = `${String(Math.round(w.from_deg) % 360).padStart(3, "0")}° ${kt(w.u20_mps)}${gust} kt${cross}`;
+// Instruments window (panel.html, e.g. on a second monitor): mirrors this window's flight
+// over a BroadcastChannel (protocol in panel.js). While one is open, this window hides its
+// own panel so the 3D view gets the room.
+const panelChannel = "BroadcastChannel" in window ? new BroadcastChannel(PANEL_CHANNEL) : null;
+let panelSeenAt = -Infinity;
+const tellPanel = (msg) => panelChannel?.postMessage(msg);
+const syncPanel = () => tellPanel({ type: "state", hello: session, row: latest, run: panel.run.textContent });
+function placePanel() {
+  const away = performance.now() - panelSeenAt < PANEL_TIMEOUT_MS;
+  if ($("panel").hidden !== away) {
+    $("panel").hidden = away;
+    dirty = true;
   }
+  $("panel-window").textContent = away ? "Instruments: own window" : "Instruments window";
 }
-
-let circuitClimbed = false; // a circuit is on final only after climbing out (reset on hello)
-
-function approachDeviations(row, a) {
-  const R_EARTH = 6371000, h = (a.heading_deg * Math.PI) / 180;
-  const dn = row.lat_rad * R_EARTH - a.threshold_north_m, de = row.lon_rad * R_EARTH - a.threshold_east_m;
-  const along = dn * Math.cos(h) + de * Math.sin(h), cross = -dn * Math.sin(h) + de * Math.cos(h);
-  const gp = row.alt_msl_m - (a.elevation_m + Math.max(0, a.aim_point_m - along) * Math.tan((a.glide_path_deg * Math.PI) / 180));
-  return { along, cross, gp };
-}
-
-// Takeoff: POH Section 4 normal takeoff, nose wheel up at 55 KIAS, climb 70-80 KIAS (75 used).
-const ROTATE_KT = 55;
-const CLIMB_KT = 75;
-
-function updateReadout(row) {
-  const a = session?.approach ?? session?.takeoff;
-  if (session?.takeoff) {
-    const tk = session.takeoff;
-    if (row) {
-      const d = approachDeviations(row, { ...tk, aim_point_m: 0, glide_path_deg: 0 });
-      const kt = indicatedKt(row), height = row.alt_msl_m - tk.elevation_m;
-      const airborne = height > 3;
-      readout.talt.textContent = !airborne ? `rotate at ${ROTATE_KT} kt`
-        : Math.abs(kt - CLIMB_KT) < 3 ? "on speed" : `${Math.round(Math.abs(kt - CLIMB_KT))} kt ${kt > CLIMB_KT ? "fast" : "slow"}`;
-      readout.thdg.textContent = Math.abs(d.cross) < 2 ? "on centreline" : `${Math.abs(d.cross).toFixed(0)} m ${d.cross > 0 ? "right" : "left"}`;
-      $("r-dist").textContent = airborne ? "airborne" : `${Math.max(0, Math.round(tk.length_m - d.along))} m`;
-    } else {
-      readout.talt.textContent = readout.thdg.textContent = $("r-dist").textContent = "–";
-    }
-  } else if (a) {
-    if (row) {
-      const d = approachDeviations(row, a);
-      const ft = Math.round(d.gp * units.M_TO_FT);
-      // A circuit: the glide path only means something on final (near the centreline, heading in).
-      const towardRunway = Math.cos(row.psi_rad - (a.heading_deg * Math.PI) / 180) > 0.8;
-      if (row.alt_msl_m - a.elevation_m > 200) circuitClimbed = true;
-      // (before the threshold also counts: a replay may jump straight to final)
-      const onFinal = a.task !== "circuit" || ((circuitClimbed || d.along < 0) && Math.abs(d.cross) < 300 && towardRunway);
-      readout.talt.textContent = !onFinal ? "in the pattern" : Math.abs(ft) < 10 ? "on path" : `${Math.abs(ft)} ft ${ft > 0 ? "high" : "low"}`;
-      readout.thdg.textContent = Math.abs(d.cross) < 2 ? "on centreline" : `${Math.abs(d.cross).toFixed(0)} m ${d.cross > 0 ? "right" : "left"}`;
-      $("r-dist").textContent = !onFinal ? "–" : d.along < 0 ? `${(-d.along / 1852).toFixed(2)} nm` : "over the runway";
-    } else {
-      readout.talt.textContent = readout.thdg.textContent = $("r-dist").textContent = "–";
-    }
+panelChannel?.addEventListener("message", (e) => {
+  const m = e.data;
+  if (m.type === "alive") panelSeenAt = performance.now();
+  else if (m.type === "closed") panelSeenAt = -Infinity;
+  else if (m.type === "sync") syncPanel();
+  else if (m.type === "key") {
+    const ev = { code: m.code, key: m.key, shiftKey: m.shiftKey, repeat: m.repeat, preventDefault() {} };
+    if (m.event === "down") keyDown(ev, false);
+    else pilot.keyup(ev);
   }
-  const t = a ? null : session?.targets;
-  readout.alt.textContent = row ? `${Math.round(row.alt_msl_m * units.M_TO_FT).toLocaleString("en-US")} ft` : "–";
-  if (!a) readout.talt.textContent = t ? `${Math.round(t.alt_msl_m * units.M_TO_FT).toLocaleString("en-US")} ft` : "–";
-  readout.hdg.textContent = row ? `${String(Math.round(deg360(row.psi_rad)) % 360).padStart(3, "0")}°` : "–";
-  if (!a) readout.thdg.textContent = t ? `${String(Math.round(deg360(t.heading_rad)) % 360).padStart(3, "0")}°` : "–";
-  readout.kias.textContent = row ? `${indicatedKt(row).toFixed(0)} kt` : "–";
-  readout.aoa.textContent = row ? `${(row.alpha_rad * units.DEG).toFixed(1)}°` : "–";
-  readout.g.textContent = row ? `${(-row.az_mps2 / units.G).toFixed(2)} g` : "–";
-  if (row) {
-    const flapDeg = row.flap_pos_rad * units.DEG;
-    // POH 1981 C172P Figure 2-1: 110 KIAS with 10 deg flaps, 85 KIAS beyond.
-    const vfe = flapDeg <= 0.5 ? Infinity : flapDeg <= 10.5 ? 110 : 85;
-    const over = indicatedKt(row) > vfe; // the POH limits are KIAS
-    readout.flaps.textContent = `${Math.round(flapDeg)}°${over ? ` over ${vfe} kt limit` : ""}`;
-    readout.flaps.classList.toggle("warn", over);
-    const trim = row.cmd_pitch_trim_norm;
-    readout.trim.textContent = trim == null ? "–" : `${Math.round(Math.abs(trim) * 100)}% ${trim >= 0 ? "nose down" : "nose up"}`;
-    const brake = row.cmd_brake_norm;
-    readout.brake.textContent = brake == null ? "–" : brake < 0.01 ? "off" : `${Math.round(brake * 100)}%`;
-  } else {
-    readout.flaps.textContent = readout.trim.textContent = readout.brake.textContent = "–";
-  }
-}
+  placePanel();
+});
+setInterval(() => {
+  tellPanel({ type: "viewer" });
+  placePanel();
+}, 1000);
+$("panel-window").addEventListener("click", () => {
+  window.open("panel.html", "flightsim-instruments", "popup=yes,width=1280,height=560");
+});
 
 function frame() {
   if (dirty) {
-    drawAll(gauges, latest, session?.targets);
-    updateReadout(latest);
+    panel.draw(latest);
     if (latest && session?.duration_s && !dragging) showPosition(latest.t_s);
     dirty = false;
   }

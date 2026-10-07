@@ -5,17 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Flight viewer</title>
 <link rel="stylesheet" href="./vendor/fonts/barlow-condensed.css">
+<link rel="stylesheet" href="./theme.css">
+<link rel="stylesheet" href="./panel.css">
 <style>
-  :root {
-    --panel: #3a3f44;         /* painted instrument panel */
-    --panel-edge: #2c3034;
-    --face: #000000;          /* gauge faces */
-    --marking: #ecede8;       /* gauge markings and panel text */
-    --dim: #a9aeb2;
-    --bug: #d23cc8;           /* autopilot / target bugs, aviation magenta */
-    --sky: #9cc3e4;
-    --font: "Barlow Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
-  }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
   body {
@@ -69,29 +61,6 @@
   #hint { position: absolute; right: 16px; bottom: 12px; max-width: 46%; text-align: right; color: var(--marking);
     font-size: 14px; text-shadow: 0 1px 2px rgba(0, 0, 0, .7); }
 
-  /* Instrument panel */
-  #panel {
-    display: grid; gap: 12px 18px; padding: 12px 16px 14px;
-    grid-template-columns: repeat(3, var(--g)) auto var(--g);
-    grid-template-rows: repeat(2, var(--g));
-    --g: min(17vh, 150px);
-    justify-content: center; align-items: center;
-    border-top: 3px solid var(--panel-edge);
-  }
-  .gauge { width: var(--g); height: var(--g); display: block; }
-  #tach { grid-column: 5; grid-row: 1; }
-  #controls { grid-column: 5; grid-row: 2; }
-  #readout {
-    grid-column: 4; grid-row: 1 / span 2; align-self: stretch;
-    display: flex; flex-direction: column; justify-content: center; gap: 6px;
-    min-width: 11em; padding: 0 6px; font-variant-numeric: tabular-nums;
-  }
-  #readout dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: 2px 12px; }
-  #readout dt { color: var(--dim); }
-  #readout dd { margin: 0; text-align: right; }
-  #readout .target { color: var(--bug); }
-  #readout .warn { color: #e2b93b; font-weight: 600; }
-  #run { color: var(--dim); font-size: 14px; word-break: break-all; }
 
   /* Cockpit view: points up at the aircraft's straight-ahead direction, from the bottom edge. */
   #boresight { position: absolute; bottom: 0; width: 0; height: 0; transform: translateX(-50%); display: none;
@@ -127,9 +96,9 @@
 
   @media (max-width: 760px) {
     body { height: auto; min-height: 100dvh; overflow: auto; grid-template-rows: auto 45vh auto; }
-    #panel { --g: min(28vw, 120px); grid-template-columns: repeat(3, var(--g)); grid-template-rows: none; }
-    #tach, #controls { grid-column: auto; grid-row: auto; }
-    #readout { grid-column: 1 / -1; grid-row: auto; order: 1; }
+    .panel { --g: min(28vw, 120px); grid-template-columns: repeat(3, var(--g)); grid-template-rows: none; }
+    .panel [data-g] { grid-column: auto; grid-row: auto; }
+    .panel .readout { grid-column: 1 / -1; grid-row: auto; order: 1; }
     #hint { display: none; }
   }
 </style>
@@ -156,6 +125,7 @@
     <button id="sound-toggle" type="button" aria-pressed="true">Sound on</button>
     <input id="sound-volume" type="range" min="0" max="1" step="0.05" aria-label="Sound volume">
     <button id="stick-open" type="button">Stick settings</button>
+    <button id="panel-window" type="button" title="Open the instruments in their own window, e.g. full screen (F11) on a second monitor">Instruments window</button>
     <button id="sky-open" type="button">Sky</button>
     <label for="quality">Quality</label>
     <select id="quality" title="Low: shorter view, fewer trees, no close-up ground detail (for integrated graphics)">
@@ -171,33 +141,7 @@
     <div id="hint">Drag to look around, scroll to zoom, space to pause</div>
   </main>
 
-  <section id="panel" aria-label="Instruments">
-    <canvas class="gauge" id="asi" aria-label="Airspeed"></canvas>
-    <canvas class="gauge" id="ai" aria-label="Attitude"></canvas>
-    <canvas class="gauge" id="alt" aria-label="Altimeter"></canvas>
-    <canvas class="gauge" id="tc" aria-label="Turn coordinator"></canvas>
-    <canvas class="gauge" id="hi" aria-label="Heading"></canvas>
-    <canvas class="gauge" id="vsi" aria-label="Vertical speed"></canvas>
-    <canvas class="gauge" id="tach" aria-label="Engine RPM"></canvas>
-    <canvas class="gauge" id="controls" aria-label="Control positions"></canvas>
-    <div id="readout">
-      <dl>
-        <dt>Altitude</dt><dd id="r-alt">–</dd>
-        <dt id="l-talt">Altitude target</dt><dd id="r-talt" class="target">–</dd>
-        <dt>Heading</dt><dd id="r-hdg">–</dd>
-        <dt id="l-thdg">Heading target</dt><dd id="r-thdg" class="target">–</dd>
-        <dt id="l-dist" hidden>To threshold</dt><dd id="r-dist" class="target" hidden>–</dd>
-        <dt id="l-wind" hidden>Wind (20 ft)</dt><dd id="r-wind" hidden>–</dd>
-        <dt title="Indicated airspeed (POH Figure 5-1 calibration)">Airspeed (IAS)</dt><dd id="r-kias">–</dd>
-        <dt>Angle of attack</dt><dd id="r-aoa">–</dd>
-        <dt>Load factor</dt><dd id="r-g">–</dd>
-        <dt>Flaps</dt><dd id="r-flaps">–</dd>
-        <dt>Pitch trim</dt><dd id="r-trim">–</dd>
-        <dt>Brakes</dt><dd id="r-brake">–</dd>
-      </dl>
-      <div id="run"></div>
-    </div>
-  </section>
+  <section id="panel" class="panel" aria-label="Instruments"></section>
 
   <dialog id="stick-dialog" aria-labelledby="stick-title">
     <form method="dialog">

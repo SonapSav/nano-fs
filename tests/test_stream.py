@@ -383,3 +383,23 @@ def test_preview_shows_the_starting_state_without_streaming(logged_episode, env_
     assert {c: live["row"][c] for c in state_cols} == {c: first[c] for c in state_cols}  # same seed, same start
     assert all(live["row"][c] is None for c in first if c.startswith("cmd_"))
     assert hello["type"] == "hello" and frames[0] == first and end["reason"] == "finished"  # play is unaffected
+
+
+def test_instruments_window_is_served_offline(logged_episode, env_cfg, gains):
+    """The instruments window (panel.html) and its shared files, with no external resources."""
+    data_dir, _ = logged_episode
+    paths = ("/panel.html", "/panelwindow.js", "/panel.js", "/panel.css", "/theme.css", "/gauges.js")
+
+    async def body(port):
+        def get(path):
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as r:
+                return r.headers["Content-Type"], r.read()
+
+        return await asyncio.to_thread(lambda: [get(p) for p in paths])
+
+    files = dict(zip(paths, _with_server(data_dir, env_cfg, gains, body)))
+    assert files["/panel.html"][0].startswith("text/html") and b'src="./panelwindow.js"' in files["/panel.html"][1]
+    assert files["/panelwindow.js"][0] == "text/javascript" and b"BroadcastChannel" in files["/panelwindow.js"][1]
+    assert files["/panel.css"][0].startswith("text/css")
+    for path, (_, content) in files.items():
+        assert b"http://" not in content and b"https://" not in content, path

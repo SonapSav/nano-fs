@@ -1,0 +1,11 @@
+/* Colours and font shared by the viewer and the instruments window. */
+:root {
+  --panel: #3a3f44;         /* painted instrument panel */
+  --panel-edge: #2c3034;
+  --face: #000000;          /* gauge faces */
+  --marking: #ecede8;       /* gauge markings and panel text */
+  --dim: #a9aeb2;
+  --bug: #d23cc8;           /* autopilot / target bugs, aviation magenta */
+  --sky: #9cc3e4;
+  --font: "Barlow Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+}
