@@ -37,15 +37,17 @@ const BODY_FROM_CAMERA = new THREE.Matrix4().makeBasis(
 // aircraft along the sun (a parallel projection, see updateShadow), so the outline follows
 // the attitude, the heading and the sun's direction. The flattened shape is drawn white
 // into a small mask image from straight above, and the mask darkens a patch of ground:
-// overlapping parts (wing over fuselage, both wing skins) darken once.
-const SHADOW_MASK_PX = 512;
+// overlapping parts (wing over fuselage, both wing skins) darken once. The mask is fitted
+// to the shadow's extent each frame (about 1 cm per pixel) and drawn antialiased, so the
+// outline stays clean seen from the cockpit, a metre or two away.
+const SHADOW_MASK_PX = 1024;
 
 function buildShadow(model) {
   model.group.updateMatrixWorld(true);
   const toBody = new THREE.Matrix4().copy(model.group.matrixWorld).invert();
   const m = new THREE.Matrix4(), v = new THREE.Vector3(), pos = [];
   const visible = (o) => {
-    for (let n = o; n && n !== model.group; n = n.parent) if (!n.visible) return false;
+    for (let n = o; n && n !== model.group; n = n.parent) if (!n.visible || n.userData.noShadow) return false;
     return true;
   };
   model.group.traverse((o) => {
@@ -60,12 +62,16 @@ function buildShadow(model) {
   });
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geometry.computeBoundingBox();
+  const b = geometry.boundingBox; // corners in body axes, projected each frame to fit the mask
+  const corners = [];
+  for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) corners.push(new THREE.Vector3(x, y, z));
   const flat = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }));
   flat.matrixAutoUpdate = false;
   flat.frustumCulled = false; // its matrix flattens it: the bounding sphere does not apply
   const maskScene = new THREE.Scene();
   maskScene.add(flat);
-  const target = new THREE.WebGLRenderTarget(SHADOW_MASK_PX, SHADOW_MASK_PX, { depthBuffer: false });
+  const target = new THREE.WebGLRenderTarget(SHADOW_MASK_PX, SHADOW_MASK_PX, { depthBuffer: false, samples: 4 });
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
   camera.up.set(0, 0, -1); // north up in the mask, as on the ground patch
   const patch = new THREE.Mesh(
@@ -73,7 +79,7 @@ function buildShadow(model) {
     new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: target.texture, transparent: true, opacity: 0.5, depthWrite: false }),
   );
   patch.visible = false;
-  return { flat, maskScene, target, camera, patch };
+  return { flat, maskScene, target, camera, patch, corners, corner: new THREE.Vector3() };
 }
 
 export class FlightScene {
@@ -273,15 +279,21 @@ export class FlightScene {
     this.shadowFlatten.set(1, -kx, 0, kx * h, 0, 0, 0, h, 0, -kz, 1, kz * h, 0, 0, 0, 1);
     sh.flat.matrix.multiplyMatrices(this.shadowFlatten, this.aircraft.matrix);
     sh.flat.matrixWorld.copy(sh.flat.matrix);
-    // Patch and mask camera: centred on the shadow, wide enough for the span (11 m) and the
-    // stretch of a low sun (the aircraft is ~3 m tall), at most 60 m.
-    t = (p.y - h) / s.y;
-    const cx = p.x - s.x * t, cz = p.z - s.z * t;
-    const size = Math.min(60, 14 + 3.2 / Math.max(0.05, s.y / Math.hypot(s.x, s.z)));
+    // Patch and mask camera: the shadow's extent on the ground (the model's bounding box
+    // flattened the same way), plus a small margin, at most 80 m across.
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const c of sh.corners) {
+      const q = sh.corner.copy(c).applyMatrix4(sh.flat.matrix);
+      x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); z0 = Math.min(z0, q.z); z1 = Math.max(z1, q.z);
+    }
+    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+    const w = Math.min(80, x1 - x0 + 0.5), d = Math.min(80, z1 - z0 + 0.5);
     sh.patch.position.set(cx, h, cz);
-    sh.patch.scale.set(size, 1, size);
-    sh.camera.left = sh.camera.bottom = -size / 2;
-    sh.camera.right = sh.camera.top = size / 2;
+    sh.patch.scale.set(w, 1, d);
+    sh.camera.left = -w / 2;
+    sh.camera.right = w / 2;
+    sh.camera.top = d / 2;
+    sh.camera.bottom = -d / 2;
     sh.camera.position.set(cx, h + 100, cz);
     sh.camera.lookAt(cx, h, cz);
     sh.camera.updateProjectionMatrix();

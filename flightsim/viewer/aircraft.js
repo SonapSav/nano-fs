@@ -406,6 +406,7 @@ export function buildC172({ registration = REGISTRATION } = {}) {
     tip.position.set(0, 0, s * 36 * IN);
     prop.add(tip);
   }
+  prop.userData.noShadow = true; // a turning propeller casts no crisp blade shadow
   group.add(prop);
   const disc = new THREE.Mesh(
     new THREE.CircleGeometry(37.5 * IN, 48),

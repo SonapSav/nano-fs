@@ -596,6 +596,10 @@ owner before work can start.
   (opacity 0.5, fading out by 200 m above the ground). The mask avoids double darkening
   where parts overlap without needing a stencil buffer (a stencil version drew nothing
   in headless Chromium). 25 cm above the ground, over the runway surface (0.15 m).
+  Refined after the owner's cockpit screenshot (jagged edges, a static propeller stick):
+  the mask is fitted to the shadow's extent each frame (the model's bounding box flattened
+  the same way), 1024 px (~1 cm per pixel) with 4x antialiasing, and the propeller is left
+  out (a turning propeller casts no crisp blade shadow).
 - [x] **Flights drawer and Settings** (2026-10-07). The toolbar keeps what is used in
   flight: Flights (with the chosen flight's name), Play / Pause / Stop, speed, progress,
   cockpit view, HUD, instruments window, Settings, Stick settings. The **Flights** drawer
