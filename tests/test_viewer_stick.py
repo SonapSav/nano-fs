@@ -1,6 +1,6 @@
 """Gamepad settings (flightsim/viewer/stick.js), run with Node when available: per-device
 axis mapping, inversion, centre calibration, throttle lever, axis detection, device
-choice and migration of the earlier settings."""
+choice, migration of the earlier settings, and button bindings (buttons or hat axes)."""
 
 import json
 import shutil
@@ -52,6 +52,28 @@ out.migrated = { pitch: m.pitch, deadzone: m.deadzone, devices: m.devices, centr
 // A saved v3 profile with an implausible centre is rejected as a whole.
 s.saveSettings({ ...m, devices: { Xbox: { ...s.defaultProfile(true), centre: { 0: -0.72 } } } });
 out.badCentreRejected = Object.keys(s.loadSettings().devices).length === 0;
+// Buttons: standard defaults, nothing bound on a joystick; values from buttons and hat axes.
+out.stdButtons = s.defaultProfile(true).buttons;
+out.joyButtons = s.defaultProfile(false).buttons;
+const hotasPad = { buttons: [{ pressed: true, value: 1 }, { pressed: false, value: 0 }], axes: [0, 0, 0.9, 0, 0, 0, -1] };
+out.values = [{ button: 0 }, { button: 1 }, { button: 9 }, { axis: 6, dir: -1 }, { axis: 6, dir: 1 }, null].map((b) => s.buttonValue(hotasPad, b));
+out.trigger = s.buttonValue({ buttons: [{ pressed: true, value: 0.4 }], axes: [] }, { button: 0 });
+// Detection: a newly pressed button; else a hat axis from rest; never a mapped or resting-deflected axis.
+const rest = { buttons: [0, 1, 0], axes: [0, 0, -1, 0, 0] };
+out.detBtn = s.detectButton(rest, [{ buttons: [0, 1, 0], axes: [0, 0, -1, 0, 0] }, { buttons: [0, 1, 1], axes: [0, 0, -1, 0, -1] }]);
+out.detHat = s.detectButton(rest, [{ buttons: [0, 1, 0], axes: [0, 0, -1, 0, -1] }]);
+out.detLever = s.detectButton(rest, [{ buttons: [0, 1, 0], axes: [0, 0, 1, 0, 0] }]);
+out.detMapped = s.detectButton(rest, [{ buttons: [0, 1, 0], axes: [0.9, 0, -1, 0, 0] }], [0]);
+// A profile saved before button mapping gets the default buttons; bindings round-trip through storage.
+const st = { ...structuredClone(s.DEFAULTS), devices: { Xbox: { map: s.defaultProfile(true).map, centre: {} } } };
+out.filled = s.profileFor(st, xbox).buttons.brake;
+const h = s.profileFor(st, hotas);
+h.buttons.trim_nose_down = { axis: 6, dir: -1 }; h.buttons.brake = { button: 0 };
+s.saveSettings(st);
+const back = s.loadSettings();
+out.saved = back.devices.HOTAS.buttons;
+s.saveSettings({ ...st, devices: { HOTAS: { ...h, buttons: { brake: { axis: 1, dir: 2 } } } } });
+out.badBindingRejected = Object.keys(s.loadSettings().devices).length === 0;
 console.log(JSON.stringify(out));
 """ % json.dumps((VIEWER / "stick.js").as_uri())
 
@@ -96,3 +118,30 @@ def test_migration_keeps_the_feel_and_drops_the_old_centre(out):
     assert m["pitch"] == {"sensitivity": 0.4, "expo": 0.6} and m["deadzone"] == 0.23
     assert m["devices"] == {} and m["centre"] is None
     assert out["badCentreRejected"]
+
+
+def test_default_buttons(out):
+    b = out["stdButtons"]
+    assert (b["flaps_up"], b["flaps_down"], b["brake"]) == ({"button": 4}, {"button": 5}, {"button": 1})
+    assert (b["trim_nose_down"], b["trim_nose_up"]) == ({"button": 12}, {"button": 13})
+    assert (b["throttle_up"], b["throttle_down"]) == ({"button": 7}, {"button": 6})
+    assert all(v is None for v in out["joyButtons"].values())
+
+
+def test_button_values_from_buttons_and_hat_axes(out):
+    assert out["values"] == [1, 0, 0, 1, 0, 0]  # pressed, released, missing, hat down, hat up, unbound
+    assert out["trigger"] == pytest.approx(0.4)  # analog buttons keep their value
+
+
+def test_button_detection(out):
+    assert out["detBtn"] == {"button": 2}  # buttons win; button 1 was already held
+    assert out["detHat"] == {"axis": 4, "dir": -1}
+    assert out["detLever"] is None  # the throttle lever rested at an end
+    assert out["detMapped"] is None  # the roll axis is mapped to a stick control
+
+
+def test_button_bindings_saved_and_old_profiles_filled(out):
+    assert out["filled"] == {"button": 1}
+    assert out["saved"]["trim_nose_down"] == {"axis": 6, "dir": -1}
+    assert out["saved"]["brake"] == {"button": 0} and out["saved"]["flaps_up"] is None
+    assert out["badBindingRejected"]

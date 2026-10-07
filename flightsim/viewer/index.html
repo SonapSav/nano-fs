@@ -116,6 +116,7 @@
   #stick-device { margin-bottom: 6px; }
   .axis-row { display: grid; grid-template-columns: 4.5em 11em auto auto 1fr; gap: 6px 10px; align-items: center; margin-bottom: 6px; }
   .axis-row .axis { font-weight: 600; }
+  #button-rows .axis-row { grid-template-columns: 8.5em 11em 0 auto 1fr; }
   .axis-row .live, #stick-axes-raw { font-variant-numeric: tabular-nums; color: var(--dim); }
   .axis-row .prompt { grid-column: 2 / -1; color: #e2b93b; }
   .axis-row label { display: flex; gap: 4px; align-items: center; color: var(--dim); }
@@ -217,9 +218,12 @@
       <div class="calibrate">
         <button type="button" id="stick-calibrate">Calibrate centre (hands off)</button>
         <button type="button" id="stick-calibrate-clear">Clear calibration</button>
-        <button type="button" id="stick-axes-default">Default axes</button>
+        <button type="button" id="stick-axes-default">Default axes and buttons</button>
         <span id="stick-calibrate-status" role="status"></span>
       </div>
+      <h3>Controller buttons</h3>
+      <p>Unbound functions stay on the keyboard (F/V flaps, T/G trim, B brakes, W/S throttle). A hat switch shows up as two axes: bind its directions with Detect.</p>
+      <div id="button-rows"></div>
       <div class="dialog-buttons">
         <button type="button" id="stick-reset">Reset to defaults</button>
         <button value="done">Done</button>

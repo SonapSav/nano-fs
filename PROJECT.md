@@ -554,12 +554,19 @@ owner before work can start.
   mapped stick axes. A mapped throttle lever takes over once moved (flights still start at
   trim power). Settings key v3; the v2 feel is kept, its centre dropped. Tested (Node unit
   tests; headless run with a simulated faulty pad: roll on the right stick works).
-- [ ] **Joystick support for the Thrustmaster T.Flight HOTAS X** (owner plans to buy it,
-  2026-10-04). Browsers report it without the standard layout; it is now used and its
-  axes can be mapped (pitch, roll, rudder = twist grip, throttle = lever) with Detect,
-  see above. Still to do: button mapping for flaps and trim on non-standard devices
-  (today only the standard layout's bumpers and D-pad), and a check with the real device
-  once it arrives. Do not hard-code axis indices: they vary by browser and OS.
+- [ ] **Joystick support for the Thrustmaster T.Flight HOTAS X** (arrived 2026-10-07).
+  Kernel check: USB 044f:b108, `/dev/input/js0`, 7 axes (stick X/Y, lever, twist, rocker,
+  hat X/Y) all full range, 12 buttons (button 2 not seen in the first test). Browsers
+  report it without the standard layout; its axes are mapped with Detect (see above).
+  - [x] **Button mapping** (2026-10-07): Stick settings binds flaps up/down, trim nose
+    down/up, brakes and throttle up/down per device to a button or one direction of an
+    axis (a hat switch is two axes on Linux), with Detect (press it; buttons win, axes
+    only from rest and never a mapped stick axis or a lever). Standard pads default to
+    the old layout (bumpers, D-pad, B, triggers); profiles saved before get those
+    defaults. Unbound functions stay on the keyboard. Tested (Node unit tests).
+  - [ ] Check in the browser with the real device: axes and buttons mapped, a flight
+    flown, feel (sensitivity/expo) adjusted if needed. Do not hard-code axis indices:
+    they vary by browser and OS.
 
 ### Viewer
 

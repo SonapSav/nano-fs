@@ -5,7 +5,7 @@
 import { FlightScene } from "./scene.js";
 import { drawAll, indicatedKt, units } from "./gauges.js";
 import { HANDLED_KEYS, PilotInput } from "./input.js";
-import { AXES, CONTROLS, DEFAULTS, MAX_CALIBRATION_SPREAD, MAX_CENTRE, controlValue, defaultProfile, detectAxis, saveSettings } from "./stick.js";
+import { AXES, BUTTONS, CONTROLS, DEFAULTS, MAX_CALIBRATION_SPREAD, MAX_CENTRE, buttonValue, controlValue, defaultProfile, detectAxis, detectButton, saveSettings } from "./stick.js";
 import { groupLogs } from "./flightlist.js";
 import { FlightSound } from "./sound.js";
 
@@ -659,6 +659,76 @@ function renderAxisRows() {
     row.append(label, select, invLabel, detect, live);
     rows.append(row);
   }
+  renderButtonRows();
+}
+
+// Controller buttons: which button (or hat direction) does each button function.
+const BUTTON_LABELS = {
+  flaps_up: "Flaps up", flaps_down: "Flaps down", trim_nose_down: "Trim nose down", trim_nose_up: "Trim nose up",
+  brake: "Brakes", throttle_up: "Throttle up", throttle_down: "Throttle down",
+};
+const bindingKey = (b) => (!b ? "" : b.button !== undefined ? `b${b.button}` : `a${b.axis}${b.dir > 0 ? "+" : "-"}`);
+const bindingFromKey = (k) => (!k ? null : k[0] === "b" ? { button: Number(k.slice(1)) } : { axis: Number(k.slice(1, -1)), dir: k.endsWith("+") ? 1 : -1 });
+
+function renderButtonRows() {
+  const rows = $("button-rows");
+  rows.replaceChildren();
+  const pad = pilot.pad;
+  if (!pad) return;
+  const profile = pilot.profile();
+  for (const f of BUTTONS) {
+    const row = document.createElement("div");
+    row.className = "axis-row";
+    const label = Object.assign(document.createElement("span"), { className: "axis", textContent: BUTTON_LABELS[f] });
+    const select = document.createElement("select");
+    select.setAttribute("aria-label", `${BUTTON_LABELS[f]} button`);
+    select.add(new Option("None (keyboard)", ""));
+    for (let i = 0; i < pad.buttons.length; i++) select.add(new Option(`Button ${i}`, `b${i}`));
+    for (let i = 0; i < pad.axes.length; i++) for (const d of ["+", "-"]) select.add(new Option(`Axis ${i} ${d === "+" ? "+" : "\u2212"}`, `a${i}${d}`));
+    const key = bindingKey(profile.buttons[f]);
+    if (key && ![...select.options].some((o) => o.value === key)) select.add(new Option(`${key} (not on this device)`, key));
+    select.value = key;
+    select.addEventListener("change", () => {
+      profile.buttons[f] = bindingFromKey(select.value);
+      saveSettings(pilot.stick);
+    });
+    const detect = Object.assign(document.createElement("button"), { type: "button", textContent: "Detect" });
+    detect.addEventListener("click", () => detectButtonFor(f, row, detect));
+    const live = Object.assign(document.createElement("span"), { className: "live" });
+    live.dataset.button = f;
+    row.append(label, select, document.createElement("span"), detect, live);
+    rows.append(row);
+  }
+}
+
+// Detect: the pilot presses the button (or hat direction) within 3 s.
+function detectButtonFor(f, row, button) {
+  const pad = pilot.readPad();
+  if (!pad) return;
+  const snapshot = (p) => ({ buttons: p.buttons.map((b) => (typeof b.value === "number" ? b.value : b.pressed ? 1 : 0)), axes: [...p.axes] });
+  const baseline = snapshot(pad);
+  const profile = pilot.profile();
+  const exclude = CONTROLS.map((c) => profile.map[c].axis).filter((a) => a !== null);
+  const prompt = Object.assign(document.createElement("span"), { className: "prompt", textContent: `Press the button for ${BUTTON_LABELS[f].toLowerCase()}…`, role: "status" });
+  row.append(prompt);
+  button.disabled = true;
+  const samples = [];
+  const timer = setInterval(() => {
+    const p = pilot.readPad();
+    if (p) samples.push(snapshot(p));
+    const found = detectButton(baseline, samples, exclude);
+    if (found || samples.length >= 60) { // 3 s
+      clearInterval(timer);
+      if (found) {
+        pilot.profile().buttons[f] = found;
+        saveSettings(pilot.stick);
+        renderButtonRows();
+      } else {
+        prompt.textContent = "No button press detected: try again.";
+        button.disabled = false;
+      }
+    }
+  }, 50);
 }
 
 // Detect: the pilot moves the control in its positive direction; the axis that moves most
@@ -708,6 +778,9 @@ function updateLive() {
     drift ||= off;
     span.textContent = v === null ? "" : span.dataset.control === "throttle" ? `${Math.round(v * 100)}%` : signed(v, 2);
     span.style.color = off ? "#e2b93b" : "";
+  }
+  for (const span of document.querySelectorAll("#button-rows .live")) {
+    span.textContent = buttonValue(pad, profile.buttons[span.dataset.button]) > 0.5 ? "pressed" : "";
   }
   el.textContent = drift
     ? "Hands off, a value in yellow is drift that reaches the controls: calibrate the centre, or raise the dead zone."
@@ -798,7 +871,7 @@ $("stick-open").addEventListener("click", () => {
   $("stick-dialog").showModal();
 });
 $("stick-reset").addEventListener("click", () => {
-  const devices = pilot.stick.devices; // reset the feel, keep each controller's axes and calibration
+  const devices = pilot.stick.devices; // reset the feel, keep each controller's axes, buttons and calibration
   pilot.stick = { ...structuredClone(DEFAULTS), devices };
   saveSettings(pilot.stick);
   renderStickRows();

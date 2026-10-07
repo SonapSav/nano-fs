@@ -26,16 +26,15 @@ const TRIM_KEYS = { KeyT: 1, KeyG: -1 }; // T = trim nose down, G = trim nose up
 const BRAKE_KEY = "KeyB"; // hold for the toe brakes
 const TRIM_RATE_PER_S = 0.15;
 const FLAP_DETENTS = 3; // 0, 10, 20, 30 deg = 0, 1/3, 2/3, 1
-// Standard gamepad buttons: 4 = LB, 5 = RB, 12 = D-pad up, 13 = D-pad down.
-const PAD_FLAPS = { 4: -1, 5: 1 };
-const PAD_TRIM = { 12: 1, 13: -1 };
-const PAD_BRAKE = 1; // B (Xbox) / circle
+// Gamepad and joystick buttons: per device, set in Stick settings (stick.js BUTTONS).
+const PAD_FLAPS = { flaps_up: -1, flaps_down: 1 };
+const PAD_TRIM = { trim_nose_down: 1, trim_nose_up: -1 };
 export const HANDLED_KEYS = new Set([
   ...Object.values(AXIS_KEYS).flatMap(Object.keys),
   ...Object.keys(THROTTLE_KEYS), ...Object.keys(FLAP_KEYS), ...Object.keys(TRIM_KEYS), BRAKE_KEY,
 ]);
 
-import { choosePad, controlValue, deadzone, loadSettings, profileFor, shape } from "./stick.js";
+import { buttonValue, choosePad, controlValue, deadzone, loadSettings, profileFor, shape } from "./stick.js";
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -140,16 +139,16 @@ export class PilotInput {
       if (pitch) this.value.elevator = shape(pitch, this.stick.pitch);
       if (yaw) this.value.rudder = -shape(yaw, this.stick.rudder); // right pedal: nose right = negative rudder
       lever = controlValue(profile, pad.axes, "throttle");
-      if (pad.mapping === "standard") {
-        // Standard layout: triggers = throttle up (RT) and down (LT), bumpers = flaps, D-pad = trim.
-        throttleDir += (pad.buttons[7]?.value ?? 0) - (pad.buttons[6]?.value ?? 0);
-        for (const [b, sign] of Object.entries(PAD_TRIM)) if (pad.buttons[b]?.pressed) trimDir += sign;
-        brake = Math.max(brake, pad.buttons[PAD_BRAKE]?.value ?? 0);
-        for (const [b, dir] of Object.entries(PAD_FLAPS)) {
-          const pressed = Boolean(pad.buttons[b]?.pressed);
-          if (pressed && !this._padPrev[b]) this._stepFlaps(dir); // one detent per press
-          this._padPrev[b] = pressed;
-        }
+      // Buttons as bound in Stick settings (defaults for standard gamepads: triggers =
+      // throttle, bumpers = flaps, D-pad = trim, B = brakes).
+      const btn = (f) => buttonValue(pad, profile.buttons[f]);
+      throttleDir += btn("throttle_up") - btn("throttle_down");
+      for (const [f, sign] of Object.entries(PAD_TRIM)) if (btn(f) > 0.5) trimDir += sign;
+      brake = Math.max(brake, btn("brake"));
+      for (const [f, dir] of Object.entries(PAD_FLAPS)) {
+        const pressed = btn(f) > 0.5;
+        if (pressed && !this._padPrev[f]) this._stepFlaps(dir); // one detent per press
+        this._padPrev[f] = pressed;
       }
     }
     this.value.throttle = clamp(this.value.throttle + throttleDir * THROTTLE_RATE_PER_S * dt, 0, 1);
