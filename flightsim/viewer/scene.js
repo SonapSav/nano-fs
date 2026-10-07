@@ -249,14 +249,19 @@ export class FlightScene {
     this.lastT = row.t_s;
     this.model.update(row, dt);
 
+    // Trail: a point every 1/30 s of flight time at most (the view is drawn at the screen's
+    // rate, between frames), so it keeps covering the same stretch of flight.
     const pos = this.trailGeo.attributes.position;
-    if (this.trailCount === TRAIL_POINTS) {
-      pos.array.copyWithin(0, 3);
-      this.trailCount--;
+    if (!this.trailCount || row.t_s < this.trailT || row.t_s - this.trailT >= 1 / 30 - 1e-9) {
+      if (this.trailCount === TRAIL_POINTS) {
+        pos.array.copyWithin(0, 3);
+        this.trailCount--;
+      }
+      pos.setXYZ(this.trailCount++, this.position.x, this.position.y, this.position.z);
+      pos.needsUpdate = true;
+      this.trailGeo.setDrawRange(0, this.trailCount);
+      this.trailT = row.t_s;
     }
-    pos.setXYZ(this.trailCount++, this.position.x, this.position.y, this.position.z);
-    pos.needsUpdate = true;
-    this.trailGeo.setDrawRange(0, this.trailCount);
 
     this.updateShadow();
     if (this.targets && !this.approach) {

@@ -588,6 +588,20 @@ owner before work can start.
 
 ### Viewer
 
+- [x] **Smooth motion and a performance readout** (2026-10-07). Stutter reported. Measured:
+  the server's frames arrive every 33 ms median (29-38 ms, occasionally 68 ms) and were
+  drawn as they came, so at 60 Hz each pose stayed 1-3 refreshes (judder); crossing a
+  4 km terrain tile builds ~26 tiles, the near two ~15 ms each (Node), one per refresh.
+  - The view is now drawn 50 ms of flight time behind the newest frame and interpolated
+    at every refresh (`smooth.js`: a display clock steered toward the newest frame,
+    angles the short way round, reset on seek / new flight); the gauges, readouts and
+    sound use the newest frame. The trail keeps one point per 1/30 s.
+  - P shows fps, the slowest frame and refreshes missed over 10 s, the frame message
+    timing, draw calls / triangles and terrain tiles still to build (`perf.js`).
+  - [ ] Terrain tiles built in a Web Worker (no hitch when crossing tile boundaries).
+  - [ ] Measure on the owner's machine (Firefox, integrated GPU) with P; candidates if
+    the GPU is the limit: `logarithmicDepthBuffer` (costly per pixel), pixel ratio 2 on
+    High, ~340 draw calls / ~240k triangles per frame.
 - [x] **HUD in the cockpit view** (2026-10-07, phase 1; an option, not fitted to a real
   C172): H, the "HUD" button (cockpit view) or a controller button ("HUD on/off"; X on
   standard pads), remembered per browser. Green, fixed to the aircraft (a combiner about

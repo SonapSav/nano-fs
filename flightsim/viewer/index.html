@@ -54,6 +54,8 @@
   #view { position: relative; background: var(--sky); min-height: 0; }
   #hud { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
   #message, #pad-status, #hint, #boresight { z-index: 2; }
+  #perf { position: absolute; right: 16px; top: 12px; z-index: 2; padding: 4px 10px; border-radius: 4px;
+    background: rgba(44, 48, 52, .86); font: 500 14px/1.4 var(--font); font-variant-numeric: tabular-nums; white-space: pre; }
   #view canvas { display: block; width: 100%; height: 100%; touch-action: none; }
   #message {
     position: absolute; left: 16px; bottom: 16px; max-width: 34em;
@@ -142,6 +144,7 @@
     <div id="pad-status" role="status" aria-live="polite"></div>
     <div id="boresight" aria-hidden="true"></div>
     <canvas id="hud" aria-hidden="true"></canvas>
+    <div id="perf" hidden aria-live="off"></div>
     <div id="hint">Drag to look around, scroll to zoom, space to pause</div>
   </main>
 

@@ -5,6 +5,8 @@
 import { FlightScene } from "./scene.js";
 import { CLIMB_KT, InstrumentPanel, PANEL_CHANNEL, PANEL_TIMEOUT_MS, ROTATE_KT } from "./panel.js";
 import { drawHud } from "./hud.js";
+import { FrameStats } from "./perf.js";
+import { FrameBuffer } from "./smooth.js";
 import { HANDLED_KEYS, PilotInput } from "./input.js";
 import { AXES, BUTTONS, CONTROLS, DEFAULTS, MAX_CALIBRATION_SPREAD, MAX_CENTRE, buttonValue, controlValue, copyFeel, defaultProfile, detectAxis, detectButton, saveSettings } from "./stick.js";
 import { groupLogs } from "./flightlist.js";
@@ -204,6 +206,7 @@ function stopInput() {
 function applyHello(msg) {
   session = msg;
   latest = null;
+  frames.reset();
   pendingSeek = null;
   updateSeekable();
   scene.reset();
@@ -254,7 +257,8 @@ function handle(msg) {
       panel.setRunText(`Starting position of ${msg.hello.run_id}`);
       say(`${els.message.textContent} Press Play to start.`.trim());
       latest = msg.row;
-      scene.update(latest);
+      frames.reset();
+      frames.push(latest);
       dirty = true;
       syncPanel();
       break;
@@ -276,7 +280,8 @@ function handle(msg) {
         }
       }
       latest = msg.row;
-      scene.update(latest);
+      frameStats.message(performance.now());
+      frames.push(latest); // drawn smoothly by frame()
       tellPanel({ type: "frame", row: latest });
       if (!paused) sound.update(latest, { view: scene.view, distanceM: scene.orbit.distance });
       dirty = true;
@@ -535,6 +540,10 @@ function keyDown(e, inForm) {
     scene.resetView();
     return;
   }
+  if (e.code === "KeyP" && !inForm && !e.repeat) {
+    setPerf($("perf").hidden);
+    return;
+  }
   if (e.code === "KeyH" && !inForm && !e.repeat) {
     setHud(!hudOn);
     return;
@@ -591,6 +600,35 @@ $("panel-window").addEventListener("click", () => {
   window.open("panel.html", "flightsim-instruments", "popup=yes,width=1280,height=560");
 });
 
+// Performance readout (P), remembered in this browser: drawn frames per second, the
+// slowest frame and refreshes missed over the last 10 s, the server's frame messages, and
+// the GPU work and terrain tiles still to build.
+const frameStats = new FrameStats(10000);
+function setPerf(on) {
+  $("perf").hidden = !on;
+  try {
+    localStorage.setItem("flightsim.perf", on ? "on" : "off");
+  } catch {
+    // not remembered
+  }
+}
+try {
+  setPerf(localStorage.getItem("flightsim.perf") === "on");
+} catch {
+  // storage unavailable: off
+}
+let perfShownAt = 0;
+function showPerf(now) {
+  if ($("perf").hidden || now - perfShownAt < 500) return;
+  perfShownAt = now;
+  const s = frameStats.summary(), info = scene.renderer.info.render;
+  $("perf").textContent =
+    `${s.fps.toFixed(0)} fps (refresh ${s.refreshMs.toFixed(1)} ms), slowest ${s.worstMs.toFixed(0)} ms\n` +
+    `missed refreshes, last 10 s: ${s.dropped}\n` +
+    (s.msgMedianMs ? `flight data every ${s.msgMedianMs.toFixed(0)} ms (95% < ${s.msgP95Ms.toFixed(0)}, max ${s.msgMaxMs.toFixed(0)})\n` : "") +
+    `${info.calls} draw calls, ${(info.triangles / 1000).toFixed(0)}k triangles, tiles to build ${scene.terrain.pending}`;
+}
+
 const hudCanvas = $("hud");
 function drawHudLayer() {
   const dpr = window.devicePixelRatio || 1, w = hudCanvas.clientWidth, h = hudCanvas.clientHeight;
@@ -601,8 +639,8 @@ function drawHudLayer() {
   const ctx = hudCanvas.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
-  if (!hudInView() || !latest) return;
-  drawHud(ctx, w, h, { camera: scene.camera, aircraftMatrix: scene.aircraft.matrix, row: latest, ...hudTask(latest) });
+  if (!hudInView() || !shown) return;
+  drawHud(ctx, w, h, { camera: scene.camera, aircraftMatrix: scene.aircraft.matrix, row: shown, ...hudTask(shown) });
 }
 
 // What the HUD shows for the task: free flight its altitude and heading targets; runway
@@ -624,7 +662,22 @@ function hudTask(row) {
   return { runway: a, approach: onApproach, speedBugs: vapp };
 }
 
-function frame() {
+// The flight as drawn: between the server's frames, a little behind the newest (smooth.js).
+const frames = new FrameBuffer();
+let shown = null;
+let lastFrameAt = null;
+const playbackSpeed = () => (session?.source === "manual" ? 1 : Number(els.speed.value) || 1);
+
+function frame(now = performance.now()) {
+  frameStats.frame(now);
+  showPerf(now);
+  const dt = lastFrameAt === null ? 0 : Math.min(0.25, (now - lastFrameAt) / 1000);
+  lastFrameAt = now;
+  const row = frames.sample(dt, playbackSpeed(), paused);
+  if (row && row !== shown) {
+    shown = row;
+    scene.update(shown);
+  }
   if (dirty) {
     panel.draw(latest);
     if (latest && session?.duration_s && !dragging) showPosition(latest.t_s);
