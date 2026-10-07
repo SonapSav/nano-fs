@@ -40,6 +40,8 @@ def to_table(result: RunResult, cfg: Provenance) -> pa.Table:
     }
     if cfg.pilot:
         metadata[S.META_PILOT] = cfg.pilot
+    if cfg.pilot_aids is not None:
+        metadata[S.META_PILOT_AIDS] = json.dumps(cfg.pilot_aids, sort_keys=True)
     return pa.Table.from_pydict(columns, schema=S.SCHEMA.with_metadata(metadata))
 
 

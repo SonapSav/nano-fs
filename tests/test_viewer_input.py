@@ -54,8 +54,8 @@ hotas.axes[6] = 1; out.trim = run(1.0).pitch_trim; hotas.axes[6] = 0;
 hotas.buttons[0] = btn(true); out.brake = run(1.0).brake;
 // Centre view: one request per press, however long held.
 p.stick.devices.HOTAS.buttons.view_center = { button: 2 };
-hotas.buttons[2] = btn(true); run(0.1); out.viewFirst = p.viewCenterRequested; p.viewCenterRequested = false;
-run(0.5); out.viewHeld = p.viewCenterRequested;
+hotas.buttons[2] = btn(true); run(0.1); out.viewFirst = p.requests.has("view_center"); p.requests.clear();
+run(0.5); out.viewHeld = p.requests.has("view_center");
 // A standard pad keeps its defaults (D-pad up = trim nose down).
 const xbox = { id: "Xbox", mapping: "standard", connected: true, axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => btn(false)) };
 pads = [xbox]; p.reset(0.5); xbox.buttons[12] = btn(true);

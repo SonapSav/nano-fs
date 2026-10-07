@@ -64,6 +64,10 @@ META_JSBSIM_VERSION = "flightsim.jsbsim_version"
 META_CONFIG_JSON = "flightsim.config_json"
 META_TRIM_JSON = "flightsim.trim_json"
 META_PILOT = "flightsim.pilot"  # optional: "human" for demonstrations
+# optional, demonstrations (2026-10-07 on): JSON {"hud": [[t_on_s, t_off_s], ...]}, the
+# simulation times the pilot had the viewer's HUD in view (empty list: never). Logs
+# without it predate the HUD or did not come from the viewer.
+META_PILOT_AIDS = "flightsim.pilot_aids"
 META_CODE_VERSION = "flightsim.code_version"  # JSON: source hash and git commit (flightsim.provenance)
 
 

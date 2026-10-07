@@ -64,6 +64,7 @@ class Provenance:
     config_json: str
     run_id: str | None = None  # default: derived from config hash and seed
     pilot: str | None = None  # who flew it, e.g. "human" or "pid"
+    pilot_aids: dict | None = None  # demonstrations: viewer aids in use, e.g. {"hud": [[t_on, t_off]]}
 
 
 def _deep_merge(base: dict, extra: dict) -> dict:

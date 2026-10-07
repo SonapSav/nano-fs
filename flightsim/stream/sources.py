@@ -7,7 +7,7 @@ import json
 import math
 import re
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import numpy as np
@@ -169,14 +169,35 @@ class LiveSource(Source):
 
 
 class ManualSource(LiveSource):
-    """A human flies the task episode in real time; the flight is kept as a demonstration."""
+    """A human flies the task episode in real time; the flight is kept as a demonstration,
+    with the pilot aids the viewer reported (when the HUD was in view)."""
 
     max_speed = 1.0
     min_save_s = 5.0
 
-    def __init__(self, env_cfg: EnvConfig, seed: int):
+    def __init__(self, env_cfg: EnvConfig, seed: int, hud: bool = False):
         self.pilot = HumanPolicy()
         super().__init__(env_cfg, None, seed, policy=self.pilot, source="manual")
+        self._hud_intervals: list[list[float]] = []
+        self._hud_since: float | None = None
+        self.set_hud(hud)
+
+    def _now_s(self) -> float:
+        states, _ = self._env.recorded
+        return states[-1].t_s
+
+    def set_hud(self, on: bool) -> None:
+        """The viewer's HUD came into view (on) or left it, at the current simulation time."""
+        if on and self._hud_since is None:
+            self._hud_since = self._now_s()
+        elif not on and self._hud_since is not None:
+            self._hud_intervals.append([self._hud_since, self._now_s()])
+            self._hud_since = None
+
+    def pilot_aids(self) -> dict:
+        """{"hud": [[t_on_s, t_off_s], ...]} up to now (an interval still open ends now)."""
+        hud = [*self._hud_intervals] + ([[self._hud_since, self._now_s()]] if self._hud_since is not None else [])
+        return {"hud": hud}
 
     def demo_run_id(self) -> str:
         """Unique per flown input sequence: the same seed flown differently gets a new id."""
@@ -191,7 +212,8 @@ class ManualSource(LiveSource):
             return None
         run_id = self.demo_run_id()
         path = data_dir / "demos" / f"{run_id}.parquet"
-        return write_log(path, self._env.episode_result(), self._env.provenance(run_id=run_id, pilot="human"))
+        provenance = replace(self._env.provenance(run_id=run_id, pilot="human"), pilot_aids=self.pilot_aids())
+        return write_log(path, self._env.episode_result(), provenance)
 
 
 _log_info_cache: dict[tuple[str, int, int], dict | None] = {}

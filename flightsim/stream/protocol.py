@@ -33,7 +33,7 @@ Client -> server messages:
   {"type": "play", "source": "replay", "path": "<relative to the data dir>", "speed": 1.0, "start_s"?: 0.0}
   {"type": "play", "source": "live", "autopilot": "pid" | "lqr" | "approach" | "takeoff" | "circuit" (default "pid"), "seed": 0, "speed": 1.0}
   {"type": "play", "source": "manual", "conditions": "calm" | "windy" | "approach" | "approach_crosswind" | "takeoff"
-   | "takeoff_crosswind" | "circuit" | "circuit_crosswind", "seed": 0, "record": true}
+   | "takeoff_crosswind" | "circuit" | "circuit_crosswind", "seed": 0, "record": true, "aids"?: {"hud": false}}
       (speed is capped at 1)
   {"type": "preview", "id"?, <the fields of a "play" message>}
       The starting state of that flight without starting it (shown when a flight is
@@ -47,6 +47,10 @@ Client -> server messages:
       manual task's action set includes them. Sampled and held at the
       environment's decision rate. This is the only message that reaches the physics,
       and only as a policy action.
+  {"type": "aids", "hud": true | false}
+      Manual flights only: the HUD came into or left the pilot's view (and "aids" in the
+      play message: in view at the start). Recorded in the demonstration's metadata
+      (flightsim.pilot_aids); never reaches the physics.
   {"type": "pause"} | {"type": "resume"} | {"type": "speed", "value": 2.0} | {"type": "stop"}
   {"type": "seek", "t_s": 42.0}
       Replays only: continue from the first row at or after t_s; while paused, the

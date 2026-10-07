@@ -4,6 +4,7 @@
 
 import { FlightScene } from "./scene.js";
 import { InstrumentPanel, PANEL_CHANNEL, PANEL_TIMEOUT_MS } from "./panel.js";
+import { drawHud } from "./hud.js";
 import { HANDLED_KEYS, PilotInput } from "./input.js";
 import { AXES, BUTTONS, CONTROLS, DEFAULTS, MAX_CALIBRATION_SPREAD, MAX_CENTRE, buttonValue, controlValue, copyFeel, defaultProfile, detectAxis, detectButton, saveSettings } from "./stick.js";
 import { groupLogs } from "./flightlist.js";
@@ -58,8 +59,8 @@ const LANDING_FAILURES = {
   lost: "too far off the extended centreline",
 };
 const INPUT_SEND_HZ = 30;
-const VIEW_HINT = "Drag to look around, scroll to zoom, R or double-click to re-centre, space to pause, C for cockpit view, M for sound";
-const FLY_HINT = "Arrows pitch and roll; Z/X rudder and nosewheel; W/S throttle; F/V flaps; T/G trim; B brakes; hold a key to build it up, Shift for full deflection; R re-centres the view. Gamepad: LB/RB flaps, D-pad trim, B brakes, Y view (buttons: Stick settings)";
+const VIEW_HINT = "Drag to look around, scroll to zoom, R or double-click to re-centre, space to pause, C for cockpit view (H: HUD), M for sound";
+const FLY_HINT = "Arrows pitch and roll; Z/X rudder and nosewheel; W/S throttle; F/V flaps; T/G trim; B brakes; hold a key to build it up, Shift for full deflection; R re-centres the view, H HUD (cockpit view). Gamepad: LB/RB flaps, D-pad trim, B brakes, Y view, X HUD (buttons: Stick settings)";
 
 // Graphics quality (terrain.js QUALITY), remembered in this browser only.
 const QUALITY_KEY = "flightsim.quality";
@@ -182,10 +183,8 @@ function startInput() {
     const now = performance.now();
     const v = pilot.update((now - last) / 1000);
     last = now;
-    if (pilot.viewCenterRequested) {
-      pilot.viewCenterRequested = false;
-      scene.resetView();
-    }
+    if (pilot.requests.delete("view_center")) scene.resetView();
+    if (pilot.requests.delete("hud_toggle")) setHud(!hudOn);
     if (!paused) send({ type: "input", ...v });
     $("pad-status").textContent = pilot.gamepadName
       ? `Gamepad: ${pilot.gamepadName.replace(/\s*\(.*$/, "")}`
@@ -328,6 +327,10 @@ function play() {
   if (!req) return;
   previewId++; // a preview still on its way is stale now
   if (req.source === "replay") lastReplay = req.path;
+  if (req.source === "manual") {
+    req.aids = { hud: hudInView() }; // recorded with the demonstration
+    hudReported = hudInView();
+  }
   send({ type: "play", ...req });
   document.activeElement?.blur(); // so the arrow keys fly instead of changing the menu
 }
@@ -469,12 +472,46 @@ els.source.addEventListener("change", updateSourceOptions);
 els.seed.addEventListener("change", requestPreview);
 sourceFilter.addEventListener("input", () => populateSources());
 els.source.addEventListener("focus", () => send({ type: "list" }));
+// HUD in the cockpit view (hud.js): H, the button or a controller button; remembered in
+// this browser. During a manual flight the viewer reports when it comes into or leaves
+// view, so the demonstration records it (protocol "aids"; never reaches the physics).
+let hudOn = (() => {
+  try {
+    return localStorage.getItem("flightsim.hud") === "on";
+  } catch {
+    return false;
+  }
+})();
+let hudReported = null;
+const hudInView = () => hudOn && scene.view === "cockpit";
+function reportHud() {
+  const v = hudInView();
+  if (v === hudReported) return;
+  hudReported = v;
+  if (flying()) send({ type: "aids", hud: v });
+}
+function setHud(on) {
+  hudOn = on;
+  try {
+    localStorage.setItem("flightsim.hud", on ? "on" : "off");
+  } catch {
+    // not remembered; the HUD still switches
+  }
+  $("hud-toggle").textContent = on ? "HUD on" : "HUD off";
+  $("hud-toggle").setAttribute("aria-pressed", String(on));
+  reportHud();
+}
+$("hud-toggle").addEventListener("click", () => setHud(!hudOn));
+setHud(hudOn);
+
 // Chase or cockpit view (C key or the button); remembered in this browser.
 function setView(view) {
   scene.setView(view);
   const inside = view === "cockpit";
   $("view-toggle").textContent = inside ? "Chase view" : "Cockpit view";
   $("view-toggle").setAttribute("aria-pressed", String(inside));
+  $("hud-toggle").hidden = !inside;
+  reportHud();
   try {
     localStorage.setItem("flightsim.view", view);
   } catch {
@@ -496,6 +533,10 @@ function keyDown(e, inForm) {
   }
   if (e.code === "KeyR" && !inForm && !e.repeat) {
     scene.resetView();
+    return;
+  }
+  if (e.code === "KeyH" && !inForm && !e.repeat) {
+    setHud(!hudOn);
     return;
   }
   if (e.code === "KeyC" && !inForm && !e.repeat) {
@@ -550,6 +591,22 @@ $("panel-window").addEventListener("click", () => {
   window.open("panel.html", "flightsim-instruments", "popup=yes,width=1280,height=560");
 });
 
+const hudCanvas = $("hud");
+function drawHudLayer() {
+  const dpr = window.devicePixelRatio || 1, w = hudCanvas.clientWidth, h = hudCanvas.clientHeight;
+  if (hudCanvas.width !== Math.round(w * dpr) || hudCanvas.height !== Math.round(h * dpr)) {
+    hudCanvas.width = Math.round(w * dpr);
+    hudCanvas.height = Math.round(h * dpr);
+  }
+  const ctx = hudCanvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  if (!hudInView() || !latest) return;
+  // Runway tasks have no altitude/heading targets to show; free flight shows its bugs.
+  const targets = session?.approach || session?.takeoff ? null : session?.targets;
+  drawHud(ctx, w, h, { camera: scene.camera, aircraftMatrix: scene.aircraft.matrix, row: latest, targets });
+}
+
 function frame() {
   if (dirty) {
     panel.draw(latest);
@@ -557,6 +614,7 @@ function frame() {
     dirty = false;
   }
   scene.render();
+  drawHudLayer();
   const bx = scene.boresightX();
   const marker = $("boresight");
   marker.style.display = bx === null ? "none" : "block";
@@ -668,7 +726,7 @@ function renderAxisRows() {
 // Controller buttons: which button (or hat direction) does each button function.
 const BUTTON_LABELS = {
   flaps_up: "Flaps up", flaps_down: "Flaps down", trim_nose_down: "Trim nose down", trim_nose_up: "Trim nose up",
-  brake: "Brakes", throttle_up: "Throttle up", throttle_down: "Throttle down", view_center: "Centre view",
+  brake: "Brakes", throttle_up: "Throttle up", throttle_down: "Throttle down", view_center: "Centre view", hud_toggle: "HUD on/off",
 };
 const bindingKey = (b) => (!b ? "" : b.button !== undefined ? `b${b.button}` : `a${b.axis}${b.dir > 0 ? "+" : "-"}`);
 const bindingFromKey = (k) => (!k ? null : k[0] === "b" ? { button: Number(k.slice(1)) } : { axis: Number(k.slice(1, -1)), dir: k.endsWith("+") ? 1 : -1 });

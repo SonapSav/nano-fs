@@ -403,3 +403,32 @@ def test_instruments_window_is_served_offline(logged_episode, env_cfg, gains):
     assert files["/panel.css"][0].startswith("text/css")
     for path, (_, content) in files.items():
         assert b"http://" not in content and b"https://" not in content, path
+
+
+def test_demonstrations_record_when_the_hud_was_in_view(env_cfg, tmp_path):
+    from flightsim.datalog import read_log
+    from flightsim.stream.sources import ManualSource
+
+    src = ManualSource(env_cfg, seed=1, hud=True)
+    frames = src.frames()
+    for t, _ in frames:  # fly 2 s with the HUD, 1.5 s without, then HUD again to the end
+        if t >= 2.0:
+            break
+    src.set_hud(False)
+    for t, _ in frames:
+        if t >= 3.5:
+            break
+    src.set_hud(True)
+    for _ in frames:
+        pass
+    _, meta = read_log(src.save(tmp_path))
+    hud = json.loads(meta["flightsim.pilot_aids"])["hud"]
+    assert len(hud) == 2
+    assert hud[0][0] == 0.0 and hud[0][1] == pytest.approx(2.0, abs=0.1)
+    assert hud[1][0] == pytest.approx(3.5, abs=0.1) and hud[1][1] == pytest.approx(6.0)
+
+    plain = ManualSource(env_cfg, seed=1)
+    for _ in plain.frames():
+        pass
+    _, meta = read_log(plain.save(tmp_path / "plain"))
+    assert json.loads(meta["flightsim.pilot_aids"]) == {"hud": []}  # recorded as never, not unknown

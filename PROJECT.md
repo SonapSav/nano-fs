@@ -588,6 +588,19 @@ owner before work can start.
 
 ### Viewer
 
+- [x] **HUD in the cockpit view** (2026-10-07, phase 1; an option, not fitted to a real
+  C172): H, the "HUD" button (cockpit view) or a controller button ("HUD on/off"; X on
+  standard pads), remembered per browser. Green, fixed to the aircraft (a combiner about
+  50 x 38 deg around the boresight; looking away moves it out of view), conformal horizon
+  and pitch ladder (5 deg rungs, dashed below the horizon), flight path marker (ground
+  velocity), boresight, speed (IAS) and altitude tapes with vertical speed, heading tape,
+  bank scale with slip indicator, G and angle of attack, target altitude and heading in
+  free flight. `hud.js`, Node tests for the geometry; headless screenshots.
+  Demonstrations record when the HUD was in view: metadata `flightsim.pilot_aids`
+  ({"hud": [[t_on, t_off], ...]}, empty = never; logs without it predate the HUD),
+  reported by the viewer (play `aids`, message `aids`; never reaches the physics).
+  - [ ] Phase 2 (approach symbols): -3 deg glide path reference line, aim-point marker,
+    approach speed cue, optional runway outline.
 - [x] **Instruments window** (2026-10-07): "Instruments window" opens `panel.html`, the
   instrument panel alone and scaled to its window (e.g. full screen, F11, on a second
   monitor). It mirrors the viewer window over a BroadcastChannel (same browser and

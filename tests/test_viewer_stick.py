@@ -135,7 +135,7 @@ def test_default_buttons(out):
     assert (b["flaps_up"], b["flaps_down"], b["brake"]) == ({"button": 4}, {"button": 5}, {"button": 1})
     assert (b["trim_nose_down"], b["trim_nose_up"]) == ({"button": 12}, {"button": 13})
     assert (b["throttle_up"], b["throttle_down"]) == ({"button": 7}, {"button": 6})
-    assert b["view_center"] == {"button": 3}
+    assert b["view_center"] == {"button": 3} and b["hud_toggle"] == {"button": 2}
     assert all(v is None for v in out["joyButtons"].values())
 
 

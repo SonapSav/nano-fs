@@ -116,7 +116,7 @@ class Session:
             conditions = str(msg.get("conditions", next(iter(tasks))))
             if conditions not in tasks:
                 raise ValueError(f"unknown conditions {conditions!r}; choose from {list(tasks)}")
-            return ManualSource(tasks[conditions], int(msg.get("seed", 0)))
+            return ManualSource(tasks[conditions], int(msg.get("seed", 0)), hud=bool((msg.get("aids") or {}).get("hud", False)))
         raise ValueError(f"unknown source {msg.get('source')!r}")
 
     async def handle(self, msg: dict) -> None:
@@ -155,6 +155,11 @@ class Session:
                     msg["elevator"], msg["aileron"], msg["rudder"], msg["throttle"],
                     msg.get("flaps"), msg.get("pitch_trim"), msg.get("brake"),
                 )  # fmt: skip
+        elif kind == "aids":
+            # Pilot aids in view (the HUD), recorded with a manual flight's demonstration.
+            # Metadata only: never reaches the physics.
+            if isinstance(self.source, ManualSource) and self.task and not self.task.done():
+                self.source.set_hud(bool(msg.get("hud", False)))
         elif kind == "pause":
             self.paused.set()
         elif kind == "resume":

@@ -46,6 +46,7 @@ export class PilotInput {
     this.value = { elevator: 0, aileron: 0, rudder: 0, throttle: 0, flaps: 0, pitch_trim: 0, brake: 0 };
     this.gamepadName = null;
     this._padPrev = {};
+    this.requests = new Set(); // viewer actions from controller buttons: "view_center", "hud_toggle"
     this.stick = loadSettings(); // per-device axes, buttons and feel (stick.js)
   }
 
@@ -158,9 +159,12 @@ export class PilotInput {
         if (pressed && !this._padPrev[f]) this._stepFlaps(dir); // one detent per press
         this._padPrev[f] = pressed;
       }
-      const centre = btn("view_center") > 0.5;
-      if (centre && !this._padPrev.view_center) this.viewCenterRequested = true; // the viewer resets its view
-      this._padPrev.view_center = centre;
+      // Viewer actions, one per press (the viewer takes them from `requests`).
+      for (const f of ["view_center", "hud_toggle"]) {
+        const pressed = btn(f) > 0.5;
+        if (pressed && !this._padPrev[f]) this.requests.add(f);
+        this._padPrev[f] = pressed;
+      }
     }
     this.value.throttle = clamp(this.value.throttle + throttleDir * THROTTLE_RATE_PER_S * dt, 0, 1);
     if (lever !== null) {

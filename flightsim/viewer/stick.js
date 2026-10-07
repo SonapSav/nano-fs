@@ -20,7 +20,7 @@
 
 export const AXES = ["pitch", "roll", "rudder"]; // shaped controls
 export const CONTROLS = ["roll", "pitch", "rudder", "throttle"]; // mappable controls
-export const BUTTONS = ["flaps_up", "flaps_down", "trim_nose_down", "trim_nose_up", "brake", "throttle_up", "throttle_down", "view_center"];
+export const BUTTONS = ["flaps_up", "flaps_down", "trim_nose_down", "trim_nose_up", "brake", "throttle_up", "throttle_down", "view_center", "hud_toggle"];
 export const DEFAULTS = {
   pitch: { sensitivity: 0.5, expo: 0.5 },
   roll: { sensitivity: 0.7, expo: 0.3 },
@@ -51,11 +51,11 @@ export function defaultProfile(standard) {
 
 // Standard layout: bumpers = flaps up/down, D-pad up/down = trim nose down/up (like the
 // trim wheel), B (Xbox) / circle = brakes, triggers = throttle up (RT) / down (LT),
-// Y (Xbox) / triangle = centre the view.
+// Y (Xbox) / triangle = centre the view, X (Xbox) / square = HUD on/off.
 // Other devices start unbound.
 export function defaultButtons(standard) {
   const b = (i) => (standard ? { button: i } : null);
-  return { flaps_up: b(4), flaps_down: b(5), trim_nose_down: b(12), trim_nose_up: b(13), brake: b(1), throttle_up: b(7), throttle_down: b(6), view_center: b(3) };
+  return { flaps_up: b(4), flaps_down: b(5), trim_nose_down: b(12), trim_nose_up: b(13), brake: b(1), throttle_up: b(7), throttle_down: b(6), view_center: b(3), hud_toggle: b(2) };
 }
 
 // A button function's value in [0, 1] (analog for analog buttons such as triggers); 0 if

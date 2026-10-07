@@ -69,7 +69,7 @@ Work through these in order. Finish and validate each step before starting the n
 - **Logging schema:** defined once in `flightsim/datalog/schema.py` and versioned (`SCHEMA_VERSION`, currently 2: v1 plus `cmd_brake_norm`). Do not change column names or units without bumping the version; `read_log` reads the versions in `READABLE_VERSIONS` (v1 logs come back with brake 0) and refuses others. Schema decisions (v1):
   - One row per timestep, float64 throughout (precision for fitting dynamic modes); written with zstd, float columns BYTE_STREAM_SPLIT-encoded (lossless, about half the size). Row i = state i + the command produced from it; the last row's commands are null.
   - `run_id`, `seed`, `config_hash` repeated on every row so runs concatenate trivially.
-  - File metadata: schema version, run id, aircraft, aircraft hash, JSBSim version, canonical config JSON (what the hash covers), trim result, code version (`flightsim.code_version`: source hash of the flightsim package plus git commit / dirty flag / diff hash when a repository is available; see `flightsim/provenance.py`).
+  - File metadata: schema version, run id, aircraft, aircraft hash, JSBSim version, canonical config JSON (what the hash covers), trim result, optional pilot (`human` for demonstrations) and pilot aids (demonstrations: when the viewer's HUD was in view, `flightsim.pilot_aids`), code version (`flightsim.code_version`: source hash of the flightsim package plus git commit / dirty flag / diff hash when a repository is available; see `flightsim/provenance.py`).
   - No wall-clock timestamps and a deterministic `run_id` (`<config_hash[:12]>-s<seed>`), so the same seed, config and code give byte-identical files. Local and Docker runs give identical data and the same source hash. Docker has no `.git`: images built through `scripts/docker.py` record the commit they were built from (`git_source: build`); plain `docker compose build` images have null git fields.
 - **Units:** use SI internally (meters, m/s, radians, kg). JSBSim works in imperial units (ft, slug, lbf), so all conversion happens inside the JSBSim wrapper in `core/`; everything outside `core/` is SI. The logging schema is strictly SI so swapping the physics core never changes the logs. Name variables with units where ambiguous (e.g. `alt_m`, `tas_mps`; imperial names like `alt_ft` only inside `core/`).
 - **Time:** fixed timestep only. No variable dt anywhere in the physics path.
@@ -97,6 +97,7 @@ flightsim/          # installable package (uv_build backend)
                     #   sky.js / clouds.js: time of day, visibility, seeded clouds (from the stream's `visual`)
                     #   groundDetail.js: close-up ground texture (shader noise)
                     #   panel.js / panel.html: instrument panel, also in its own window (BroadcastChannel mirror)
+                    #   hud.js: optional head-up display in the cockpit view (conformal, fixed to the aircraft)
                     #   sound.js: synthesized engine, wind, stall horn, flap motor (Web Audio, driven by frames)
   analysis/         # mode identification, validation maneuvers, validation checks
   atmosphere/       # Dryden turbulence (MIL-F-8785C)
