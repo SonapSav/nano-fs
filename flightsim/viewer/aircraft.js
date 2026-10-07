@@ -37,10 +37,10 @@ export const REGISTRATION = "SX-PAN"; // painted on both sides of the rear fusel
 // high, aft of where the cheat line has swept up, so they sit clear below it.
 const REG = { x0: 160, x1: 218, z0: 25, z1: 35 };
 
-function registrationTexture(text) {
+function registrationTexture(text, aspect = (REG.x1 - REG.x0) / (REG.z1 - REG.z0)) {
   const c = document.createElement("canvas");
   c.width = 1024;
-  c.height = Math.round((1024 * (REG.z1 - REG.z0)) / (REG.x1 - REG.x0));
+  c.height = Math.round(1024 / aspect);
   const g = c.getContext("2d");
   g.fillStyle = "#fff";
   g.textAlign = "center";
@@ -103,6 +103,38 @@ float box(vec2 p, vec2 lo, vec2 hi, float r) {
     float u = (x - ${REG.x0.toFixed(1)}) / ${(REG.x1 - REG.x0).toFixed(1)};
     if (vPaint.y > 0.0) u = 1.0 - u;
     float ink = texture2D(regTex, vec2(u, (z - ${REG.z0.toFixed(1)}) / ${(REG.z1 - REG.z0).toFixed(1)})).r;
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${new THREE.Color(REG_COLOUR).toArray().join(",")}), ink);
+  }
+}`);
+  };
+  return m;
+}
+
+// Registration on the upper surface of both wings, centred on each wing (structural
+// inches): letters 24 in (61 cm) high along the chord, their tops toward the leading edge,
+// so they read left to right from behind (the chase view). On the fixed wing, clear of
+// the leading edge and of the flaps and ailerons (hinges at 70% and 75% chord).
+const WING_REG = { x0: 34, x1: 58, y0: 73, y1: 163 };
+
+function wingMaterial(material, registration) {
+  const m = material.clone();
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.regTex = { value: registrationTexture(registration, (WING_REG.y1 - WING_REG.y0) / (WING_REG.x1 - WING_REG.x0)) };
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vStruct;\nvarying float vUp;")
+      .replace("#include <begin_vertex>", `#include <begin_vertex>
+vStruct = vec3(${CG.x.toFixed(2)} - position.x / ${IN}, position.y / ${IN}, ${CG.z.toFixed(2)} - position.z / ${IN});
+vUp = normal.z; // the skin is wound inward (lit through DoubleSide): +z body (down) = upper surface`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vStruct;\nvarying float vUp;\nuniform sampler2D regTex;")
+      .replace("#include <color_fragment>", `#include <color_fragment>
+{
+  float ay = abs(vStruct.y);
+  if (vUp > 0.3 && ay > ${WING_REG.y0.toFixed(1)} && ay < ${WING_REG.y1.toFixed(1)} && vStruct.x > ${WING_REG.x0.toFixed(1)} && vStruct.x < ${WING_REG.x1.toFixed(1)}) {
+    // Left to right seen from behind: root to tip on the right wing, tip to root on the left.
+    float u = (ay - ${WING_REG.y0.toFixed(1)}) / ${(WING_REG.y1 - WING_REG.y0).toFixed(1)};
+    if (vStruct.y < 0.0) u = 1.0 - u;
+    float ink = texture2D(regTex, vec2(u, (${WING_REG.x1.toFixed(1)} - vStruct.x) / ${(WING_REG.x1 - WING_REG.x0).toFixed(1)})).r;
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${new THREE.Color(REG_COLOUR).toArray().join(",")}), ink);
   }
 }`);
@@ -395,12 +427,13 @@ export function buildC172({ registration = REGISTRATION } = {}) {
   const span = (a, b, k = 3) => Array.from({ length: k + 1 }, (_, i) => ws(a + ((b - a) * i) / k));
   const wingOpts = { t: 0.12, m: 0.02, p: 0.4 };
   const pivots = { flapL: null, flapR: null, aileronL: null, aileronR: null, elevator: null, rudder: null };
+  const wingPaint = wingMaterial(white, registration);
   for (const side of [1, -1]) {
     const yy = (v) => side * v;
     group.add(new THREE.Mesh(surface(side > 0 ? span(0, 22, 1) : span(-22, 0, 1), wingOpts), white));
-    group.add(new THREE.Mesh(surface(side > 0 ? span(22, 110, 1) : span(-110, -22, 1), { ...wingOpts, f1: 0.7 }), white));
-    group.add(new THREE.Mesh(surface(side > 0 ? span(110, 113, 1) : span(-113, -110, 1), wingOpts), white));
-    group.add(new THREE.Mesh(surface(side > 0 ? span(113, 196) : span(-196, -113), { ...wingOpts, f1: 0.75 }), white));
+    group.add(new THREE.Mesh(surface(side > 0 ? span(22, 110, 1) : span(-110, -22, 1), { ...wingOpts, f1: 0.7 }), wingPaint));
+    group.add(new THREE.Mesh(surface(side > 0 ? span(110, 113, 1) : span(-113, -110, 1), wingOpts), wingPaint));
+    group.add(new THREE.Mesh(surface(side > 0 ? span(113, 196) : span(-196, -113), { ...wingOpts, f1: 0.75 }), wingPaint));
     group.add(new THREE.Mesh(surface(side > 0 ? span(196, 214, 2) : span(-214, -196, 2), wingOpts), white));
     const flap = hinged(side > 0 ? span(22, 110, 1) : span(-110, -22, 1), 0.7, wingOpts, white, new THREE.Vector3(0, 1, 0));
     const aileron = hinged(side > 0 ? span(113, 196) : span(-196, -113), 0.75, wingOpts, white, new THREE.Vector3(0, 1, 0));
