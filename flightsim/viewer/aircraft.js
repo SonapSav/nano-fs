@@ -111,9 +111,9 @@ float box(vec2 p, vec2 lo, vec2 hi, float r) {
 }
 
 // Greek flag on both sides of the fin (structural inches, 2:3): nine equal stripes, blue
-// first, and a blue canton five stripes high with a white cross one stripe wide. The
-// canton faces forward on both sides, as aircraft wear flags (so the right side shows it
-// mirrored). Painted on the fixed fin, clear of the leading edge and the rudder hinge.
+// first, and a blue canton five stripes high with a white cross one stripe wide. Both
+// sides read as the flag (canton at the viewer's upper left): forward on the left side,
+// aft on the right. Painted on the fixed fin, clear of the leading edge and the rudder hinge.
 const FLAG = { x0: 235, x1: 254.5, z0: 57, z1: 70 };
 const FLAG_BLUE = 0x0d5eaf;
 
@@ -131,6 +131,7 @@ vStruct = vec3(${CG.x.toFixed(2)} - position.x / ${IN}, position.y / ${IN}, ${CG
   // Flag units: 13.5 wide (from the hoist, forward) by 9 high (from the top).
   float u = (vStruct.x - ${FLAG.x0.toFixed(1)}) / ${(FLAG.x1 - FLAG.x0).toFixed(2)} * 13.5;
   float v = (${FLAG.z1.toFixed(1)} - vStruct.z) / ${(FLAG.z1 - FLAG.z0).toFixed(2)} * 9.0;
+  if (vStruct.y > 0.0) u = 13.5 - u; // right side: hoist aft
   if (u > 0.0 && u < 13.5 && v > 0.0 && v < 9.0 && abs(vStruct.y) > 0.3) {
     float blue = 1.0 - mod(floor(v), 2.0); // stripes: blue, white, ... blue
     if (u < 5.0 && v < 5.0) blue = (abs(u - 2.5) < 0.5 || abs(v - 2.5) < 0.5) ? 0.0 : 1.0; // canton
