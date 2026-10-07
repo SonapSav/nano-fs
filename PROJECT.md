@@ -620,9 +620,8 @@ owner before work can start.
     Firefox 153: drawing the HUD takes 22 ms with the canvas shadow blur, 1.8 ms without,
     2.6 ms with a thin dark outline under lines and text (Chromium: 0.5 ms either way).
     The HUD now uses the outline (`contrast` option of drawHud).
-  - [ ] Confirm on the owner's machine (rerun the test: cockpit "as set" should reach ~144 fps); candidates if
-    the GPU is the limit: `logarithmicDepthBuffer` (costly per pixel), pixel ratio 2 on
-    High, ~340 draw calls / ~240k triangles per frame.
+  - [x] Confirmed on the owner's machine (2026-10-07): cockpit view with the HUD 139 fps,
+    script 5 ms; every case 132-144 fps on the 144 Hz screen; no drops in flight.
 - [x] **HUD in the cockpit view** (2026-10-07, phase 1; an option, not fitted to a real
   C172): H, the "HUD" button (cockpit view) or a controller button ("HUD on/off"; X on
   standard pads), remembered per browser. Green, fixed to the aircraft (a combiner about
