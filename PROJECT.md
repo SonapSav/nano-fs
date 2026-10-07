@@ -805,10 +805,21 @@ owner before work can start.
   green right on the wingtips at their thickest point (sized to fit inside the tip, fin
   and tail cone), white position light at the tail, red beacon
   on the fin flashing 45 times a minute (timed by the flight clock, so replays match).
-- [ ] Photo-real aircraft (option B, discussed 2026-10-05): e.g. FlightGear's detailed
-  c172p (GPL-2.0, AC3D format, needs conversion to glTF and a licence decision for this
-  repo, which has no licence yet) or a CC-BY/CC0 model. **Needs decision:** project
-  licence first.
+- [ ] Photo-real aircraft (option B, discussed 2026-10-05): the project is now MIT
+  (2026-10-07), so a GPL model such as FlightGear's c172p (AC3D, needs glTF conversion)
+  would not fit; look for a CC0 or CC-BY model instead (attribution in THIRD_PARTY.md).
+
+### Licence and documentation
+
+- [x] **Licence and README** (2026-10-07): MIT (`LICENSE`, copyright Panos Vasilopoulos;
+  repository public). The tuned aircraft (`flightsim/aircraft/c172p_tuned/`) is a
+  modified copy of JSBSim's c172p and stays LGPL-2.1-or-later, with its own `LICENSE` and
+  a README listing the changes; `THIRD_PARTY.md` lists three.js (MIT), Barlow Condensed
+  (OFL) and the installed dependencies; `pyproject.toml` declares the licence. `README.md`
+  for visitors: features, accuracy summary, quick start, flying keys and controllers,
+  research commands, architecture and folders, tests, licence, a not-for-real-training
+  note; two screenshots in `docs/images/` (short final, cockpit with HUD and chase, both
+  with the instrument panel; taken headless).
 
 ### Data and logging
 
