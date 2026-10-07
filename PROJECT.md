@@ -615,7 +615,12 @@ owner before work can start.
     case, High and Medium alike, so no graphics feature is the limit. The test now also
     reports the viewer's script time per frame and switches off the HUD and the
     instrument panel (redrawn 30 times a second during the test, as in flight).
-  - [ ] Measure on the owner's machine (Firefox, integrated GPU) with P and the test; candidates if
+  - [x] Cause found (2026-10-07): the HUD. Owner's second run: cockpit view with the HUD
+    69 fps and 10-12 ms script per frame, without it 138-144 fps and 4 ms. Headless
+    Firefox 153: drawing the HUD takes 22 ms with the canvas shadow blur, 1.8 ms without,
+    2.6 ms with a thin dark outline under lines and text (Chromium: 0.5 ms either way).
+    The HUD now uses the outline (`contrast` option of drawHud).
+  - [ ] Confirm on the owner's machine (rerun the test: cockpit "as set" should reach ~144 fps); candidates if
     the GPU is the limit: `logarithmicDepthBuffer` (costly per pixel), pixel ratio 2 on
     High, ~340 draw calls / ~240k triangles per frame.
 - [x] **HUD in the cockpit view** (2026-10-07, phase 1; an option, not fitted to a real

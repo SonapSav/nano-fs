@@ -6,7 +6,10 @@
 // camera as the 3D view, so they sit exactly on the outside world. Speed, altitude and
 // heading tapes, the bank scale and the small readouts are fixed on the combiner.
 //
-// Drawn on a 2D canvas over the 3D view, from the frame row (state) and the camera.
+// Drawn on a 2D canvas over the 3D view, from the frame row (state) and the camera. A thin
+// dark outline under every line and letter keeps it readable against a bright sky; a
+// blurred shadow ("shadow") looks the same but costs ~10x more in Firefox (measured
+// 2026-10-07: 22 ms against 2.6 ms per frame, headless Firefox 153).
 //
 // Runway tasks add (phase 2): the runway outline and a dashed extended centreline (1 nm),
 // conformal, so the runway stays visible through haze; on approach (heading toward the
@@ -72,8 +75,9 @@ const pad3 = (deg) => String(Math.round(((deg % 360) + 360) % 360) % 360).padSta
 // Draw the HUD for a frame. `aircraftMatrix`: the scene's aircraft matrix (body axes as
 // its basis). Runway tasks: `runway` (the hello's approach or takeoff geometry),
 // `approach` (true to show the aim point and glide path reference), `speedBugs`
-// ([{kt, label}]). Returns false when the combiner is out of view (looking away).
-export function drawHud(ctx, w, h, { camera, aircraftMatrix, row, targets, runway = null, approach = false, speedBugs = [], shadow = true }) {
+// ([{kt, label}]); `contrast`: "outline" (default), "shadow" or "none". Returns false when
+// the combiner is out of view (looking away).
+export function drawHud(ctx, w, h, { camera, aircraftMatrix, row, targets, runway = null, approach = false, speedBugs = [], contrast = "outline" }) {
   const rot = new THREE.Matrix4().extractRotation(aircraftMatrix);
   const body = (az, el) => project(bodyVector(az, el).applyMatrix4(rot), camera, w, h);
   const F = HUD_FIELD;
@@ -93,16 +97,25 @@ export function drawHud(ctx, w, h, { camera, aircraftMatrix, row, targets, runwa
   ctx.strokeStyle = ctx.fillStyle = HUD_GREEN;
   ctx.lineWidth = lw;
   ctx.lineCap = "round";
-  if (shadow) {
+  if (contrast === "shadow") {
     ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
     ctx.shadowBlur = 3;
   }
+  const outline = contrast === "outline";
+  const DARK = "rgba(0, 0, 0, 0.45)";
   ctx.font = `600 ${fs}px "Barlow Condensed", "Arial Narrow", sans-serif`;
   ctx.textBaseline = "middle";
   const line = (pts, dash = []) => {
     ctx.setLineDash(dash);
     ctx.beginPath();
     pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+    if (outline) {
+      ctx.strokeStyle = DARK;
+      ctx.lineWidth = lw + 2;
+      ctx.stroke();
+      ctx.strokeStyle = HUD_GREEN;
+      ctx.lineWidth = lw;
+    }
     ctx.stroke();
     ctx.setLineDash([]);
   };
@@ -119,6 +132,13 @@ export function drawHud(ctx, w, h, { camera, aircraftMatrix, row, targets, runwa
   };
   const text = (s, x, y, align = "center") => {
     ctx.textAlign = align;
+    if (outline) {
+      ctx.strokeStyle = DARK;
+      ctx.lineWidth = 3;
+      ctx.strokeText(s, x, y);
+      ctx.strokeStyle = HUD_GREEN;
+      ctx.lineWidth = lw;
+    }
     ctx.fillText(s, x, y);
   };
 
