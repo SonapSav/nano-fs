@@ -158,6 +158,9 @@ export class PilotInput {
         if (pressed && !this._padPrev[f]) this._stepFlaps(dir); // one detent per press
         this._padPrev[f] = pressed;
       }
+      const centre = btn("view_center") > 0.5;
+      if (centre && !this._padPrev.view_center) this.viewCenterRequested = true; // the viewer resets its view
+      this._padPrev.view_center = centre;
     }
     this.value.throttle = clamp(this.value.throttle + throttleDir * THROTTLE_RATE_PER_S * dt, 0, 1);
     if (lever !== null) {

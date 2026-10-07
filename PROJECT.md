@@ -577,6 +577,9 @@ owner before work can start.
     The surfaces looked still in the HOTAS flights because the feel limited them
     (19:05 flight: elevator -2.7..+4.2 deg, ailerons +/-4.8 deg, of -28..+23 and
     -20..+15); suggested HOTAS start: pitch 0.8 / expo 0.3, roll 1.0 / expo 0.2.
+  - [x] **Centre view** (2026-10-07): R, a double-click, or a bindable button ("Centre
+    view" in Stick settings; Y on standard pads) puts the camera back to the default
+    chase position (direction, height and distance) or the cockpit head straight ahead.
   - [ ] Feel: in that flight the power stayed at 70-75%, the speed built from 65 to 110 kt
     and the pitch oscillated (~8 s period, ~50 stick reversals/min); judge sensitivity
     and expo after a few more flights. Do not hard-code axis indices: they vary by

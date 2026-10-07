@@ -52,6 +52,10 @@ hotas.buttons[3] = btn(false); run(0.1); hotas.buttons[3] = btn(true); run(0.1);
 out.flapsTwice = p.value.flaps;
 hotas.axes[6] = 1; out.trim = run(1.0).pitch_trim; hotas.axes[6] = 0;
 hotas.buttons[0] = btn(true); out.brake = run(1.0).brake;
+// Centre view: one request per press, however long held.
+p.stick.devices.HOTAS.buttons.view_center = { button: 2 };
+hotas.buttons[2] = btn(true); run(0.1); out.viewFirst = p.viewCenterRequested; p.viewCenterRequested = false;
+run(0.5); out.viewHeld = p.viewCenterRequested;
 // A standard pad keeps its defaults (D-pad up = trim nose down).
 const xbox = { id: "Xbox", mapping: "standard", connected: true, axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => btn(false)) };
 pads = [xbox]; p.reset(0.5); xbox.buttons[12] = btn(true);
@@ -98,6 +102,7 @@ def test_joystick_buttons_as_bound(out):
     assert out["trim"] == pytest.approx(-0.15, abs=0.01)  # hat up bound to nose-up trim, 0.15/s
     assert out["brake"] == pytest.approx(1.0, abs=0.01)
     assert out["stdTrim"] == pytest.approx(0.15, abs=0.01)  # standard D-pad up = nose down
+    assert out["viewFirst"] is True and out["viewHeld"] is False
 
 
 def test_feel_is_per_device(out):

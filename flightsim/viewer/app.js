@@ -59,8 +59,8 @@ const LANDING_FAILURES = {
   lost: "too far off the extended centreline",
 };
 const INPUT_SEND_HZ = 30;
-const VIEW_HINT = "Drag to look around, scroll to zoom, space to pause, C for cockpit view, M for sound";
-const FLY_HINT = "Arrows pitch and roll; Z/X rudder and nosewheel; W/S throttle; F/V flaps; T/G trim; B brakes; hold a key to build it up, Shift for full deflection. Gamepad: LB/RB flaps, D-pad trim, B brakes";
+const VIEW_HINT = "Drag to look around, scroll to zoom, R or double-click to re-centre, space to pause, C for cockpit view, M for sound";
+const FLY_HINT = "Arrows pitch and roll; Z/X rudder and nosewheel; W/S throttle; F/V flaps; T/G trim; B brakes; hold a key to build it up, Shift for full deflection; R re-centres the view. Gamepad: LB/RB flaps, D-pad trim, B brakes, Y view (buttons: Stick settings)";
 
 // Graphics quality (terrain.js QUALITY), remembered in this browser only.
 const QUALITY_KEY = "flightsim.quality";
@@ -182,6 +182,10 @@ function startInput() {
     const now = performance.now();
     const v = pilot.update((now - last) / 1000);
     last = now;
+    if (pilot.viewCenterRequested) {
+      pilot.viewCenterRequested = false;
+      scene.resetView();
+    }
     if (!paused) send({ type: "input", ...v });
     $("pad-status").textContent = pilot.gamepadName
       ? `Gamepad: ${pilot.gamepadName.replace(/\s*\(.*$/, "")}`
@@ -450,6 +454,10 @@ document.addEventListener("keydown", (e) => {
     toggleSound();
     return;
   }
+  if (e.code === "KeyR" && !inForm && !e.repeat) {
+    scene.resetView();
+    return;
+  }
   if (e.code === "KeyC" && !inForm && !e.repeat) {
     setView(scene.view === "cockpit" ? "chase" : "cockpit");
     return;
@@ -671,7 +679,7 @@ function renderAxisRows() {
 // Controller buttons: which button (or hat direction) does each button function.
 const BUTTON_LABELS = {
   flaps_up: "Flaps up", flaps_down: "Flaps down", trim_nose_down: "Trim nose down", trim_nose_up: "Trim nose up",
-  brake: "Brakes", throttle_up: "Throttle up", throttle_down: "Throttle down",
+  brake: "Brakes", throttle_up: "Throttle up", throttle_down: "Throttle down", view_center: "Centre view",
 };
 const bindingKey = (b) => (!b ? "" : b.button !== undefined ? `b${b.button}` : `a${b.axis}${b.dir > 0 ? "+" : "-"}`);
 const bindingFromKey = (k) => (!k ? null : k[0] === "b" ? { button: Number(k.slice(1)) } : { axis: Number(k.slice(1, -1)), dir: k.endsWith("+") ? 1 : -1 });

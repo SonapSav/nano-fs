@@ -285,6 +285,13 @@ export class FlightScene {
     this.head = { yaw: 0, pitch: 0 };
   }
 
+  // Back to the default view: chase camera behind at its usual height and distance,
+  // cockpit head straight ahead (after dragging to look around or zooming).
+  resetView() {
+    this.orbit = { azimuth: 0, elevation: 0.18, distance: CHASE_DISTANCE_M };
+    this.head = { yaw: 0, pitch: 0 };
+  }
+
   render() {
     this.papi.update(new THREE.Vector3().copy(EYE_BODY).applyMatrix4(this.aircraft.matrix)); // as the pilot sees them
     if (this.view === "cockpit") {
@@ -340,10 +347,7 @@ export class FlightScene {
       drag = { x: e.clientX, y: e.clientY };
     });
     el.addEventListener("pointerup", () => (drag = null));
-    el.addEventListener("dblclick", () => {
-      this.orbit.azimuth = 0;
-      this.head = { yaw: 0, pitch: 0 };
-    });
+    el.addEventListener("dblclick", () => this.resetView());
     el.addEventListener("wheel", (e) => {
       e.preventDefault();
       if (this.view === "cockpit") return;
