@@ -32,15 +32,44 @@
   }
   input[type="number"] { width: 5.5em; }
   input[type="checkbox"] { min-height: 0; width: 18px; height: 18px; margin: 0 -6px 0 0; accent-color: var(--bug); }
-  #bar label[for="record"] { color: var(--marking); }
+  .drawer-row input[type="checkbox"], .check input[type="checkbox"] { margin: 0; }
   [hidden] { display: none !important; }
   button { cursor: pointer; }
   button:hover { background: #474d53; }
   button:disabled { opacity: .45; cursor: default; }
   :focus-visible { outline: 2px solid var(--bug); outline-offset: 2px; }
-  #source { max-width: 22em; }
-  #source-filter { width: 11em; }
-  #sound-volume { width: 5em; accent-color: var(--marking); padding: 0; border: 0; min-height: 0; }
+  #flight-name { color: var(--dim); max-width: 24em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #sound-volume { width: 8em; accent-color: var(--marking); padding: 0; border: 0; min-height: 0; }
+
+  /* Flights drawer: over the left of the 3D view, so the selected flight's start shows beside it. */
+  .drawer { position: absolute; left: 0; top: 0; bottom: 0; z-index: 3; width: min(27em, 92vw);
+    display: flex; flex-direction: column; background: rgba(44, 48, 52, .96); border-right: 1px solid #5b6167;
+    box-shadow: 4px 0 16px rgba(0, 0, 0, .35); }
+  .drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px 4px; }
+  .drawer h2 { margin: 0; font-size: 20px; font-weight: 600; }
+  .drawer h3 { margin: 12px 0 6px; font-size: 15px; font-weight: 600; color: var(--dim); }
+  .tabs { display: flex; gap: 4px; padding: 0 14px; border-bottom: 1px solid #5b6167; }
+  .tabs [role="tab"] { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 6px 10px; }
+  .tabs [role="tab"][aria-selected="true"] { border-bottom-color: var(--bug); }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 4px 14px 10px; }
+  .flight-list { display: flex; flex-direction: column; gap: 3px; }
+  .flight-item { display: block; width: 100%; text-align: left; padding: 6px 10px; line-height: 1.25; }
+  .flight-item .title { display: block; font-weight: 600; }
+  .flight-item .detail { display: block; color: var(--dim); font-size: 14px; }
+  .flight-item[aria-selected="true"] { border-color: var(--bug); background: #4a3f52; }
+  .group-label { margin: 12px 0 6px; font-size: 15px; font-weight: 600; color: var(--dim); }
+  .more { color: var(--dim); font-size: 14px; padding: 4px 10px; }
+  .drawer-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  #source-filter { width: 100%; margin: 10px 0 2px; }
+  .drawer-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-top: 1px solid #5b6167; }
+  #drawer-selected { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #drawer-go { min-width: 7em; font-weight: 600; border-color: var(--bug); }
+  .check { display: flex; align-items: center; gap: 8px; }
+  .set-row { display: grid; grid-template-columns: 8.5em auto 1fr; gap: 6px 12px; align-items: center; margin-bottom: 8px; }
+  .set-row .axis { font-weight: 600; }
+  .set-row .what { color: var(--dim); }
+  /* With the Flights drawer open, the message line moves out from under it. */
+  #view:has(#flights:not([hidden])) #message { left: calc(min(27em, 92vw) + 16px); }
   #progress { flex: 1 1 200px; display: flex; align-items: center; gap: 10px; min-width: 180px; }
   #progress-track { flex: 1; padding: 8px 0; touch-action: none; } /* padding: a larger target for seeking */
   #progress-bar { height: 4px; background: #5b6167; border-radius: 2px; overflow: hidden; }
@@ -112,13 +141,8 @@
 </head>
 <body>
   <div id="bar" role="toolbar" aria-label="Playback">
-    <label for="source">Flight</label>
-    <select id="source"></select>
-    <input id="source-filter" type="search" placeholder="Filter: seed or text" aria-label="Filter recorded flights" hidden>
-    <label for="seed" id="seed-label">Seed</label>
-    <input id="seed" type="number" min="0" step="1" value="0">
-    <input id="record" type="checkbox" checked>
-    <label for="record" id="record-label">Save as demonstration</label>
+    <button id="flights-open" type="button" aria-expanded="false" aria-controls="flights" title="Choose a flight (L)">Flights</button>
+    <span id="flight-name" aria-live="polite"></span>
     <button id="play">Play</button>
     <button id="pause" disabled>Pause</button>
     <button id="stop" disabled>Stop</button>
@@ -129,20 +153,46 @@
     </select>
     <button id="view-toggle" type="button" aria-pressed="false">Cockpit view</button>
     <button id="hud-toggle" type="button" aria-pressed="false" hidden title="Head-up display in the cockpit view (H). Not fitted to a real C172.">HUD off</button>
-    <button id="sound-toggle" type="button" aria-pressed="true">Sound on</button>
-    <input id="sound-volume" type="range" min="0" max="1" step="0.05" aria-label="Sound volume">
-    <button id="stick-open" type="button">Stick settings</button>
-    <button id="bench" type="button" hidden title="Measure the frame rate with the costly features switched off one at a time (about a minute)">Performance test</button>
     <button id="panel-window" type="button" title="Open the instruments in their own window, e.g. full screen (F11) on a second monitor">Instruments window</button>
-    <button id="sky-open" type="button">Sky</button>
-    <label for="quality">Quality</label>
-    <select id="quality" title="Low: shorter view, fewer trees, no close-up ground detail (for integrated graphics)">
-      <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
-    </select>
+    <button id="settings-open" type="button">Settings</button>
+    <button id="stick-open" type="button">Stick settings</button>
     <div id="progress"><div id="progress-track" aria-label="Replay position" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><div id="progress-bar"><div id="progress-fill"></div></div></div><span id="clock">0:00</span></div>
   </div>
 
   <main id="view">
+    <aside id="flights" class="drawer" hidden aria-labelledby="flights-title">
+      <div class="drawer-head">
+        <h2 id="flights-title">Flights</h2>
+        <button type="button" id="flights-close" aria-label="Close">✕</button>
+      </div>
+      <div class="tabs" role="tablist" aria-label="Flights">
+        <button type="button" role="tab" id="tab-scenarios" aria-controls="pane-scenarios" aria-selected="true">Scenarios</button>
+        <button type="button" role="tab" id="tab-past" aria-controls="pane-past" aria-selected="false" tabindex="-1">Past flights</button>
+      </div>
+      <div class="drawer-body">
+        <section id="pane-scenarios" role="tabpanel" aria-labelledby="tab-scenarios">
+          <h3>Fly it yourself</h3>
+          <div class="flight-list" role="listbox" aria-label="Fly it yourself" id="list-fly"></div>
+          <h3>Watch the autopilot</h3>
+          <div class="flight-list" role="listbox" aria-label="Watch the autopilot" id="list-watch"></div>
+          <div class="drawer-row" id="seed-row">
+            <label for="seed" id="seed-label">Seed</label>
+            <input id="seed" type="number" min="0" step="1" value="0">
+            <button type="button" id="seed-random" title="A random seed">Random</button>
+            <span class="what">wind, start offsets</span>
+          </div>
+          <label class="drawer-row" id="record-row"><input id="record" type="checkbox" checked> Save as demonstration</label>
+        </section>
+        <section id="pane-past" role="tabpanel" aria-labelledby="tab-past" hidden>
+          <input id="source-filter" type="search" placeholder="Filter: seed or text" aria-label="Filter past flights">
+          <div id="list-past"></div>
+        </section>
+      </div>
+      <div class="drawer-foot">
+        <span id="drawer-selected" class="what"></span>
+        <button type="button" id="drawer-go">Fly</button>
+      </div>
+    </aside>
     <div id="message" role="status" aria-live="polite"></div>
     <div id="pad-status" role="status" aria-live="polite"></div>
     <div id="boresight" aria-hidden="true"></div>
@@ -198,21 +248,39 @@
     </form>
   </dialog>
 
-  <dialog id="sky-dialog" aria-labelledby="sky-title">
+  <dialog id="settings-dialog" aria-labelledby="settings-title">
     <form method="dialog">
-      <h2 id="sky-title">Sky</h2>
+      <h2 id="settings-title">Settings</h2>
+      <h3>Sound</h3>
+      <div class="set-row"><span class="axis">Engine, wind, horn</span>
+        <button type="button" id="sound-toggle" aria-pressed="true">Sound on</button>
+        <input id="sound-volume" type="range" min="0" max="1" step="0.05" aria-label="Sound volume"></div>
+      <h3>Sky</h3>
       <p>By default each flight shows its own conditions (set in its task config; clouds follow its wind and turbulence). Override them here for this browser. Visual only: the physics never sees them.</p>
-      <div class="stick-row"><label class="axis" for="sky-time">Time</label>
+      <div class="set-row"><label class="axis" for="sky-time">Time of day</label>
         <select id="sky-time"><option value="flight">As the flight</option><option value="morning">Morning</option><option value="midday">Midday</option><option value="afternoon">Afternoon</option><option value="evening">Evening</option></select>
         <span id="sky-time-flight" class="what"></span></div>
-      <div class="stick-row"><label class="axis" for="sky-visibility">Visibility</label>
+      <div class="set-row"><label class="axis" for="sky-visibility">Visibility</label>
         <select id="sky-visibility"><option value="flight">As the flight</option><option value="clear">Clear</option><option value="normal">Normal</option><option value="hazy">Hazy</option></select>
         <span id="sky-visibility-flight" class="what"></span></div>
-      <div class="stick-row"><label class="axis" for="sky-clouds">Clouds</label>
+      <div class="set-row"><label class="axis" for="sky-clouds">Clouds</label>
         <select id="sky-clouds"><option value="flight">As the flight</option><option value="clear">Clear</option><option value="few">Few</option><option value="scattered">Scattered</option><option value="broken">Broken</option></select>
         <span id="sky-clouds-flight" class="what"></span></div>
+      <div class="set-row"><span></span><button type="button" id="sky-reset">Sky as the flight</button></div>
+      <h3>Graphics</h3>
+      <div class="set-row"><label class="axis" for="quality">Quality</label>
+        <select id="quality" title="Low: shorter view, fewer trees, no close-up ground detail (for integrated graphics)">
+          <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+        </select>
+        <span class="what">Low: shorter view, fewer trees</span></div>
+      <div class="set-row"><span class="axis">Frame rate</span>
+        <label class="check"><input type="checkbox" id="perf-toggle"> Show the readout (P)</label>
+        <span></span></div>
+      <div class="set-row"><span></span>
+        <button type="button" id="bench" title="Measure the frame rate with the costly features switched off one at a time (about a minute)">Performance test</button>
+        <span class="what">about a minute</span></div>
       <div class="dialog-buttons">
-        <button type="button" id="sky-reset">All as the flight</button>
+        <span></span>
         <button value="done">Done</button>
       </div>
     </form>

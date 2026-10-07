@@ -16,7 +16,7 @@ import { FlightSound } from "./sound.js";
 const $ = (id) => document.getElementById(id);
 const panel = new InstrumentPanel($("panel"));
 const els = {
-  source: $("source"), seed: $("seed"), seedLabel: $("seed-label"), record: $("record"), recordLabel: $("record-label"),
+  seed: $("seed"), record: $("record"),
   play: $("play"), pause: $("pause"), stop: $("stop"), speed: $("speed"), fill: $("progress-fill"), clock: $("clock"),
   message: $("message"), hint: $("hint"),
 };
@@ -42,6 +42,25 @@ const MANUAL_CONDITIONS = {
   [MANUAL_CIRCUIT]: "circuit", [MANUAL_CIRCUIT_XW]: "circuit_crosswind",
 };
 const isManual = (v) => v in MANUAL_CONDITIONS;
+// The Flights drawer's scenarios: [value, title, detail].
+const SCENARIOS_FLY = [
+  [MANUAL, "Free flight", "Calm air: fly to the altitude and heading bugs"],
+  [MANUAL_WIND, "Free flight in wind", "Wind and turbulence (vary by seed)"],
+  [MANUAL_APPROACH, "Approach and landing", "Runway 09, calm: glide path, flare, stop on the runway"],
+  [MANUAL_CROSSWIND, "Approach and landing in crosswind", "Runway 09, wind and gusts (vary by seed)"],
+  [MANUAL_TAKEOFF, "Takeoff", "Runway 09, calm: climb to 1000 ft"],
+  [MANUAL_TAKEOFF_XW, "Takeoff in crosswind", "Runway 09, wind and gusts (vary by seed)"],
+  [MANUAL_CIRCUIT, "Circuit", "Takeoff, left-hand pattern, land on 09 (calm)"],
+  [MANUAL_CIRCUIT_XW, "Circuit in crosswind", "The circuit with wind and gusts (vary by seed)"],
+];
+const SCENARIOS_WATCH = [
+  [LIVE, "PID autopilot", "Holds altitude and heading"],
+  [LIVE_LQR, "LQR autopilot", "Holds altitude and heading (optimal control)"],
+  [LIVE_APPROACH, "Approach autopilot", "Lands on runway 09"],
+  [LIVE_TAKEOFF, "Takeoff autopilot", "Takes off from runway 09 (wind varies by seed)"],
+  [LIVE_CIRCUIT, "Circuit autopilot", "A whole circuit (wind varies by seed)"],
+];
+const SCENARIO_TITLES = Object.fromEntries([...SCENARIOS_FLY, ...SCENARIOS_WATCH].map(([v, t]) => [v, t]));
 // Why an approach ended (envs/approach.py failure reasons), for the message line.
 const LANDING_FAILURES = {
   undershoot: "touched down short of the runway",
@@ -62,7 +81,7 @@ const LANDING_FAILURES = {
   lost: "too far off the extended centreline",
 };
 const INPUT_SEND_HZ = 30;
-const VIEW_HINT = "Drag to look around, scroll to zoom, R or double-click to re-centre, space to pause, C for cockpit view (H: HUD), M for sound";
+const VIEW_HINT = "L for flights; drag to look around, scroll to zoom, R or double-click to re-centre, space to pause, C for cockpit view (H: HUD), M for sound";
 const FLY_HINT = "Arrows pitch and roll; Z/X rudder and nosewheel; W/S throttle; F/V flaps; T/G trim; B brakes; hold a key to build it up, Shift for full deflection; R re-centres the view, H HUD (cockpit view). Gamepad: LB/RB flaps, D-pad trim, B brakes, Y view, X HUD (buttons: Stick settings)";
 
 // Graphics quality (terrain.js QUALITY), remembered in this browser only.
@@ -119,56 +138,150 @@ function send(msg) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
 }
 
-const FILTER_FROM = 20; // show the filter box once there are this many recorded flights
+// --- Flights drawer: scenarios and past flights ---------------------------------------
+
 const sourceFilter = $("source-filter");
 let allLogs = [];
+let selection = MANUAL; // the chosen flight: a scenario value or a log path
+let selectionTitle = SCENARIO_TITLES[MANUAL];
+
+// A list item: a button with a title and a detail line, selected when it is the choice.
+function flightItem(value, title, detail) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "flight-item";
+  b.setAttribute("role", "option");
+  b.dataset.value = value;
+  b.append(Object.assign(document.createElement("span"), { className: "title", textContent: title }));
+  if (detail) b.append(Object.assign(document.createElement("span"), { className: "detail", textContent: detail }));
+  b.addEventListener("click", () => selectFlight(value, title));
+  b.addEventListener("dblclick", () => {
+    selectFlight(value, title);
+    startSelected();
+  });
+  return b;
+}
 
 function populateSources(logs = allLogs) {
   allLogs = logs;
-  const current = els.source.value;
-  els.source.replaceChildren();
-  els.source.add(new Option("Fly it yourself (calm air)", MANUAL));
-  els.source.add(new Option("Fly it yourself (wind and turbulence)", MANUAL_WIND));
-  els.source.add(new Option("Fly an approach to runway 09 and land (calm)", MANUAL_APPROACH));
-  els.source.add(new Option("Fly an approach to runway 09 and land (crosswind, gusts)", MANUAL_CROSSWIND));
-  els.source.add(new Option("Take off from runway 09 and climb to 1000 ft (calm)", MANUAL_TAKEOFF));
-  els.source.add(new Option("Take off from runway 09 and climb to 1000 ft (crosswind, gusts)", MANUAL_TAKEOFF_XW));
-  els.source.add(new Option("Fly a circuit: take off, left-hand pattern, land on 09 (calm)", MANUAL_CIRCUIT));
-  els.source.add(new Option("Fly a circuit: take off, left-hand pattern, land on 09 (crosswind, gusts)", MANUAL_CIRCUIT_XW));
-  els.source.add(new Option("Watch the PID autopilot", LIVE));
-  els.source.add(new Option("Watch the LQR autopilot", LIVE_LQR));
-  els.source.add(new Option("Watch the approach autopilot land on runway 09", LIVE_APPROACH));
-  els.source.add(new Option("Watch the takeoff autopilot (wind varies by seed)", LIVE_TAKEOFF));
-  els.source.add(new Option("Watch the circuit autopilot (wind varies by seed)", LIVE_CIRCUIT));
-  sourceFilter.hidden = logs.length < FILTER_FROM && !sourceFilter.value;
-  for (const g of groupLogs(logs, sourceFilter.value)) {
-    const group = document.createElement("optgroup");
-    group.label = g.label;
-    for (const o of g.options) group.append(new Option(o.label, o.value));
-    if (g.more) {
-      const more = new Option(`… ${g.more} more: filter by seed to find them`, "");
-      more.disabled = true;
-      group.append(more);
-    }
-    els.source.add(group);
+  $("list-fly").replaceChildren(...SCENARIOS_FLY.map(([v, t, d]) => flightItem(v, t, d)));
+  $("list-watch").replaceChildren(...SCENARIOS_WATCH.map(([v, t, d]) => flightItem(v, t, d)));
+  const past = $("list-past");
+  past.replaceChildren();
+  const groups = groupLogs(logs, sourceFilter.value);
+  for (const g of groups) {
+    past.append(Object.assign(document.createElement("div"), { className: "group-label", textContent: g.label }));
+    const list = Object.assign(document.createElement("div"), { className: "flight-list" });
+    list.setAttribute("role", "listbox");
+    list.setAttribute("aria-label", g.label);
+    for (const o of g.options) list.append(flightItem(o.value, o.title ?? o.label, o.title ? o.detail : ""));
+    past.append(list);
+    if (g.more) past.append(Object.assign(document.createElement("div"), { className: "more", textContent: `… ${g.more} more: filter by seed to find them` }));
   }
-  if ([...els.source.options].some((o) => o.value === current && !o.disabled)) els.source.value = current;
+  if (!groups.length) past.append(Object.assign(document.createElement("div"), { className: "more", textContent: sourceFilter.value ? "No flights match the filter." : "No recorded flights yet." }));
   updateSourceOptions();
 }
 
+// Choose a flight (shows its start: a preview).
+function selectFlight(value, title) {
+  selection = value;
+  selectionTitle = title ?? SCENARIO_TITLES[value] ?? value;
+  updateSourceOptions();
+}
+
+const goLabel = (v) => (isManual(v) ? "Fly" : isLive(v) ? "Watch" : "Replay");
+
 function updateSourceOptions() {
-  const v = els.source.value;
-  els.seed.hidden = els.seedLabel.hidden = !isLive(v) && !isManual(v);
-  els.record.hidden = els.recordLabel.hidden = !isManual(v);
+  const v = selection;
+  $("seed-row").hidden = !isLive(v) && !isManual(v);
+  $("record-row").hidden = !isManual(v);
   els.speed.disabled = isManual(v); // manual flights run in real time
+  for (const item of document.querySelectorAll(".flight-item")) item.setAttribute("aria-selected", String(item.dataset.value === v));
+  const seedText = isLive(v) || isManual(v) ? ` · seed ${Number(els.seed.value) || 0}` : "";
+  $("flight-name").textContent = selectionTitle + seedText;
+  $("drawer-selected").textContent = selectionTitle + seedText;
+  $("drawer-go").textContent = goLabel(v);
   requestPreview();
 }
+
+// The drawer: open/close (L, the Flights button, Esc), tabs, keyboard in the lists.
+const drawer = $("flights");
+function setDrawer(open) {
+  drawer.hidden = !open;
+  $("flights-open").setAttribute("aria-expanded", String(open));
+  if (open) {
+    send({ type: "list" }); // fresh past flights
+    (drawer.querySelector('.flight-item[aria-selected="true"]') ?? drawer.querySelector(".flight-item"))?.focus();
+  } else if (drawer.contains(document.activeElement)) $("flights-open").focus();
+}
+function showTab(past) {
+  $("tab-scenarios").setAttribute("aria-selected", String(!past));
+  $("tab-past").setAttribute("aria-selected", String(past));
+  $("tab-scenarios").tabIndex = past ? -1 : 0;
+  $("tab-past").tabIndex = past ? 0 : -1;
+  $("pane-scenarios").hidden = past;
+  $("pane-past").hidden = !past;
+  if (past) send({ type: "list" });
+}
+function startSelected() {
+  setDrawer(false);
+  play();
+}
+$("flights-open").addEventListener("click", () => setDrawer(drawer.hidden));
+$("flights-close").addEventListener("click", () => setDrawer(false));
+$("tab-scenarios").addEventListener("click", () => showTab(false));
+$("tab-past").addEventListener("click", () => showTab(true));
+$("drawer-go").addEventListener("click", startSelected);
+$("seed-random").addEventListener("click", () => {
+  els.seed.value = String(Math.floor(Math.random() * 1000));
+  updateSourceOptions();
+});
+// Keys for the drawer: Esc closes; Up/Down choose the previous/next flight (and show it);
+// Enter starts it; Left/Right on the tabs switch them. `e.target` may be outside the drawer
+// (it opened without taking the focus): then the chosen item is the reference.
+function drawerKey(e) {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    setDrawer(false);
+    return true;
+  }
+  if (e.target.getAttribute?.("role") === "tab" && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+    e.preventDefault();
+    showTab(e.target.id === "tab-scenarios");
+    $(e.target.id === "tab-scenarios" ? "tab-past" : "tab-scenarios").focus();
+    return true;
+  }
+  const items = [...drawer.querySelectorAll(".flight-item")].filter((i) => i.offsetParent !== null);
+  const current = e.target.classList?.contains("flight-item") ? e.target : items.find((i) => i.getAttribute("aria-selected") === "true");
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    const next = current ? items[items.indexOf(current) + (e.key === "ArrowDown" ? 1 : -1)] : items[0];
+    if (next) {
+      next.focus();
+      next.click();
+    }
+    return true;
+  }
+  if (e.key === "Enter" && (current || e.target.classList?.contains("flight-item"))) {
+    e.preventDefault();
+    current?.click();
+    startSelected();
+    return true;
+  }
+  return false;
+}
+drawer.addEventListener("keydown", (e) => {
+  e.stopPropagation(); // keys in the drawer never fly the aircraft
+  if (e.target.tagName === "INPUT" && e.key !== "Escape") return; // typing in the filter or seed
+  drawerKey(e);
+});
+
 
 function connect() {
   ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
   ws.addEventListener("open", () => {
     lastPreviewKey = null; // preview again after a reconnect
-    say("Fly the task yourself, watch the autopilot fly it, or replay a recorded flight. Then press Play.");
+    say("Choose a flight (Flights, or L): fly it yourself, watch an autopilot, or replay a past flight. Then press Play.");
     send({ type: "list" });
   });
   ws.addEventListener("close", () => {
@@ -235,10 +348,9 @@ function handle(msg) {
     case "logs":
       populateSources(msg.logs);
       if (params.has("source")) {
-        els.source.value = params.get("source");
+        selectFlight(params.get("source"));
         params.delete("source");
       }
-      updateSourceOptions();
       if (autoplay) {
         autoplay = false;
         play();
@@ -254,7 +366,7 @@ function handle(msg) {
       // or when a newer selection was made).
       if (msg.id !== previewId || !els.stop.disabled) break;
       applyHello(msg.hello);
-      if (msg.hello.source === "replay") lastReplay = els.source.value; // seeking on the bar starts it there
+      if (msg.hello.source === "replay") lastReplay = selection; // seeking on the bar starts it there
       panel.setRunText(`Starting position of ${msg.hello.run_id}`);
       say(`${els.message.textContent} Press Play to start.`.trim());
       latest = msg.row;
@@ -321,7 +433,7 @@ function handle(msg) {
 function flightRequest() {
   const speed = Number(els.speed.value);
   const seed = Number(els.seed.value) || 0;
-  const v = els.source.value;
+  const v = selection;
   if (isManual(v)) return { source: "manual", conditions: MANUAL_CONDITIONS[v], seed, record: els.record.checked };
   if (isLive(v)) return { source: "live", autopilot: LIVE_AUTOPILOT[v], seed, speed };
   return v ? { source: "replay", path: v, speed } : null;
@@ -474,10 +586,8 @@ els.play.addEventListener("click", play);
 els.pause.addEventListener("click", togglePause);
 els.stop.addEventListener("click", () => send({ type: "stop" }));
 els.speed.addEventListener("change", () => send({ type: "speed", value: Number(els.speed.value) }));
-els.source.addEventListener("change", updateSourceOptions);
-els.seed.addEventListener("change", requestPreview);
+els.seed.addEventListener("change", updateSourceOptions);
 sourceFilter.addEventListener("input", () => populateSources());
-els.source.addEventListener("focus", () => send({ type: "list" }));
 // HUD in the cockpit view (hud.js): H, the button or a controller button; remembered in
 // this browser. During a manual flight the viewer reports when it comes into or leaves
 // view, so the demonstration records it (protocol "aids"; never reaches the physics).
@@ -539,6 +649,12 @@ function keyDown(e, inForm) {
   }
   if (e.code === "KeyR" && !inForm && !e.repeat) {
     scene.resetView();
+    return;
+  }
+  const typing = ["INPUT", "SELECT"].includes(document.activeElement?.tagName);
+  if (!drawer.hidden && !typing && ["Escape", "ArrowUp", "ArrowDown", "Enter"].includes(e.key) && drawerKey(e)) return;
+  if (e.code === "KeyL" && !inForm && !e.repeat) {
+    setDrawer(drawer.hidden);
     return;
   }
   if (e.code === "KeyP" && !inForm && !e.repeat) {
@@ -607,7 +723,7 @@ $("panel-window").addEventListener("click", () => {
 const frameStats = new FrameStats(10000);
 function setPerf(on) {
   $("perf").hidden = !on;
-  $("bench").hidden = !on;
+  $("perf-toggle").checked = on;
   try {
     localStorage.setItem("flightsim.perf", on ? "on" : "off");
   } catch {
@@ -637,12 +753,12 @@ $("bench").addEventListener("click", async () => {
     say("Stop the flight first, then run the performance test.");
     return;
   }
+  $("settings-dialog").close(); // the test needs the view
   const buttons = [$("bench"), els.play];
   buttons.forEach((b) => (b.disabled = true));
   try {
-    els.source.value = MANUAL_APPROACH; // a fixed view: the approach start, seed 0
     els.seed.value = "0";
-    updateSourceOptions();
+    selectFlight(MANUAL_APPROACH); // a fixed view: the approach start, seed 0
     await new Promise((r) => setTimeout(r, 2000)); // the preview arrives and the tiles build
     scriptTimes.length = 0;
     benchActive = true;
@@ -1114,5 +1230,6 @@ $("sky-reset").addEventListener("click", () => {
   }
   applySky();
 });
-$("sky-open").addEventListener("click", () => $("sky-dialog").showModal());
+$("settings-open").addEventListener("click", () => $("settings-dialog").showModal());
+$("perf-toggle").addEventListener("change", (e) => setPerf(e.target.checked));
 applySky();

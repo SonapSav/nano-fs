@@ -39,6 +39,9 @@ def test_flight_menu_groups_caps_and_filters():
       seed12: f.groupLogs(logs, "12"),
       s7: f.groupLogs(logs, "s7"),
       text: f.groupLogs(logs, "local"),
+      task: f.itemText({{ path: "demos/y.parquet", group: "demos", seed: 3, duration_s: 195, pilot: "human", mtime: 1000, task: "approach", windy: true, hud: true }}),
+      taskBatch: f.itemText({{ path: "batch/b/logs/y.parquet", group: "batch/b", seed: 4, duration_s: 60, pilot: "circuit", mtime: 1, task: "circuit", windy: false, hud: null }}),
+      byTask: f.groupLogs([...logs, {{ path: "demos/y.parquet", group: "demos", seed: 3, duration_s: 195, pilot: "human", mtime: 1000, task: "takeoff", windy: false, hud: false }}], "takeoff"),
     }};
     console.log(JSON.stringify(out));
     """
@@ -50,13 +53,18 @@ def test_flight_menu_groups_caps_and_filters():
     assert demos["options"][0]["label"].startswith("Seed 0 · 2:00 · ")
     assert local["options"][0]["label"] == "local/x-s7.parquet · 5:00"
     assert len(batch["options"]) == 50 and batch["more"] == 250  # capped, sorted by seed
-    assert batch["options"][0] == {"value": "batch/abc/logs/x-s1.parquet", "label": "Seed 1 · LQR · 2:00"}
+    assert {k: batch["options"][0][k] for k in ("value", "label")} == {"value": "batch/abc/logs/x-s1.parquet", "label": "Seed 1 · LQR · 2:00"}
     # A number filters by exact seed, across groups; text filters by path or label.
     assert [(g["label"], [o["value"] for o in g["options"]]) for g in out["seed12"]] == [
         ("Batch abc (1 flight)", ["batch/abc/logs/x-s12.parquet"])
     ]
     assert [g["label"] for g in out["s7"]] == ["Recorded flights: local", "Batch abc (1 flight)"]
     assert [g["label"] for g in out["text"]] == ["Recorded flights: local"]
+    # Past flights in the drawer: the task as the title, then seed, duration, date, pilot, HUD.
+    assert out["task"]["title"] == "Approach and landing in wind"
+    assert out["task"]["detail"].startswith("Seed 3 · 3:15 · ") and out["task"]["detail"].endswith(" · HUD")
+    assert out["taskBatch"] == {"title": "Circuit", "detail": "Seed 4 · 1:00 · CIRCUIT"}
+    assert [o["value"] for g in out["byTask"] for o in g["options"]] == ["demos/y.parquet"]  # filter by task name
 
 
 def test_list_logs_summarizes_and_caches(tmp_path, monkeypatch):
@@ -73,6 +81,7 @@ def test_list_logs_summarizes_and_caches(tmp_path, monkeypatch):
     assert b["group"] == "batch/b1" and b["seed"] == 5 and b["pilot"] == "trim_hold"
     assert b["duration_s"] == pytest.approx(2.0) and b["rows"] == 241
     assert logs[f"demos/{run_id}-mdeadbeef.parquet"]["group"] == "demos"
+    assert b["task"] == "free" and b["windy"] is False and b["hud"] is None  # no pilot aids recorded
 
     calls = []
     monkeypatch.setattr(sources.pq, "read_metadata", lambda *a, **k: calls.append(a) or (_ for _ in ()).throw(AssertionError))

@@ -588,6 +588,20 @@ owner before work can start.
 
 ### Viewer
 
+- [x] **Flights drawer and Settings** (2026-10-07). The toolbar keeps what is used in
+  flight: Flights (with the chosen flight's name), Play / Pause / Stop, speed, progress,
+  cockpit view, HUD, instruments window, Settings, Stick settings. The **Flights** drawer
+  (button or L; Esc closes) slides over the left of the 3D view so the chosen flight's
+  start shows beside it: tabs **Scenarios** (fly it yourself / watch the autopilot, one
+  line of description each, seed with Random, Save as demonstration) and **Past flights**
+  (filter; your flights titled by task, "in wind", with seed, duration, date and HUD use;
+  other recordings and batches grouped). Up/Down choose (and preview), Enter or a
+  double-click starts, the Fly / Watch / Replay button too. The server's log list now
+  carries `task`, `windy` and `hud` (from each log's config and pilot aids metadata).
+  **Settings** dialog: sound and volume, sky overrides, quality, frame rate readout and
+  the performance test. Stick settings stay separate.
+  - [ ] Past flight results in the list (landed / failure, touchdown numbers): needs the
+    server to re-fly each log once and cache the result (owner: later).
 - [x] **Smooth motion and a performance readout** (2026-10-07). Stutter reported. Measured:
   the server's frames arrive every 33 ms median (29-38 ms, occasionally 68 ms) and were
   drawn as they came, so at 60 Hz each pose stayed 1-3 refreshes (judder); crossing a

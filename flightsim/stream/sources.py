@@ -231,8 +231,12 @@ def _log_info(path: Path) -> dict | None:
             meta = {k.decode(): v.decode() for k, v in (md.metadata or {}).items()}
             if "flightsim.run_id" in meta:
                 seed = re.search(r"-s(\d+)", meta["flightsim.run_id"])
+                task, windy = _task_of(meta.get("flightsim.config_json"))
                 info = {
                     "run_id": meta["flightsim.run_id"],
+                    "task": task,
+                    "windy": windy,
+                    "hud": _hud_used(meta.get("flightsim.pilot_aids")),
                     "aircraft": meta.get("flightsim.aircraft"),
                     "rows": md.num_rows,
                     "duration_s": _last_time(path, md),
@@ -244,6 +248,31 @@ def _log_info(path: Path) -> dict | None:
             info = None  # unreadable: not a flightsim log
         _log_info_cache[key] = info
     return _log_info_cache[key]
+
+
+def _task_of(config_json: str | None) -> tuple[str | None, bool | None]:
+    """The task of a log ("free", "approach", "takeoff", "circuit") and whether it flew in
+    wind, from its config (None, None if unreadable)."""
+    try:
+        raw = json.loads(config_json or "null")
+    except ValueError:
+        return None, None
+    if not isinstance(raw, dict):
+        return None, None
+    for task in ("circuit", "takeoff", "approach"):
+        if raw.get(task):
+            return task, any(isinstance(raw.get(k), dict) and bool(raw[k].get("wind")) for k in ("circuit", "takeoff", "approach"))
+    speeds = (raw.get("wind") or {}).get("steady_speed_mps") or [0]
+    return "free", max(speeds) > 0
+
+
+def _hud_used(aids_json: str | None) -> bool | None:
+    """Whether the HUD was in view at any time (None: not recorded)."""
+    try:
+        aids = json.loads(aids_json) if aids_json else None
+    except ValueError:
+        return None
+    return bool(aids.get("hud")) if isinstance(aids, dict) and "hud" in aids else None
 
 
 def _last_time(path: Path, md) -> float:
