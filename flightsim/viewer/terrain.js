@@ -1,5 +1,5 @@
-// Procedural terrain. Its height is shared with the physics: flightsim/world/terrain.py is
-// a bit-identical port, used by tasks with `terrain: procedural` (other tasks fly over
+// Procedural terrain (meshes; the height itself is in terrainCore.js). Its height is shared
+// with the physics: flightsim/world/terrain.py is a bit-identical port, used by tasks with `terrain: procedural` (other tasks fly over
 // flat ground at 0 m). The airfield, valley floors and lake surfaces sit at about 0 m and
 // hills rise above (at most ~350 m).
 //
@@ -8,113 +8,14 @@
 
 import * as THREE from "three";
 import { addGroundDetail } from "./groundDetail.js";
+import { TILE_SIZE_M, WATER_LEVEL_M, tileGeometryData, tileObjectsData } from "./terrainCore.js";
 
-export const WORLD_SEED = 172;
-export const TILE_SIZE_M = 4000;
-export const AIRFIELD = { x: 0, z: 0, lengthM: 1000, widthM: 30, flatRadiusM: 1400 };
-
-// --- Deterministic noise --------------------------------------------------------------
-
-function hash2(ix, iz, seed = WORLD_SEED) {
-  // Integer hash -> [0, 1). Same inputs always give the same value, in any browser.
-  let h = (ix * 374761393 + iz * 668265263 + seed * 2147483647) | 0;
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  h ^= h >>> 16;
-  return (h >>> 0) / 4294967296;
-}
-
-function valueNoise(x, z, seed) {
-  const ix = Math.floor(x), iz = Math.floor(z);
-  const fx = x - ix, fz = z - iz;
-  const sx = fx * fx * (3 - 2 * fx), sz = fz * fz * (3 - 2 * fz);
-  const a = hash2(ix, iz, seed), b = hash2(ix + 1, iz, seed);
-  const c = hash2(ix, iz + 1, seed), d = hash2(ix + 1, iz + 1, seed);
-  return a + (b - a) * sx + (c - a) * sz + (a - b - c + d) * sx * sz;
-}
-
-function fbm(x, z, octaves, seed) {
-  let sum = 0, amp = 0.5, freq = 1, norm = 0;
-  for (let o = 0; o < octaves; o++) {
-    sum += amp * valueNoise(x * freq, z * freq, seed + o * 101);
-    norm += amp;
-    amp *= 0.5;
-    freq *= 2.03;
-  }
-  return sum / norm; // ~[0, 1]
-}
-
-const smoothstep = (a, b, x) => {
-  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-  return t * t * (3 - 2 * t);
-};
-
-// --- Terrain height and land cover ----------------------------------------------------
-
-// 0 on dry land, rising to 1 in the middle of a lake.
-function lakeness(x, z) {
-  return 1 - smoothstep(0.24, 0.31, fbm(x / 3000, z / 3000, 3, 7));
-}
-
-// The physics lands on this same terrain: flightsim/world/terrain.py is an exact port.
-// Keep the two in step, using only operations that give identical results in Python and
-// JavaScript (sqrt, not ** or hypot); tests/test_world_terrain.py compares them.
-export function height(x, z) {
-  const n = fbm(x / 7000, z / 7000, 5, 1);
-  const t = Math.max(0, (n - 0.42) / 0.58);
-  let h = t * Math.sqrt(t) * 350; // valleys at 0, hills up to ~350 m
-  h -= lakeness(x, z) * 25; // lakes dip below the water plane (just under 0 m)
-  const dx = x - AIRFIELD.x, dz = z - AIRFIELD.z;
-  const r = Math.sqrt(dx * dx + dz * dz);
-  return h * smoothstep(AIRFIELD.flatRadiusM, AIRFIELD.flatRadiusM + 1200, r); // flat airfield at 0 m
-}
-
-export function isForest(x, z, h) {
-  return h > 2 && fbm(x / 1800, z / 1800, 3, 3) > 0.55;
-}
-
-// How forested a point looks (0..1): soft edges around isForest's threshold, so forest
-// borders are not stepped along the terrain mesh grid. Trees still follow isForest.
-function forestness(x, z, h) {
-  return h > 2 ? smoothstep(0.53, 0.57, fbm(x / 1800, z / 1800, 3, 3)) : 0;
-}
-
-export const VILLAGE_CELL_M = 2000;
-
-// The village of a 2 km cell ([x, z] of its centre), or null: about one cell in three, on
-// low, dry, open land (valley floors too, clear of lakes). Houses (buildTileObjects) and
-// roads (roads.js) use the same list.
-export function villageCentre(ci, cj) {
-  if (hash2(ci, cj, 31) > 0.35) return null;
-  const x = (ci + 0.5) * VILLAGE_CELL_M, z = (cj + 0.5) * VILLAGE_CELL_M;
-  const h = height(x, z);
-  if (h > 120 || lakeness(x, z) > 0.02 || isForest(x, z, h)) return null;
-  if (Math.sqrt(x * x + z * z) < AIRFIELD.flatRadiusM + 600) return null; // not on the airfield
-  return [x, z];
-}
+// Height, land cover and tile data live in terrainCore.js (no three.js: also used by the
+// tile worker); re-exported here for the rest of the viewer.
+export { AIRFIELD, TILE_SIZE_M, VILLAGE_CELL_M, WATER_LEVEL_M, WORLD_SEED, height, isForest, villageCentre } from "./terrainCore.js";
 
 // Field crops; the patchwork itself is drawn per pixel in the terrain shader (fieldMaterial).
 const FIELD_COLOURS = [0x7c8b55, 0x8e9a5a, 0x6f8248, 0xa59b62, 0x8b8a4e, 0x74874d, 0x9aa56a].map((c) => new THREE.Color(c));
-const FIELD_BASE = new THREE.Color(0x7e8c53); // vertex colour under fields (seen only at their blurred edges)
-const FOREST = new THREE.Color(0x3f5a33);
-const ROCK = new THREE.Color(0x8a8172);
-const SAND = new THREE.Color(0xb9ad86);
-const GRASS = new THREE.Color(0x6f8a4c);
-
-// Returns how much of the field patchwork shows here (0..1) and sets `out` to the
-// underlying land colour.
-function landColour(x, z, h, slope, out) {
-  if (h < 3 && lakeness(x, z) > 0.05) {
-    out.copy(SAND); // shoreline
-    return 0;
-  }
-  const forest = forestness(x, z, h);
-  const rocky = Math.min(1, smoothstep(0.35, 0.7, slope) * 0.8 + smoothstep(230, 330, h) * 0.5);
-  // Airfield grass fades into the fields over a few hundred metres.
-  const r = Math.hypot(x - AIRFIELD.x, z - AIRFIELD.z);
-  const grass = 1 - smoothstep(AIRFIELD.flatRadiusM - 500, AIRFIELD.flatRadiusM + 300, r);
-  out.copy(FIELD_BASE).lerp(ROCK, rocky).lerp(GRASS, grass).lerp(FOREST, forest);
-  return (1 - rocky) * (1 - grass) * (1 - forest);
-}
 
 // Lambert material plus a per-pixel field patchwork: ~450 m cells on a slightly rotated
 // grid, one crop colour per cell, darker hedgerows along the edges. Crisp at any range.
@@ -175,123 +76,49 @@ float rvField(vec2 xz) { vec2 p = xz / 3200.0 + 41.0; return 0.65 * rvNoise(p) +
   return addGroundDetail(material); // close-up texture on top of the patchwork
 }
 
-// --- Tiles ----------------------------------------------------------------------------
-
-function buildTileGeometry(tx, tz, segments) {
-  // Grid plus a "skirt" ring hanging 40 m down, hiding cracks between tiles of different detail.
-  const n = segments + 1;
-  const x0 = tx * TILE_SIZE_M, z0 = tz * TILE_SIZE_M, step = TILE_SIZE_M / segments;
-  const pos = [], col = [], fld = [], nrm = [], idx = [];
-  let minHeight = Infinity;
-  const c = new THREE.Color();
-  const grid = (i, j) => i * n + j;
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < n; j++) {
-      const x = x0 + j * step, z = z0 + i * step;
-      const h = height(x, z);
-      minHeight = Math.min(minHeight, h);
-      // Normals from the height function itself (central differences), not from the tile's
-      // triangles, so shading matches exactly across tile edges.
-      const dhdx = (height(x + 10, z) - height(x - 10, z)) / 20;
-      const dhdz = (height(x, z + 10) - height(x, z - 10)) / 20;
-      const slope = Math.hypot(dhdx, dhdz);
-      const inv = 1 / Math.sqrt(dhdx * dhdx + 1 + dhdz * dhdz);
-      nrm.push(-dhdx * inv, inv, -dhdz * inv);
-      pos.push(x, h, z);
-      fld.push(landColour(x, z, h, slope, c));
-      col.push(c.r, c.g, c.b);
-    }
-  }
-  for (let i = 0; i < segments; i++) {
-    for (let j = 0; j < segments; j++) {
-      const a = grid(i, j), b = grid(i, j + 1), d = grid(i + 1, j), e = grid(i + 1, j + 1);
-      idx.push(a, d, b, b, d, e);
-    }
-  }
-  const edge = [];
-  for (let j = 0; j < n; j++) edge.push(grid(0, j));
-  for (let i = 1; i < n; i++) edge.push(grid(i, n - 1));
-  for (let j = n - 2; j >= 0; j--) edge.push(grid(n - 1, j));
-  for (let i = n - 2; i > 0; i--) edge.push(grid(i, 0));
-  const base = pos.length / 3;
-  for (const v of edge) {
-    pos.push(pos[3 * v], pos[3 * v + 1] - 40, pos[3 * v + 2]);
-    col.push(col[3 * v], col[3 * v + 1], col[3 * v + 2]);
-    fld.push(fld[v]);
-    nrm.push(nrm[3 * v], nrm[3 * v + 1], nrm[3 * v + 2]);
-  }
-  for (let k = 0; k < edge.length; k++) {
-    const a = edge[k], b = edge[(k + 1) % edge.length], sa = base + k, sb = base + ((k + 1) % edge.length);
-    idx.push(a, b, sa, b, sb, sa, a, sa, b, b, sa, sb); // both windings: visible from any side
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
-  g.setAttribute("fieldness", new THREE.Float32BufferAttribute(fld, 1));
-  g.setAttribute("normal", new THREE.Float32BufferAttribute(nrm, 3));
-  g.setIndex(idx);
-  g.userData.hasWater = minHeight < WATER_LEVEL_M;
-  return g;
-}
-
-export const WATER_LEVEL_M = -0.5; // just below 0 m, so dry valley floors at 0 m stay dry
 const WATER = new THREE.MeshLambertMaterial({ color: 0x3f6b8c });
 const WATER_QUAD = new THREE.PlaneGeometry(TILE_SIZE_M, TILE_SIZE_M).rotateX(-Math.PI / 2);
 
-function seededRandom(seed) {
-  let s = seed >>> 0 || 1;
-  return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
+// --- Tiles: meshes from tile data -------------------------------------------------------
+
+function tileGeometry(data) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(data.position, 3));
+  g.setAttribute("color", new THREE.BufferAttribute(data.color, 3));
+  g.setAttribute("fieldness", new THREE.BufferAttribute(data.fieldness, 1));
+  g.setAttribute("normal", new THREE.BufferAttribute(data.normal, 3));
+  g.setIndex(new THREE.BufferAttribute(data.index, 1));
+  g.userData.hasWater = data.hasWater;
+  return g;
 }
 
-// Trees in forests and villages on low, flat open land, for one (near) tile. `far`: only
-// sparser, simpler trees (the second ring of tiles, so distant hills are not bare).
-function buildTileObjects(tx, tz, shared, far = false) {
+function tileObjects(data, shared, far) {
   const group = new THREE.Group();
-  const rnd = seededRandom(hash2(tx, tz, 23) * 4294967296);
-  const x0 = tx * TILE_SIZE_M, z0 = tz * TILE_SIZE_M;
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
   const up = new THREE.Vector3(0, 1, 0);
-
-  const trees = [];
-  const maxTrees = far ? Math.round(shared.maxTrees / 3) : shared.maxTrees;
-  for (let k = 0; k < 2500 && trees.length < maxTrees; k++) {
-    const x = x0 + rnd() * TILE_SIZE_M, z = z0 + rnd() * TILE_SIZE_M, h = height(x, z);
-    if (isForest(x, z, h)) trees.push([x, h, z, 0.7 + rnd() * 0.7]);
-  }
+  const { trees, houses, landmarks } = data;
   if (trees.length) {
-    const crowns = new THREE.InstancedMesh(far ? shared.farCrown : shared.crown, shared.crownMat, trees.length);
-    trees.forEach(([x, h, z, k], i) => crowns.setMatrixAt(i, m.compose(p.set(x, h + 7 * k, z), q.identity(), s.set(k, k, k))));
+    const crowns = new THREE.InstancedMesh(far ? shared.farCrown : shared.crown, shared.crownMat, trees.length / 4);
+    for (let i = 0; i < trees.length / 4; i++) {
+      const [x, h, z, k] = trees.subarray(4 * i, 4 * i + 4);
+      crowns.setMatrixAt(i, m.compose(p.set(x, h + 7 * k, z), q.identity(), s.set(k, k, k)));
+    }
     group.add(crowns);
   }
-  if (far) return group;
-
-  const houses = [];
-  const landmarks = []; // one per village: a church or a water tower, seen from the circuit
-  const cells = 2; // two 2-km village cells per tile side
-  for (let ci = 0; ci < cells; ci++) {
-    for (let cj = 0; cj < cells; cj++) {
-      const centre = villageCentre(Math.floor((x0 + (cj + 0.5) * (TILE_SIZE_M / cells)) / VILLAGE_CELL_M), Math.floor((z0 + (ci + 0.5) * (TILE_SIZE_M / cells)) / VILLAGE_CELL_M));
-      if (!centre) continue;
-      const [cx, cz] = centre;
-      landmarks.push([cx, height(cx, cz), cz, hash2(Math.floor(cx), Math.floor(cz), 41)]);
-      const count = 15 + Math.floor(rnd() * 35);
-      for (let k = 0; k < count; k++) {
-        const x = cx + (rnd() - 0.5) * 500, z = cz + (rnd() - 0.5) * 500, h = height(x, z);
-        if (lakeness(x, z) < 0.02 && !isForest(x, z, h)) houses.push([x, h, z, rnd() * Math.PI, 8 + rnd() * 10, 6 + rnd() * 6]);
-      }
-    }
-  }
   if (houses.length) {
-    const walls = new THREE.InstancedMesh(shared.box, shared.wallMat, houses.length);
-    const roofs = new THREE.InstancedMesh(shared.roof, shared.roofMat, houses.length);
-    houses.forEach(([x, h, z, yaw, w, d], i) => {
+    const n = houses.length / 6;
+    const walls = new THREE.InstancedMesh(shared.box, shared.wallMat, n);
+    const roofs = new THREE.InstancedMesh(shared.roof, shared.roofMat, n);
+    for (let i = 0; i < n; i++) {
+      const [x, h, z, yaw, w, d] = houses.subarray(6 * i, 6 * i + 6);
       q.setFromAxisAngle(up, yaw);
       walls.setMatrixAt(i, m.compose(p.set(x, h + 2.5, z), q, s.set(w, 5, d)));
       roofs.setMatrixAt(i, m.compose(p.set(x, h + 5 + 1.5, z), q, s.set(w * 1.05, 3, d * 1.05)));
-    });
+    }
     group.add(walls, roofs);
   }
-  for (const [x, h, z, kind] of landmarks) {
+  for (let i = 0; i < landmarks.length / 4; i++) {
+    const [x, h, z, kind] = landmarks.subarray(4 * i, 4 * i + 4);
     if (kind < 0.6) {
       // Church: nave, tower and spire, ~35 m tall.
       const nave = new THREE.Mesh(shared.box, shared.wallMat);
@@ -339,9 +166,27 @@ export const QUALITY = {
   },
 }; // fmt: skip
 
+// Tiles are built in a Web Worker (terrainWorker.js) when the browser has one, so the
+// drawing never waits for them; otherwise (Node tests, a failed worker) here, a few per
+// frame. The worker returns tile data; the meshes are made here (fast).
+const MAX_IN_FLIGHT = 3; // tiles asked of the worker at a time (nearest first; stays responsive when the wanted set changes)
+const specKey = (w) => `${w.segments}|${w.objects ? 1 : 0}|${w.farTrees ? 1 : 0}`;
+
 export class Terrain {
-  constructor(scene, quality = "high") {
+  constructor(scene, quality = "high", { worker = true } = {}) {
     this.scene = scene;
+    this.wanted = new Map();
+    this.inFlight = new Map(); // key -> spec key asked of the worker
+    this.worker = null;
+    if (worker && typeof Worker !== "undefined") {
+      try {
+        this.worker = new Worker(new URL("./terrainWorker.js", import.meta.url), { type: "module" });
+        this.worker.onmessage = (e) => this._built(e.data);
+        this.worker.onerror = () => this._noWorker();
+      } catch {
+        this.worker = null;
+      }
+    }
     this.rings = QUALITY[quality].rings;
     this.tiles = new Map(); // key -> { mesh, objects, segments }
     this.queue = [];
@@ -373,7 +218,16 @@ export class Terrain {
     this.shared.maxTrees = QUALITY[quality].maxTrees;
     for (const key of [...this.tiles.keys()]) this._drop(key);
     this.queue = [];
+    this.inFlight.clear(); // late answers no longer match the wanted spec and are dropped
     this.centre = null;
+  }
+
+  // The worker failed (e.g. no module workers): build here from now on.
+  _noWorker() {
+    this.worker?.terminate();
+    this.worker = null;
+    this.inFlight.clear();
+    this.centre = null; // recompute the queue on the next update
   }
 
   _wanted(cx, cz) {
@@ -389,40 +243,69 @@ export class Terrain {
     return wanted;
   }
 
-  // Call every frame with the camera position. Builds tiles (nearest first) until about
-  // `budgetMs` of this frame is used, at least one: a near tile takes ~20 ms, a far one < 1 ms.
+  // Call every frame with the camera position. Asks the worker for the nearest missing tiles;
+  // without one, builds tiles here until about `budgetMs` of this frame is used, at least
+  // one (a near tile takes ~15 ms, a far one < 1 ms).
   update(x, z, budgetMs = 8) {
     const cx = Math.floor(x / TILE_SIZE_M), cz = Math.floor(z / TILE_SIZE_M);
     if (!this.centre || this.centre[0] !== cx || this.centre[1] !== cz) {
       this.centre = [cx, cz];
-      const wanted = this._wanted(cx, cz);
+      this.wanted = this._wanted(cx, cz);
       for (const [key, tile] of this.tiles) {
-        const want = wanted.get(key);
+        const want = this.wanted.get(key);
         if (!want || want.segments !== tile.segments || want.objects !== tile.near || Boolean(want.farTrees) !== tile.far) this._drop(key);
       }
-      this.queue = [...wanted.values()].filter((w) => !this.tiles.has(`${w.tx},${w.tz}`)).sort((a, b) => a.ring - b.ring);
+      this.queue = [...this.wanted.values()].filter((w) => !this.tiles.has(`${w.tx},${w.tz}`)).sort((a, b) => a.ring - b.ring);
+    }
+    if (this.worker) {
+      this._pump();
+      return;
     }
     const start = performance.now();
     while (this.queue.length && (performance.now() - start < budgetMs || budgetMs <= 0)) {
       const w = this.queue.shift();
-      const geometry = buildTileGeometry(w.tx, w.tz, w.segments);
-      const mesh = new THREE.Mesh(geometry, this.material);
-      if (geometry.userData.hasWater) {
-        // Water only where this tile has lakes; elsewhere the land fallback shows through gaps.
-        const water = new THREE.Mesh(WATER_QUAD, WATER);
-        water.position.set((w.tx + 0.5) * TILE_SIZE_M, WATER_LEVEL_M, (w.tz + 0.5) * TILE_SIZE_M);
-        mesh.add(water);
-      }
-      this.scene.add(mesh);
-      const objects = w.objects || w.farTrees ? buildTileObjects(w.tx, w.tz, this.shared, !w.objects) : null;
-      if (objects) this.scene.add(objects);
-      this.tiles.set(`${w.tx},${w.tz}`, { mesh, objects, segments: w.segments, near: Boolean(w.objects), far: Boolean(w.farTrees) });
+      const wantsObjects = Boolean(w.objects || w.farTrees);
+      this._add(w, tileGeometryData(w.tx, w.tz, w.segments), wantsObjects ? tileObjectsData(w.tx, w.tz, this.shared.maxTrees, !w.objects) : null);
       if (budgetMs <= 0) break; // budget 0: exactly one tile (tests)
     }
   }
 
+  // Ask the worker for the next tiles (also on each answer, so it stays busy whatever the
+  // frame rate).
+  _pump() {
+    while (this.worker && this.queue.length && this.inFlight.size < MAX_IN_FLIGHT) {
+      const w = this.queue.shift(), key = `${w.tx},${w.tz}`;
+      if (this.inFlight.get(key) === specKey(w) || this.tiles.has(key)) continue;
+      this.inFlight.set(key, specKey(w));
+      this.worker.postMessage({ key, spec: specKey(w), tx: w.tx, tz: w.tz, segments: w.segments, objects: Boolean(w.objects || w.farTrees), far: !w.objects, maxTrees: this.shared.maxTrees });
+    }
+  }
+
+  // A tile from the worker: kept only if it is still wanted with the same detail.
+  _built({ key, spec, geometry, objects }) {
+    if (this.inFlight.get(key) === spec) this.inFlight.delete(key);
+    const w = this.wanted.get(key);
+    if (w && specKey(w) === spec && !this.tiles.has(key)) this._add(w, geometry, objects);
+    this._pump();
+  }
+
+  _add(w, geometryData, objectsData) {
+    const geometry = tileGeometry(geometryData);
+    const mesh = new THREE.Mesh(geometry, this.material);
+    if (geometry.userData.hasWater) {
+      // Water only where this tile has lakes; elsewhere the land fallback shows through gaps.
+      const water = new THREE.Mesh(WATER_QUAD, WATER);
+      water.position.set((w.tx + 0.5) * TILE_SIZE_M, WATER_LEVEL_M, (w.tz + 0.5) * TILE_SIZE_M);
+      mesh.add(water);
+    }
+    this.scene.add(mesh);
+    const objects = objectsData ? tileObjects(objectsData, this.shared, !w.objects) : null;
+    if (objects) this.scene.add(objects);
+    this.tiles.set(`${w.tx},${w.tz}`, { mesh, objects, segments: w.segments, near: Boolean(w.objects), far: Boolean(w.farTrees) });
+  }
+
   get pending() {
-    return this.queue.length;
+    return this.queue.length + this.inFlight.size;
   }
 
   _drop(key) {

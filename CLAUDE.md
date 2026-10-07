@@ -91,7 +91,8 @@ flightsim/          # installable package (uv_build backend)
   control/          # heading hold (step 1), PID autopilot (step 3), human pilot (step 5), gain-scheduled LQR, approach, takeoff and circuit autopilots
   stream/           # protocol, frame sources (replay, live PID), HTTP + WebSocket server
   viewer/           # static Three.js app (no build step); three.js 0.186.1 + Sky addon + font vendored in viewer/vendor
-                    #   terrain.js / scenery.js: procedural, seeded, visual-only scenery (airfield at 0 m = physics ground)
+                    #   terrain.js / scenery.js: procedural, seeded, visual-only scenery (airfield at 0 m = physics ground);
+                    #     terrainCore.js: height and tile data without three.js (also run in terrainWorker.js)
                     #   aircraft.js: C172P model built in code; control surfaces follow the logged positions
                     #   pattern.js: circuit traffic pattern drawing (from the stream's `pattern`)
                     #   sky.js / clouds.js: time of day, visibility, seeded clouds (from the stream's `visual`)
@@ -101,7 +102,7 @@ flightsim/          # installable package (uv_build backend)
                     #   sound.js: synthesized engine, wind, stall horn, flap motor (Web Audio, driven by frames)
   analysis/         # mode identification, validation maneuvers, validation checks
   atmosphere/       # Dryden turbulence (MIL-F-8785C)
-  world/            # terrain height shared with the viewer (bit-identical port of viewer/terrain.js)
+  world/            # terrain height shared with the viewer (bit-identical port of viewer/terrainCore.js)
   batch.py          # parallel seeded episode batches
   config.py         # YAML loading (base: inheritance, overrides) + config hash
   runner.py         # headless run loop

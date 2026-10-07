@@ -598,7 +598,12 @@ owner before work can start.
     sound use the newest frame. The trail keeps one point per 1/30 s.
   - P shows fps, the slowest frame and refreshes missed over 10 s, the frame message
     timing, draw calls / triangles and terrain tiles still to build (`perf.js`).
-  - [ ] Terrain tiles built in a Web Worker (no hitch when crossing tile boundaries).
+  - [x] Terrain tiles built in a Web Worker (2026-10-07): the height, land cover and tile
+    data moved to `terrainCore.js` (no three.js; `terrain.js` re-exports it and makes the
+    meshes); `terrainWorker.js` builds tile data off the main thread (3 tiles asked at a
+    time, nearest first, the next on each answer; stale answers dropped); without a
+    worker (Node tests) the old in-frame path. The 121 tiles around the airfield come out
+    identical to before (vertices, colours, normals, trees, houses, landmarks).
   - [ ] Measure on the owner's machine (Firefox, integrated GPU) with P; candidates if
     the GPU is the limit: `logarithmicDepthBuffer` (costly per pixel), pixel ratio 2 on
     High, ~340 draw calls / ~240k triangles per frame.
