@@ -110,11 +110,11 @@ float box(vec2 p, vec2 lo, vec2 hi, float r) {
   return m;
 }
 
-// Registration on the upper surface of both wings, centred on each wing (structural
-// inches): letters 24 in (61 cm) high along the chord, their tops toward the leading edge,
-// so they read left to right from behind (the chase view). On the fixed wing, clear of
-// the leading edge and of the flaps and ailerons (hinges at 70% and 75% chord).
-const WING_REG = { x0: 34, x1: 58, y0: 73, y1: 163 };
+// Registration across the top of the wing, centred on the fuselage (structural inches):
+// letters 32 in (81 cm) high along the chord, their tops toward the leading edge, so they
+// read left to right from behind (the chase view). On the fixed wing, clear of the
+// leading edge and of the flaps (hinge at 70% chord).
+const WING_REG = { x0: 31, x1: 63, y0: -70, y1: 70 };
 
 function wingMaterial(material, registration) {
   const m = material.clone();
@@ -129,11 +129,8 @@ vUp = normal.z; // the skin is wound inward (lit through DoubleSide): +z body (d
       .replace("#include <common>", "#include <common>\nvarying vec3 vStruct;\nvarying float vUp;\nuniform sampler2D regTex;")
       .replace("#include <color_fragment>", `#include <color_fragment>
 {
-  float ay = abs(vStruct.y);
-  if (vUp > 0.3 && ay > ${WING_REG.y0.toFixed(1)} && ay < ${WING_REG.y1.toFixed(1)} && vStruct.x > ${WING_REG.x0.toFixed(1)} && vStruct.x < ${WING_REG.x1.toFixed(1)}) {
-    // Left to right seen from behind: root to tip on the right wing, tip to root on the left.
-    float u = (ay - ${WING_REG.y0.toFixed(1)}) / ${(WING_REG.y1 - WING_REG.y0).toFixed(1)};
-    if (vStruct.y < 0.0) u = 1.0 - u;
+  if (vUp > 0.3 && vStruct.y > ${WING_REG.y0.toFixed(1)} && vStruct.y < ${WING_REG.y1.toFixed(1)} && vStruct.x > ${WING_REG.x0.toFixed(1)} && vStruct.x < ${WING_REG.x1.toFixed(1)}) {
+    float u = (vStruct.y - ${WING_REG.y0.toFixed(1)}) / ${(WING_REG.y1 - WING_REG.y0).toFixed(1)}; // left to right seen from behind
     float ink = texture2D(regTex, vec2(u, (${WING_REG.x1.toFixed(1)} - vStruct.x) / ${(WING_REG.x1 - WING_REG.x0).toFixed(1)})).r;
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${new THREE.Color(REG_COLOUR).toArray().join(",")}), ink);
   }
@@ -430,7 +427,7 @@ export function buildC172({ registration = REGISTRATION } = {}) {
   const wingPaint = wingMaterial(white, registration);
   for (const side of [1, -1]) {
     const yy = (v) => side * v;
-    group.add(new THREE.Mesh(surface(side > 0 ? span(0, 22, 1) : span(-22, 0, 1), wingOpts), white));
+    group.add(new THREE.Mesh(surface(side > 0 ? span(0, 22, 1) : span(-22, 0, 1), wingOpts), wingPaint));
     group.add(new THREE.Mesh(surface(side > 0 ? span(22, 110, 1) : span(-110, -22, 1), { ...wingOpts, f1: 0.7 }), wingPaint));
     group.add(new THREE.Mesh(surface(side > 0 ? span(110, 113, 1) : span(-113, -110, 1), wingOpts), wingPaint));
     group.add(new THREE.Mesh(surface(side > 0 ? span(113, 196) : span(-196, -113), { ...wingOpts, f1: 0.75 }), wingPaint));
