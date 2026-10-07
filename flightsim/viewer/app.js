@@ -3,7 +3,7 @@
 // as stick/pedal/throttle values that the server applies as policy actions.
 
 import { FlightScene } from "./scene.js";
-import { InstrumentPanel, PANEL_CHANNEL, PANEL_TIMEOUT_MS } from "./panel.js";
+import { CLIMB_KT, InstrumentPanel, PANEL_CHANNEL, PANEL_TIMEOUT_MS, ROTATE_KT } from "./panel.js";
 import { drawHud } from "./hud.js";
 import { HANDLED_KEYS, PilotInput } from "./input.js";
 import { AXES, BUTTONS, CONTROLS, DEFAULTS, MAX_CALIBRATION_SPREAD, MAX_CENTRE, buttonValue, controlValue, copyFeel, defaultProfile, detectAxis, detectButton, saveSettings } from "./stick.js";
@@ -602,9 +602,26 @@ function drawHudLayer() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
   if (!hudInView() || !latest) return;
-  // Runway tasks have no altitude/heading targets to show; free flight shows its bugs.
-  const targets = session?.approach || session?.takeoff ? null : session?.targets;
-  drawHud(ctx, w, h, { camera: scene.camera, aircraftMatrix: scene.aircraft.matrix, row: latest, targets });
+  drawHud(ctx, w, h, { camera: scene.camera, aircraftMatrix: scene.aircraft.matrix, row: latest, ...hudTask(latest) });
+}
+
+// What the HUD shows for the task: free flight its altitude and heading targets; runway
+// tasks the runway, and on approach (an approach, or a circuit heading for the runway
+// after climbing out) the aim point, glide path reference and approach speed; takeoffs
+// (and circuits before climbing out) the rotate and climb speeds.
+// Approach speed: target plus half the reported gust factor, at most 10 kt (FAA AFH
+// ch. 9, docs/REFERENCES.md; as configs/approach_autopilot.yaml).
+function hudTask(row) {
+  const a = session?.approach, tk = session?.takeoff;
+  if (!a && !tk) return { targets: session?.targets };
+  const takeoffBugs = [{ kt: ROTATE_KT, label: "R" }, { kt: CLIMB_KT, label: "C" }];
+  if (tk) return { runway: tk, speedBugs: takeoffBugs };
+  const towardRunway = Math.cos(row.psi_rad - (a.heading_deg * Math.PI) / 180) > 0.8;
+  const onApproach = a.task !== "circuit" || (panel.climbedOut && towardRunway);
+  const gustKt = (a.wind?.gust_factor_mps ?? 0) * 1.943844;
+  const vapp = a.target_kias != null ? [{ kt: a.target_kias + Math.min(10, 0.5 * gustKt), label: "A" }] : [];
+  if (a.task === "circuit" && !panel.climbedOut) return { runway: a, speedBugs: takeoffBugs };
+  return { runway: a, approach: onApproach, speedBugs: vapp };
 }
 
 function frame() {

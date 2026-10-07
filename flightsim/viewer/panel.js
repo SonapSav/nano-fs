@@ -58,6 +58,11 @@ export class InstrumentPanel {
     this.circuitClimbed = false; // a circuit is on final only after climbing out
   }
 
+  // A circuit has climbed out (from then on, final approach speed and glide path apply).
+  get climbedOut() {
+    return this.circuitClimbed;
+  }
+
   // A new flight (its hello message, or null for none).
   setSession(hello) {
     this.session = hello;
@@ -102,8 +107,8 @@ function approachDeviations(row, a) {
 }
 
 // Takeoff: POH Section 4 normal takeoff, nose wheel up at 55 KIAS, climb 70-80 KIAS (75 used).
-const ROTATE_KT = 55;
-const CLIMB_KT = 75;
+export const ROTATE_KT = 55;
+export const CLIMB_KT = 75;
 
 function updateReadout(p, row) {
   const $ = p.$, session = p.session, readout = p.readout;

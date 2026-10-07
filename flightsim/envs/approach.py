@@ -75,7 +75,7 @@ def approach_geometry(cfg: EnvConfig) -> dict | None:
         "threshold_north_m": a.threshold_north_m, "threshold_east_m": a.threshold_east_m,
         "heading_deg": math.degrees(a.runway_heading_rad), "length_m": a.runway_length_m, "width_m": a.runway_width_m,
         "aim_point_m": a.aim_point_m, "glide_path_deg": math.degrees(a.glide_path_rad), "elevation_m": elevation,
-        "touchdown_zone_m": list(a.touchdown_zone_m),
+        "touchdown_zone_m": list(a.touchdown_zone_m), "target_kias": a.target_cas_mps / KT_TO_MPS,
     }  # fmt: skip
 
 

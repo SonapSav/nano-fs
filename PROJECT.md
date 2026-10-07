@@ -599,8 +599,15 @@ owner before work can start.
   Demonstrations record when the HUD was in view: metadata `flightsim.pilot_aids`
   ({"hud": [[t_on, t_off], ...]}, empty = never; logs without it predate the HUD),
   reported by the viewer (play `aids`, message `aids`; never reaches the physics).
-  - [ ] Phase 2 (approach symbols): -3 deg glide path reference line, aim-point marker,
-    approach speed cue, optional runway outline.
+  - [x] Phase 2 (2026-10-07): runway outline (conformal, drawn in visible pieces, so it
+    shows on the takeoff roll and through haze) and a dashed 1 nm extended centreline;
+    on approach (or a circuit heading for the runway after climbing out) the aim point
+    and a dashed "GP" glide path reference line at the glide path angle (flight path
+    marker on the aim point and on the line = on the glide path); speed bugs: R 55 / C 75
+    (takeoff, circuit before climbing out), A = target + half the gust factor, at most
+    10 kt (approach; FAA AFH ch. 9, as the approach autopilot). The approach geometry in
+    the hello now carries `target_kias`. Node tests (the aim point seen from the glide
+    path lies on the reference line; bugs off the tape hidden); headless screenshots.
 - [x] **Instruments window** (2026-10-07): "Instruments window" opens `panel.html`, the
   instrument panel alone and scaled to its window (e.g. full screen, F11, on a second
   monitor). It mirrors the viewer window over a BroadcastChannel (same browser and

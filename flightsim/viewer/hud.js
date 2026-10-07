@@ -7,6 +7,12 @@
 // heading tapes, the bank scale and the small readouts are fixed on the combiner.
 //
 // Drawn on a 2D canvas over the 3D view, from the frame row (state) and the camera.
+//
+// Runway tasks add (phase 2): the runway outline and a dashed extended centreline (1 nm),
+// conformal, so the runway stays visible through haze; on approach (heading toward the
+// runway) the aim point and a dashed glide path reference line at the glide path angle
+// below the horizon (put the flight path marker where the line crosses the aim point:
+// on the glide path); and speed bugs on the speed tape (R rotate, C climb, A approach).
 
 import * as THREE from "three";
 import { indicatedKt, units } from "./gauges.js";
@@ -39,6 +45,22 @@ export function project(dir, camera, w, h) {
   return { x: ((p.x + 1) / 2) * w, y: ((1 - p.y) / 2) * h };
 }
 
+// Screen position of a world point (not a direction), or null if behind the camera.
+export function projectPoint(point, camera, w, h) {
+  const p = point.clone().project(camera);
+  if (p.z > 1 || p.z < -1) return null;
+  return { x: ((p.x + 1) / 2) * w, y: ((1 - p.y) / 2) * h };
+}
+
+// World point of a runway position: `along` metres past the threshold, `cross` metres
+// right of the centreline, on the runway surface. `rw`: the hello's runway geometry.
+export function runwayPoint(rw, along, cross) {
+  const h = rw.heading_deg * D2R;
+  const north = rw.threshold_north_m + along * Math.cos(h) - cross * Math.sin(h);
+  const east = rw.threshold_east_m + along * Math.sin(h) + cross * Math.cos(h);
+  return nedToWorld(north, east, -rw.elevation_m);
+}
+
 // World direction of the flight path (ground velocity), or null when too slow.
 export function flightPathDirection(row) {
   const v = nedToWorld(row.v_north_mps, row.v_east_mps, row.v_down_mps);
@@ -48,8 +70,10 @@ export function flightPathDirection(row) {
 const pad3 = (deg) => String(Math.round(((deg % 360) + 360) % 360) % 360).padStart(3, "0");
 
 // Draw the HUD for a frame. `aircraftMatrix`: the scene's aircraft matrix (body axes as
-// its basis). Returns false when the combiner is out of view (looking away).
-export function drawHud(ctx, w, h, { camera, aircraftMatrix, row, targets }) {
+// its basis). Runway tasks: `runway` (the hello's approach or takeoff geometry),
+// `approach` (true to show the aim point and glide path reference), `speedBugs`
+// ([{kt, label}]). Returns false when the combiner is out of view (looking away).
+export function drawHud(ctx, w, h, { camera, aircraftMatrix, row, targets, runway = null, approach = false, speedBugs = [] }) {
   const rot = new THREE.Matrix4().extractRotation(aircraftMatrix);
   const body = (az, el) => project(bodyVector(az, el).applyMatrix4(rot), camera, w, h);
   const F = HUD_FIELD;
@@ -79,6 +103,17 @@ export function drawHud(ctx, w, h, { camera, aircraftMatrix, row, targets }) {
     pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
     ctx.stroke();
     ctx.setLineDash([]);
+  };
+  // A polyline with gaps where points are out of view (null).
+  const pieces = (pts, dash = []) => {
+    let run = [];
+    for (const p of [...pts, null]) {
+      if (p) run.push(p);
+      else {
+        if (run.length > 1) line(run, dash);
+        run = [];
+      }
+    }
   };
   const text = (s, x, y, align = "center") => {
     ctx.textAlign = align;
@@ -117,7 +152,35 @@ export function drawHud(ctx, w, h, { camera, aircraftMatrix, row, targets }) {
     }
   }
 
+  // Glide path reference: a long-dashed line at the glide path angle below the horizon.
+  if (runway && approach) {
+    const c = worldDirection(psi, -runway.glide_path_deg * D2R);
+    const a = along(c, -9.5), b = along(c, 9.5), lbl = along(c, 10.3);
+    if (a && b) line([a, b], [pxPerDeg * 1.6, pxPerDeg * 0.7]);
+    if (lbl) text("GP", lbl.x, lbl.y, "left");
+  }
   ctx.restore();
+
+  // --- Conformal: runway outline, extended centreline and aim point. --------------------
+  if (runway) {
+    const pt = (al, cr) => projectPoint(runwayPoint(runway, al, cr), camera, w, h);
+    // Sampled along the edges, drawn in the visible pieces (on the runway, the near end
+    // is beside or behind the pilot).
+    const hw = runway.width_m / 2, L = runway.length_m, n = 24, outline = [];
+    for (let k = 0; k <= n; k++) outline.push(pt((L * k) / n, -hw));
+    for (let k = 0; k <= 4; k++) outline.push(pt(L, -hw + (2 * hw * k) / 4));
+    for (let k = n; k >= 0; k--) outline.push(pt((L * k) / n, hw));
+    for (let k = 0; k <= 4; k++) outline.push(pt(0, hw - (2 * hw * k) / 4));
+    pieces(outline);
+    const ext = [];
+    for (let al = -1852; al <= 0; al += 1852 / 12) ext.push(pt(al, 0));
+    pieces(ext, [pxPerDeg * 0.6, pxPerDeg * 0.6]);
+    const aim = approach && pt(runway.aim_point_m, 0);
+    if (aim) {
+      const r = fs * 0.45;
+      line([{ x: aim.x, y: aim.y - r }, { x: aim.x + r, y: aim.y }, { x: aim.x, y: aim.y + r }, { x: aim.x - r, y: aim.y }, { x: aim.x, y: aim.y - r }]);
+    }
+  }
 
   // --- Conformal: flight path marker (where the aircraft is going). --------------------
   const fpDir = flightPathDirection(row);
@@ -173,8 +236,14 @@ export function drawHud(ctx, w, h, { camera, aircraftMatrix, row, targets }) {
   // Airspeed (indicated, knots), left.
   const kias = indicatedKt(row);
   const sx = body(-17, 0)?.x ?? centre.x - 17 * pxPerDeg;
-  tape(sx, kias, 25, 5, 10, -1, (v) => (v >= 0 ? String(v) : ""));
+  const pxPerKt = tape(sx, kias, 25, 5, 10, -1, (v) => (v >= 0 ? String(v) : ""));
   box(sx - fs * 0.4, centre.y, `${Math.max(0, Math.round(kias))}`, "right");
+  for (const bug of speedBugs) {
+    const y = centre.y - (bug.kt - kias) * pxPerKt;
+    if (!(Math.abs(y - centre.y) <= halfTape)) continue; // off the tape
+    caret(sx + fs * 0.6, y, -1);
+    text(bug.label, sx + fs * 0.75, y, "left");
+  }
 
   // Altitude (feet) and vertical speed, right.
   const ft = row.alt_msl_m * units.M_TO_FT;
