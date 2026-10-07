@@ -192,16 +192,18 @@ export class FlightScene {
     };
     // Gates (40 m wide, 24 m tall frames, centred on the glide path) every 400 m from 200 m
     // before the threshold out to 5 nm: fly through their centres.
-    const material = new THREE.MeshBasicMaterial({ color: 0xd23cc8, transparent: true, opacity: 0.8 });
-    const bar = (w, ht) => new THREE.Mesh(new THREE.BoxGeometry(w, ht, 0.6), material);
+    // Each gate is one flat frame (a rectangle with a rectangular hole, 1.5 m bars): no
+    // overlapping parts, so the translucent corners join cleanly.
+    const material = new THREE.MeshBasicMaterial({ color: 0xd23cc8, transparent: true, opacity: 0.8, side: THREE.DoubleSide });
+    const rect = (path, hw, hh) => path.moveTo(-hw, -hh).lineTo(hw, -hh).lineTo(hw, hh).lineTo(-hw, hh).lineTo(-hw, -hh);
+    const frame = new THREE.Shape();
+    rect(frame, 20.75, 12.75);
+    const hole = new THREE.Path();
+    rect(hole, 19.25, 11.25);
+    frame.holes.push(hole);
+    const gateGeometry = new THREE.ShapeGeometry(frame);
     for (let along = -200; along > a.aim_point_m - 9260; along -= 400) {
-      const gate = new THREE.Group();
-      const top = bar(40, 1.5), bottom = bar(40, 1.5), left = bar(1.5, 24), right = bar(1.5, 24);
-      top.position.y = 12;
-      bottom.position.y = -12;
-      left.position.x = -20;
-      right.position.x = 20;
-      gate.add(top, bottom, left, right);
+      const gate = new THREE.Mesh(gateGeometry, material);
       gate.position.copy(at(along));
       gate.rotation.y = -h; // face along the approach
       this.glidePath.add(gate);
