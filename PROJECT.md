@@ -588,6 +588,12 @@ owner before work can start.
 
 ### Viewer
 
+- [x] **Preview the selected flight** (2026-10-07): choosing a flight (or changing the
+  seed) shows where it starts, before Play: runway, glide path or pattern, sky, wind,
+  instruments and the task instructions. Protocol: client `preview` (the fields of a
+  `play`) -> server `preview` with the hello and the starting state (live/manual: the
+  reset state, commands null; replay: the first row); nothing is streamed or recorded,
+  and previews are ignored during a flight. Seeking on a previewed replay starts it there.
 - [x] **Procedural scenery for visual cues** (2026-10-04): seeded, offline, visual only
   (physics still flies over flat ground at 0 m). `flightsim/viewer/terrain.js`: hills
   up to ~350 m, valleys, lakes and the airfield at 0 m (consistent with the physics),

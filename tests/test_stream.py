@@ -356,3 +356,30 @@ def test_replays_carry_the_logged_episode_targets(tmp_path):
     path = write_log(tmp_path / "r.parquet", live._env.episode_result(), live._env.provenance())
     replay = ReplaySource(path)
     assert replay.targets == live.targets and replay.approach is None and replay.takeoff is None
+
+
+def test_preview_shows_the_starting_state_without_streaming(logged_episode, env_cfg, gains):
+    data_dir, path = logged_episode
+
+    async def body(port):
+        async with connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            rel = path.relative_to(data_dir).as_posix()
+            await ws.send(json.dumps({"type": "preview", "id": 7, "source": "replay", "path": rel}))
+            replay = json.loads(await ws.recv())
+            await ws.send(json.dumps({"type": "preview", "id": 8, "source": "live", "seed": 3}))
+            live = json.loads(await ws.recv())
+            with pytest.raises(TimeoutError):  # nothing is streamed after a preview
+                await asyncio.wait_for(ws.recv(), 0.5)
+            await ws.send(json.dumps({"type": "play", "source": "live", "seed": 3, "speed": 64}))
+            played = await _collect(ws)
+            return replay, live, played
+
+    replay, live, (hello, frames, end) = _with_server(data_dir, env_cfg, gains, body)
+    first = next(ReplaySource(path).frames())[1]
+    assert replay["type"] == "preview" and replay["id"] == 7 and replay["hello"]["source"] == "replay"
+    assert replay["row"] == first
+    assert live["id"] == 8 and live["hello"]["source"] == "live" and live["hello"]["targets"] is not None
+    state_cols = [c for c in first if not c.startswith("cmd_")]
+    assert {c: live["row"][c] for c in state_cols} == {c: first[c] for c in state_cols}  # same seed, same start
+    assert all(live["row"][c] is None for c in first if c.startswith("cmd_"))
+    assert hello["type"] == "hello" and frames[0] == first and end["reason"] == "finished"  # play is unaffected

@@ -43,6 +43,10 @@ class Source:
     def frames(self) -> Iterator[tuple[float, dict]]:
         raise NotImplementedError
 
+    def first_frame(self) -> dict:
+        """The state the flight starts from, without running it (previews)."""
+        raise NotImplementedError
+
 
 def _logged_episode(meta: dict, seed: int | None):
     """The task environment of a log, reset with its seed (None if the config cannot be
@@ -97,6 +101,9 @@ class ReplaySource(Source):
         frames() is being iterated."""
         self._next = min(bisect.bisect_left(self._times, float(t_s) - 1e-9), max(0, len(self._rows) - 1))
 
+    def first_frame(self) -> dict:
+        return self._rows[min(self._next, len(self._rows) - 1)]
+
     def frames(self) -> Iterator[tuple[float, dict]]:
         while self._next < len(self._rows):
             row = self._rows[self._next]
@@ -125,6 +132,11 @@ class LiveSource(Source):
         self.takeoff = self._env.runway_info() if hasattr(self._env, "runway_info") else None
         self.visual = self._env.visual_conditions()
         self._config_hash = env_cfg.config_hash
+
+    def first_frame(self) -> dict:
+        """The reset state; its commands are null (the policy has not chosen any yet)."""
+        states, _ = self._env.recorded
+        return frame_row(0, self.run_id, self._seed, self._config_hash, states[0], None)
 
     def frames(self) -> Iterator[tuple[float, dict]]:
         env, emitted = self._env, 0

@@ -93,6 +93,7 @@ class Session:
         self.paused = asyncio.Event()  # set = paused
         self._rebase = True
         self._seeked = False
+        self._preview_seq = 0
 
     def _open(self, msg: dict) -> Source:
         if msg.get("source") == "replay":
@@ -123,7 +124,21 @@ class Session:
         if kind == "list":
             logs = await asyncio.to_thread(list_logs, self.cfg.data_dir)  # can take a while for big batches
             await self.ws.send(encode({"type": "logs", "logs": logs}))
+        elif kind == "preview":
+            # The starting state of a flight, without starting it: built like "play", only
+            # the hello and the first frame are sent. Ignored during a flight; a newer
+            # preview (or a play) supersedes one still being built.
+            if self.task and not self.task.done():
+                return
+            self._preview_seq += 1
+            seq = self._preview_seq
+            source = await asyncio.to_thread(self._open, msg)
+            if seq != self._preview_seq or (self.task and not self.task.done()):
+                return
+            row = await asyncio.to_thread(source.first_frame)
+            await self.ws.send(encode({"type": "preview", "id": msg.get("id"), "hello": self._hello(source), "row": row}))
         elif kind == "play":
+            self._preview_seq += 1  # drop a preview still being built
             await self.stop()
             source = await asyncio.to_thread(self._open, msg)
             self.source = source
@@ -188,14 +203,17 @@ class Session:
             except ConnectionClosed:
                 pass
 
-    async def _play(self, source: Source) -> None:
-        await self.ws.send(encode({
+    def _hello(self, source: Source) -> dict:
+        return {
             "type": "hello", "protocol": PROTOCOL_VERSION, "source": source.source, "run_id": source.run_id,
             "aircraft": source.aircraft, "sim_rate_hz": source.sim_rate_hz, "frame_rate_hz": self.cfg.frame_rate_hz,
             "duration_s": source.duration_s, "targets": source.targets, "meta": source.meta,
             "pilot": source.pilot_name, "approach": source.approach, "takeoff": source.takeoff, "visual": source.visual,
             "pattern": self.cfg.pattern_info() if (source.approach or {}).get("task") == "circuit" else None,
-        }))  # fmt: skip
+        }  # fmt: skip
+
+    async def _play(self, source: Source) -> None:
+        await self.ws.send(encode(self._hello(source)))
         frame_dt = 1.0 / self.cfg.frame_rate_hz
         next_t = None
         wall0 = sim0 = 0.0

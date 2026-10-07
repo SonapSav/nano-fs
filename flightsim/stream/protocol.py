@@ -15,6 +15,9 @@ Server -> client messages (JSON):
    "visual" ({"time_of_day", "visibility", "clouds", "cloud_seed"}: the flight's viewer
              conditions, envs visual_conditions; null when unknown: viewer defaults)}
   {"type": "frame", "row": {<log column>: value, ...}}
+  {"type": "preview", "id", "hello": {<hello message>}, "row": {<log column>: value, ...}}
+      Answer to a client "preview": the flight's hello and its starting state (live and
+      manual: the reset state, commands null; replay: the first row), nothing streamed.
   {"type": "end", "reason": "finished" | "landed" | "climbed" | "stopped" | "terminated:<why>",
    "landing"?: {...}, "takeoff"?: {...}}
       landing: the approach task's result (touchdown point, sink rate, ...), approach only
@@ -32,6 +35,10 @@ Client -> server messages:
   {"type": "play", "source": "manual", "conditions": "calm" | "windy" | "approach" | "approach_crosswind" | "takeoff"
    | "takeoff_crosswind" | "circuit" | "circuit_crosswind", "seed": 0, "record": true}
       (speed is capped at 1)
+  {"type": "preview", "id"?, <the fields of a "play" message>}
+      The starting state of that flight without starting it (shown when a flight is
+      selected). Ignored while a flight streams; a newer preview or a play supersedes one
+      still being prepared. "id" is echoed back.
   {"type": "input", "elevator", "aileron", "rudder", "throttle", "flaps"?, "pitch_trim"?, "brake"?}
       Manual flights only. Stick and pedals in [-1, 1] relative to trim (elevator +
       = push, nose down; rudder + = nose left, the JSBSim convention), throttle and

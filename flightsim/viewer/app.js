@@ -159,11 +159,13 @@ function updateSourceOptions() {
   els.seed.hidden = els.seedLabel.hidden = !isLive(v) && !isManual(v);
   els.record.hidden = els.recordLabel.hidden = !isManual(v);
   els.speed.disabled = isManual(v); // manual flights run in real time
+  requestPreview();
 }
 
 function connect() {
   ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
   ws.addEventListener("open", () => {
+    lastPreviewKey = null; // preview again after a reconnect
     say("Fly the task yourself, watch the autopilot fly it, or replay a recorded flight. Then press Play.");
     send({ type: "list" });
   });
@@ -200,6 +202,34 @@ function stopInput() {
   els.hint.textContent = VIEW_HINT;
 }
 
+// Set the scene up for a flight (its hello message): targets, runway, pattern, sky,
+// readouts and the task instructions. Used for playback and for previews.
+function applyHello(msg) {
+  session = msg;
+  latest = null;
+  pendingSeek = null;
+  updateSeekable();
+  scene.reset();
+  scene.setTargets(msg.targets);
+  scene.setApproach(msg.approach ?? null);
+  scene.setPattern(msg.pattern ?? null);
+  applySky();
+  circuitClimbed = false;
+  if (msg.takeoff) scene.windsock.setWind(msg.takeoff.wind?.from_deg ?? 0, (msg.takeoff.wind?.u20_mps ?? 0) * 1.943844);
+  showApproachRows(msg.approach ? "approach" : msg.takeoff ? "takeoff" : null);
+  const pilotName = { pid: "PID", lqr: "LQR", approach: "Approach", takeoff: "Takeoff", circuit: "Circuit" }[msg.pilot ?? "pid"] ?? msg.pilot;
+  els.run.textContent = `${msg.source === "live" ? `${pilotName} autopilot` : { manual: "You are flying", replay: "Replay" }[msg.source]} ${msg.run_id}`;
+  say(msg.source === "manual"
+    ? msg.approach?.task === "circuit"
+      ? "Take off, climb straight ahead past the runway end, turn left at 700 ft, fly downwind at 1000 ft about 1 nm north, descend from abeam the threshold, turn base at 45 degrees and land on 09." + (msg.approach.wind ? " Crosswind and gusts." : "")
+      : msg.approach
+      ? "Follow the glide path to runway 09 (ahead), flare and land main wheels first." + (msg.approach.wind ? " Crosswind: crab on the approach, then line up with rudder and hold a wing low into the wind." : "")
+      : msg.takeoff
+        ? "Full throttle (W), keep the centreline with Z/X, lift the nose wheel at 55 kt and climb at 75 kt to 1000 ft." + (msg.takeoff.wind ? " Crosswind: aileron into the wind on the roll; after lift-off let the nose turn into the wind." : "")
+        : "Fly to the magenta altitude and heading bugs."
+    : "");
+}
+
 function handle(msg) {
   switch (msg.type) {
     case "logs":
@@ -215,30 +245,20 @@ function handle(msg) {
       }
       break;
     case "hello":
-      session = msg;
-      latest = null;
-      pendingSeek = null;
-      updateSeekable();
-      scene.reset();
-      scene.setTargets(msg.targets);
-      scene.setApproach(msg.approach ?? null);
-      scene.setPattern(msg.pattern ?? null);
-      applySky();
-      circuitClimbed = false;
-      if (msg.takeoff) scene.windsock.setWind(msg.takeoff.wind?.from_deg ?? 0, (msg.takeoff.wind?.u20_mps ?? 0) * 1.943844);
-      showApproachRows(msg.approach ? "approach" : msg.takeoff ? "takeoff" : null);
-      const pilotName = { pid: "PID", lqr: "LQR", approach: "Approach", takeoff: "Takeoff", circuit: "Circuit" }[msg.pilot ?? "pid"] ?? msg.pilot;
-      els.run.textContent = `${msg.source === "live" ? `${pilotName} autopilot` : { manual: "You are flying", replay: "Replay" }[msg.source]} ${msg.run_id}`;
-      say(msg.source === "manual"
-        ? msg.approach?.task === "circuit"
-          ? "Take off, climb straight ahead past the runway end, turn left at 700 ft, fly downwind at 1000 ft about 1 nm north, descend from abeam the threshold, turn base at 45 degrees and land on 09." + (msg.approach.wind ? " Crosswind and gusts." : "")
-          : msg.approach
-          ? "Follow the glide path to runway 09 (ahead), flare and land main wheels first." + (msg.approach.wind ? " Crosswind: crab on the approach, then line up with rudder and hold a wing low into the wind." : "")
-          : msg.takeoff
-            ? "Full throttle (W), keep the centreline with Z/X, lift the nose wheel at 55 kt and climb at 75 kt to 1000 ft." + (msg.takeoff.wind ? " Crosswind: aileron into the wind on the roll; after lift-off let the nose turn into the wind." : "")
-            : "Fly to the magenta altitude and heading bugs."
-        : "");
+      applyHello(msg);
       setPlaying(true);
+      break;
+    case "preview":
+      // The selected flight's starting position, before Play (ignored once a flight runs
+      // or when a newer selection was made).
+      if (msg.id !== previewId || !els.stop.disabled) break;
+      applyHello(msg.hello);
+      if (msg.hello.source === "replay") lastReplay = els.source.value; // seeking on the bar starts it there
+      els.run.textContent = `Starting position of ${msg.hello.run_id}`;
+      say(`${els.message.textContent} Press Play to start.`.trim());
+      latest = msg.row;
+      scene.update(latest);
+      dirty = true;
       break;
     case "frame":
       // After a seek, start the trail at the new position (frames sent before the seek may still arrive).
@@ -292,18 +312,37 @@ function handle(msg) {
   }
 }
 
-function play() {
-  sound.unlock(); // a click: browsers allow audio from here on
+// The play request for the selected flight (also sent as a preview).
+function flightRequest() {
   const speed = Number(els.speed.value);
   const seed = Number(els.seed.value) || 0;
   const v = els.source.value;
-  if (isManual(v)) send({ type: "play", source: "manual", conditions: MANUAL_CONDITIONS[v], seed, record: els.record.checked });
-  else if (isLive(v)) send({ type: "play", source: "live", autopilot: LIVE_AUTOPILOT[v], seed, speed });
-  else {
-    lastReplay = v;
-    send({ type: "play", source: "replay", path: v, speed });
-  }
+  if (isManual(v)) return { source: "manual", conditions: MANUAL_CONDITIONS[v], seed, record: els.record.checked };
+  if (isLive(v)) return { source: "live", autopilot: LIVE_AUTOPILOT[v], seed, speed };
+  return v ? { source: "replay", path: v, speed } : null;
+}
+
+function play() {
+  sound.unlock(); // a click: browsers allow audio from here on
+  const req = flightRequest();
+  if (!req) return;
+  previewId++; // a preview still on its way is stale now
+  if (req.source === "replay") lastReplay = req.path;
+  send({ type: "play", ...req });
   document.activeElement?.blur(); // so the arrow keys fly instead of changing the menu
+}
+
+// Preview: show where the selected flight starts (seed included) without starting it.
+let previewId = 0;
+let lastPreviewKey = null;
+function requestPreview() {
+  if (!els.stop.disabled) return; // a flight is running
+  const req = flightRequest();
+  if (!req) return;
+  const key = JSON.stringify([req.source, req.conditions, req.autopilot, req.path, req.source === "replay" ? null : req.seed]);
+  if (key === lastPreviewKey) return;
+  lastPreviewKey = key;
+  send({ type: "preview", id: ++previewId, ...req });
 }
 
 // Seeking (replays only): click or drag the progress bar, or use the arrow keys on it.
@@ -427,6 +466,7 @@ els.pause.addEventListener("click", togglePause);
 els.stop.addEventListener("click", () => send({ type: "stop" }));
 els.speed.addEventListener("change", () => send({ type: "speed", value: Number(els.speed.value) }));
 els.source.addEventListener("change", updateSourceOptions);
+els.seed.addEventListener("change", requestPreview);
 sourceFilter.addEventListener("input", () => populateSources());
 els.source.addEventListener("focus", () => send({ type: "list" }));
 // Chase or cockpit view (C key or the button); remembered in this browser.
