@@ -853,8 +853,20 @@ Goal (owner, 2026-10-08): build up from correct coordinates to GPS navigation. S
   a target due true north 20 km off the origin's meridian at 38 N: bearing 000 within
   0.01 deg where the map says 0.13 deg). Runway numbers use the true heading until
   magnetic variation is modelled (real airfield step).
-- [ ] **Moving map:** the aircraft, runway, pattern and track on a map, in the panel or
-  the instruments window.
+- [x] **Moving map** (2026-10-08, plain background): "Map window" opens `map.html`, its
+  own window (e.g. a third monitor), fed like the instruments window over the browser
+  channel (no server change; it never sends "alive", so the viewer keeps its own panel).
+  North up or track up (N), range 0.5-20 nm (+/- or the wheel), remembered per browser;
+  range rings, the runway with its numbers (the task's, else the airfield's 09/27), the
+  extended centreline (runway tasks), the circuit's pattern legs, the flown track (a point
+  a second, cleared on a seek or a new flight), a one-minute predicted path curved by the
+  yaw rate (at most half a turn), the aircraft, a true-north arrow, and a GPS line (GS,
+  track, distance and bearing to the target). Other keys are forwarded to the viewer.
+  `viewer/map.js` (geometry tested with Node), `mapwindow.js`; the pattern geometry moved
+  to `patternPath.js` (no three.js). Checked headless with a circuit autopilot flight.
+  - [ ] Terrain background: lakes, rivers, villages and roads, forests, hills shaded by
+    height, from the same deterministic terrain (map images per tile in the worker).
+  - [ ] Optional corner inset in the 3D view (reusing `drawMap`).
 - [ ] **Waypoint navigation tasks:** fly a route of waypoints (cross-country legs);
   config-defined waypoints in latitude/longitude, an autopilot and RL-ready task.
 - [ ] **Real airfield placement:** the origin at a real airfield (runway true heading,

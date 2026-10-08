@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moving map</title>
+<link rel="stylesheet" href="./vendor/fonts/barlow-condensed.css">
+<link rel="stylesheet" href="./theme.css">
+<style>
+  html, body { margin: 0; height: 100%; background: #1d2a22; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100dvh; touch-action: none; }
+  #status { position: fixed; left: 14px; top: 40px; color: var(--dim); font: 500 16px var(--font); }
+  #status:empty { display: none; }
+</style>
+</head>
+<body>
+  <canvas id="map" aria-label="Moving map"></canvas>
+  <div id="status" role="status">Waiting for the flight viewer window…</div>
+  <script type="module" src="./mapwindow.js"></script>
+</body>
+</html>

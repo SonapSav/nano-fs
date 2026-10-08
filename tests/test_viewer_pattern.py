@@ -31,7 +31,8 @@ def drawn(tmp_path_factory):
     for f in ("three.module.js", "three.core.js"):
         shutil.copy(VIEWER / "vendor" / f, three / f)
     (three / "package.json").write_text('{"name":"three","type":"module","exports":{".":"./three.module.js"}}')
-    shutil.copy(VIEWER / "pattern.js", d / "pattern.js")
+    for f in ("pattern.js", "patternPath.js"):
+        shutil.copy(VIEWER / f, d / f)
     script = f"""
 const {{ patternPath, buildPattern }} = await import("./pattern.js");
 const a = {json.dumps(a)}, p = {json.dumps(pattern)};

@@ -9,8 +9,10 @@
 // turn point depends on the climb, so the upwind leg is drawn to an indicative point.
 
 import * as THREE from "three";
+import { patternPath } from "./patternPath.js";
 
-export const UPWIND_PAST_END_M = 600; // indicative: where the crosswind turn usually happens
+export { UPWIND_PAST_END_M, patternPath } from "./patternPath.js";
+
 const COLOR = 0xd23cc8;
 
 // Fade out within ~200 m of the camera: flying along the pattern, the ribbon passes right
@@ -25,24 +27,6 @@ function fadeNear(material) {
       .replace("#include <opaque_fragment>", "diffuseColor.a *= smoothstep(60.0, 220.0, vEyeDist);\n#include <opaque_fragment>");
   };
   return material;
-}
-
-// Pattern path as [along, cross, height] points, and the marker points.
-export function patternPath(a, p) {
-  const d = p.downwind_offset_m, top = p.height_m, turn = p.height_m - p.crosswind_below_m;
-  const tan = Math.tan((a.glide_path_deg * Math.PI) / 180), aim = a.aim_point_m;
-  const corner = a.length_m + UPWIND_PAST_END_M;
-  const descent = (remaining) => Math.min(top, remaining * tan);
-  const points = [
-    [a.length_m, 0, turn / 2], // past the departure end, climbing (indicative)
-    [corner, 0, turn], // turn crosswind within 300 ft of pattern altitude
-    [corner, -d, top], // turn downwind at pattern altitude
-    [0, -d, top], // abeam the threshold: begin the descent
-    [-d, -d, descent(2 * d + aim)], // base turn, 45 degrees from the threshold
-    [-d, 0, descent(d + aim)], // turn final
-    [aim, 0, 0], // aim point
-  ];
-  return { points, markers: { abeam: points[3], base: points[4] } };
 }
 
 // A group holding the ribbon and markers, in world coordinates (x east, y up, z south).

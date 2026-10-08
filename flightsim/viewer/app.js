@@ -720,6 +720,9 @@ setInterval(() => {
 $("panel-window").addEventListener("click", () => {
   window.open("panel.html", "flightsim-instruments", "popup=yes,width=1280,height=560");
 });
+$("map-window").addEventListener("click", () => {
+  window.open("map.html", "flightsim-map", "popup=yes,width=900,height=900");
+});
 
 // Performance readout (P), remembered in this browser: drawn frames per second, the
 // slowest frame and refreshes missed over the last 10 s, the server's frame messages, and
