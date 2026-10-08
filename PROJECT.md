@@ -897,7 +897,22 @@ Goal (owner, 2026-10-08): build up from correct coordinates to GPS navigation. S
   Trials on seeds 1000-1019: calm 20/20, cross-track RMS 6.6 m, max 26 m (before the turn
   arcs: 90 / 810 m); wind 20/20, RMS 15 m, max 55 m (worst 125 m). Tests:
   `tests/test_navigation.py`.
-  - [ ] 1000-seed batches, calm and wind (seeds 0-999).
+  - [x] 1000-seed batches, calm and wind (seeds 0-999), 2026-10-09 (b2cd148, ada4e86):
+    - calm (batch 7cf608af6b4c): 1000/1000 routes completed; cross-track RMS 7.1 m mean
+      (max 11.8), max off track 27 m mean, 42 m at the 99th percentile, 46 m worst;
+      altitude RMS 0.8 m.
+    - wind and turbulence (batch 55656f9dbdec): 1000/1000 completed; cross-track RMS
+      13.3 m mean, max off track 43 m median, 141 m at the 99th percentile, 27 routes over
+      100 m and 4 over 200 m (all moderate turbulence), 398 m worst; altitude RMS 3.9 m.
+    - The first run in wind found routes up to 2.2 km off track: sharp turns back towards
+      the previous leg made the next turn look due at once (legs skipped), and arcs were
+      sized from a gusty wind estimate. Fixed: no leg change during a turn arc, a leg
+      shared between its two turns only when they would overlap, turns planned per flight
+      from trim TAS + the steady wind (sent with the route to the viewer).
+  - [ ] Route turns in moderate turbulence: the worst cases are gusts at the start of a
+    turn (seed 207: airspeed 47 -> 63 m/s, bank held at the autopilot's 25 deg limit,
+    400 m wide). A higher bank limit for route flying (e.g. 30 deg) is a candidate; tune
+    on seeds 1000-1999 only.
   - [x] Viewer (2026-10-08): the hello carries the route; `viewer/nav.js` (a port of the
     sequencing, turn arcs and quantities, fed every frame; after a seek it starts from
     the nearest leg; a test feeds a recorded autopilot flight to both and gets the same
