@@ -140,6 +140,7 @@ class EnvConfig:
     approach: ApproachConfig | None = None  # set: the approach and landing task
     takeoff: "TakeoffConfig | None" = None  # set: the takeoff and climb-out task
     circuit: "CircuitConfig | None" = None  # set (with `approach`): takeoff, traffic pattern, landing
+    route: "RouteConfig | None" = None  # set: the navigation task (fly a route of waypoints)
     # Viewer conditions (visual only, never the physics): time_of_day, visibility, clouds;
     # each "auto" unless set (see VISUAL_OPTIONS). Part of the config, so replays match.
     visual: tuple[tuple[str, str], ...] = ()
@@ -223,6 +224,7 @@ def env_config_from_raw(raw: dict) -> EnvConfig:
         approach=_parse_approach(raw.get("approach")),
         takeoff=_parse_takeoff(raw.get("takeoff")),
         circuit=_parse_circuit(raw.get("circuit")),
+        route=_parse_route(raw.get("route"), geodesy),
         visual=_parse_visual(raw.get("visual")),
         config_hash=config_hash(raw),
         config_json=canonical_json(raw),
@@ -249,6 +251,25 @@ class TakeoffConfig:
     max_ground_s: float  # still on the ground this long after the start: no_liftoff
     reward: dict  # weights and scales, see configs/envs/takeoff.yaml
     wind: dict | None = None  # low-altitude wind, as in the approach task
+
+
+@dataclass(frozen=True)
+class RouteConfig:
+    """Navigation task (envs/navigation.py): fly a route of waypoints (envs/route.py) at a
+    cruise altitude. Either named waypoints (map metres, converted from latitude/longitude
+    when given that way) or a route drawn per seed (`random`)."""
+
+    name: str
+    waypoints: tuple | None  # of envs.route.Waypoint; None: random
+    random: dict | None  # {waypoints: [min, max], leg_m: [min, max], turn_deg: [min, max]}
+    start_north_m: float
+    start_east_m: float
+    start_course_rad: float | None  # first leg's course for random routes; None: drawn per seed
+    randomize_heading_rad: float  # start heading: the first leg's course +/- this
+    cruise_alt_m: float  # MSL
+    turn_bank_rad: float  # bank the fly-by turn anticipation assumes
+    max_xtk_m: float  # further off the active leg: failure (off_course)
+    reward: dict  # xtk_scale_m, w_xtk, track_scale_deg, w_track, completion_bonus
 
 
 # Visual conditions a task config may set (viewer only). "auto": time and visibility take
@@ -294,6 +315,39 @@ def _parse_circuit(c: dict | None) -> CircuitConfig | None:
         min_height_m=float(c["min_height_ft"]) * 0.3048,
         lost_distance_m=float(lim["lost_distance_m"]),
         max_ground_s=float(lim["max_ground_s"]),
+    )
+
+
+def _parse_route(r: dict | None, geodesy) -> "RouteConfig | None":
+    if r is None:
+        return None
+    from flightsim.envs.route import Waypoint
+
+    waypoints = None
+    if r.get("waypoints"):
+        waypoints = []
+        for k, w in enumerate(r["waypoints"]):
+            if "lat_deg" in w:
+                north, east = geodesy.to_map(math.radians(w["lat_deg"]), math.radians(w["lon_deg"]))
+            else:
+                north, east = float(w["north_m"]), float(w["east_m"])
+            waypoints.append(Waypoint(str(w.get("name", f"WP{k + 1}")), north, east, bool(w.get("fly_over", False))))
+        waypoints = tuple(waypoints)
+    elif not r.get("random"):
+        raise ValueError("route needs `waypoints` or `random`")
+    start = r.get("start", {})
+    return RouteConfig(
+        name=str(r.get("name", "route")),
+        waypoints=waypoints,
+        random=dict(r["random"]) if not waypoints else None,
+        start_north_m=float(start.get("north_m", 0.0)),
+        start_east_m=float(start.get("east_m", 0.0)),
+        start_course_rad=math.radians(r["start_course_deg"]) if r.get("start_course_deg") is not None else None,
+        randomize_heading_rad=math.radians(float(r.get("randomize_heading_deg", 0.0))),
+        cruise_alt_m=float(r["cruise_alt_ft"]) * 0.3048,
+        turn_bank_rad=math.radians(float(r.get("turn_bank_deg", 25.0))),
+        max_xtk_m=float(r.get("max_xtk_nm", 2.0)) * 1852.0,
+        reward=dict(r.get("reward", {})),
     )
 
 

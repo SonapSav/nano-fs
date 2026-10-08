@@ -1,0 +1,11 @@
+# Navigation with wind and turbulence: the windy task's distributions (MIL-F-8785C 3.7.2,
+# see altitude_heading_hold_wind.yaml): steady wind 0-10 m/s from any direction, light or
+# moderate turbulence 75 % of the time.
+base: navigation.yaml
+
+wind:
+  steady_speed_mps: [0, 10]
+  turbulence:
+    scale_length_m: 533.4
+    sigma_mps: {none: 0.0, light: 1.524, moderate: 3.048, severe: 6.4}
+    probability: {none: 0.25, light: 0.45, moderate: 0.30}

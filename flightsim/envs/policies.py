@@ -135,3 +135,26 @@ class CircuitPolicy:
     def __call__(self, obs: np.ndarray, info: dict) -> np.ndarray:
         u = self._autopilot(info["state"], info["on_ground"], info["touched_down"], info.get("nose_wheel_down", False))
         return controls_to_action(u, self._names)
+
+
+class RoutePolicy:
+    """The route autopilot (lateral navigation over the PID loops) for the navigation task."""
+
+    name = "route"
+
+    def __init__(self, gains, control_rate_hz: float):
+        self.gains = gains
+        self.dt_s = 1.0 / control_rate_hz
+
+    def reset(self, info: dict) -> None:
+        from flightsim.control.route import RouteAutopilot
+        from flightsim.world.geo import Geodesy
+
+        if "route" not in info:
+            raise ValueError("the route autopilot needs the navigation task")
+        geo = Geodesy(**info["route"]["geodesy"])
+        self._autopilot = RouteAutopilot(self.gains, info["trim"], info["trim_state"], info["targets"], geo, self.dt_s)
+        self._names = info["action_names"]
+
+    def __call__(self, obs: np.ndarray, info: dict) -> np.ndarray:
+        return controls_to_action(self._autopilot(info["state"], info["nav"], info["targets"]), self._names)

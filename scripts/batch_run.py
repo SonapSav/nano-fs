@@ -48,6 +48,7 @@ def main() -> None:
     parser.add_argument("--approach-autopilot", default="configs/approach_autopilot.yaml", help="approach autopilot gains (policy approach)")
     parser.add_argument("--takeoff-autopilot", default="configs/takeoff_autopilot.yaml", help="takeoff autopilot gains (policy takeoff)")
     parser.add_argument("--circuit-autopilot", default="configs/circuit_autopilot.yaml", help="circuit autopilot (policy circuit)")
+    parser.add_argument("--route-autopilot", default="configs/route_autopilot.yaml", help="route autopilot (policy route)")
     parser.add_argument("--rl-model", help="trained model directory, e.g. data/rl/<run_id>/best (policy rl)")
     parser.add_argument("--policy-set", action="append", default=[], metavar="KEY=VALUE",
                         help="override a policy config value; part of the batch id")
@@ -72,6 +73,12 @@ def main() -> None:
         if args.policy_set:
             raise SystemExit("--policy-set is not supported for the circuit autopilot; edit its files")
         policy_raw = load_circuit_raw(args.circuit_autopilot)
+    elif args.policy == "route":
+        from flightsim.control.route import load_route_raw
+
+        policy_raw = load_route_raw(args.route_autopilot)
+        if args.policy_set:
+            policy_raw = {**policy_raw, **parse_overrides(args.policy_set)}
     else:
         policy_path = {"pid": args.autopilot, "lqr": args.lqr, "approach": args.approach_autopilot, "takeoff": args.takeoff_autopilot}.get(args.policy)
         policy_raw = load_raw(policy_path, parse_overrides(args.policy_set)) if policy_path else None
@@ -139,6 +146,27 @@ def main() -> None:
             print(f"  to 50 ft m:                 {span('fifty_ft_distance_m')}")
             print(f"  max centreline offset m:    {span('ground_max_cross_m')}")
             print(f"  skips: {sum(r['skips'] for r in rows)}")
+
+
+    if rows and rows[0]["route_completed"] is not None:  # navigation task: the routes
+        done = [r for r in rows if r["route_completed"]]
+        fails = {}
+        for r in rows:
+            if not r["route_completed"]:
+                why = r["termination_reason"] or "timeout"
+                fails[why] = fails.get(why, 0) + 1
+        print(f"\nroutes: {len(done)}/{len(rows)} completed" + (f"; failures {fails}" if fails else ""))
+        if done:
+            def rspan(key, scale=1.0):
+                v = [r[key] * scale for r in done if r[key] is not None]
+                return f"mean {sum(v) / len(v):.1f}, range {min(v):.1f} .. {max(v):.1f}" if v else "n/a"
+            print(f"  legs:                       {rspan('route_legs')}")
+            print(f"  length km:                  {rspan('route_length_m', 0.001)}")
+            print(f"  time min:                   {rspan('route_time_s', 1 / 60)}")
+            print(f"  cross-track RMS m:          {rspan('xtk_rms_m')}")
+            print(f"  cross-track max m:          {rspan('xtk_max_m')}")
+            print(f"  altitude RMS m:             {rspan('alt_rms_m')}")
+
 
 if __name__ == "__main__":
     main()

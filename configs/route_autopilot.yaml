@@ -1,0 +1,7 @@
+# Route autopilot (flightsim/control/route.py): lateral navigation on top of the PID
+# autopilot (its file, inlined when loaded). Project choices, tuned on seeds 1000-1999.
+inner: autopilot.yaml
+lookahead_s: 20                # look-ahead distance = ground speed x this (about 1 km at 100 kt)
+min_lookahead_m: 500
+max_intercept_deg: 30          # largest intercept angle toward the leg
+drift_time_constant_s: 5       # crab angle filter

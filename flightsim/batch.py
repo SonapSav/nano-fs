@@ -33,14 +33,14 @@ from flightsim.envs.config import env_config_from_raw
 from flightsim.envs.evaluate import run_episode
 from flightsim.envs.policies import LQRPolicy, PIDPolicy, TrimHoldPolicy
 
-POLICIES = ("pid", "lqr", "rl", "approach", "takeoff", "circuit", "trim_hold")
-BATCH_FORMAT = 7  # 2: lqr policy, envelope metrics; 3: comfort_cost; 4: code_version in manifest; 5: landing columns; 6: drift, rollout; 7: takeoff columns
+POLICIES = ("pid", "lqr", "rl", "approach", "takeoff", "circuit", "route", "trim_hold")
+BATCH_FORMAT = 8  # 2: lqr policy, envelope metrics; 3: comfort_cost; 4: code_version in manifest; 5: landing columns; 6: drift, rollout; 7: takeoff columns; 8: route columns
 
 
 def make_manifest(env_raw: dict, policy: str, policy_raw: dict | None, seeds: list[int], logs: bool) -> dict:
     if policy not in POLICIES:
         raise ValueError(f"unknown policy {policy!r}; choose from {POLICIES}")
-    if policy in ("pid", "lqr", "rl", "approach", "takeoff", "circuit") and policy_raw is None:
+    if policy in ("pid", "lqr", "rl", "approach", "takeoff", "circuit", "route") and policy_raw is None:
         raise ValueError(f"the {policy} policy needs its config")
     env_cfg = env_config_from_raw(env_raw)
     manifest = {
@@ -85,6 +85,11 @@ def make_policy(policy: str, policy_raw: dict | None, cfg):
         from flightsim.envs.policies import CircuitPolicy
 
         return CircuitPolicy(circuit_gains_from_raw(policy_raw), cfg.control_rate_hz)
+    if policy == "route":
+        from flightsim.control.route import route_gains_from_raw
+        from flightsim.envs.policies import RoutePolicy
+
+        return RoutePolicy(route_gains_from_raw(policy_raw), cfg.control_rate_hz)
     if policy == "rl":
         from flightsim.rl.policy import load_policy, model_identity  # torch only when needed
 
@@ -118,6 +123,7 @@ def _run_seed(seed: int) -> dict:
     row.update({k: v for k, v in asdict(metrics).items() if k not in ("seed", "policy")})
     row.update(_landing_columns(env))
     row.update(_takeoff_columns(env))
+    row.update(_route_columns(env))
     return row
 
 
@@ -160,6 +166,20 @@ def _takeoff_columns(env) -> dict:
     }  # fmt: skip
 
 
+ROUTE_COLUMNS = ("route_completed", "route_legs", "route_legs_done", "route_length_m", "route_time_s", "xtk_rms_m", "xtk_max_m")
+
+
+def _route_columns(env) -> dict:
+    """The navigation task's route, or nulls for other tasks."""
+    if not hasattr(env, "route_summary"):
+        return dict.fromkeys(ROUTE_COLUMNS)
+    s = env.route_summary()
+    return {
+        "route_completed": s["completed"], "route_legs": s["legs"], "route_legs_done": s["legs_done"], "route_length_m": s["length_m"],
+        "route_time_s": s["time_s"], "xtk_rms_m": s["xtk_rms_m"], "xtk_max_m": s["xtk_max_m"],
+    }  # fmt: skip
+
+
 # --- Driver -------------------------------------------------------------------------
 
 SUMMARY_SCHEMA = pa.schema(
@@ -185,6 +205,9 @@ SUMMARY_SCHEMA = pa.schema(
         ("climbed", pa.bool_()), ("takeoff_failure", pa.string()), ("liftoff_ground_roll_m", pa.float64()),
         ("liftoff_cas_mps", pa.float64()), ("liftoff_pitch_deg", pa.float64()), ("fifty_ft_distance_m", pa.float64()),
         ("ground_max_cross_m", pa.float64()), ("skips", pa.int64()),
+        # Navigation task only (null otherwise): the route as in envs/navigation.py.
+        ("route_completed", pa.bool_()), ("route_legs", pa.int64()), ("route_legs_done", pa.int64()),
+        ("route_length_m", pa.float64()), ("route_time_s", pa.float64()), ("xtk_rms_m", pa.float64()), ("xtk_max_m", pa.float64()),
     ]
 )  # fmt: skip
 

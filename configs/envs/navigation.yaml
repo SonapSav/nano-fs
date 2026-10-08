@@ -1,0 +1,29 @@
+# Navigation task: fly a route of waypoints (GPS), random per seed, in calm air.
+# Fly-by waypoints with turn anticipation planned at 20 deg bank (the autopilot may use 25,
+# so it can catch up), as a GPS navigator sequences them; the cruise altitude clears the procedural terrain (hills to ~350 m) by far.
+base: altitude_heading_hold.yaml
+episode_s: 3600                 # long routes: up to 6 legs of 15 km at ~100 kt take ~30 min
+terrain: procedural
+
+randomize:
+  alt_msl_m: 0                  # the route's cruise altitude
+  tas_mps: 5
+  heading_deg: 0
+
+route:
+  name: random
+  random:
+    waypoints: [3, 6]
+    leg_m: [5000, 15000]
+    turn_deg: [30, 150]
+  start: {north_m: 0, east_m: 0}  # overhead the airfield
+  randomize_heading_deg: 10       # start heading: the first leg's course +/- this
+  cruise_alt_ft: 3000
+  turn_bank_deg: 20             # planned bank of the turn arcs (the PID autopilot may bank 25)
+  max_xtk_nm: 2
+  reward:
+    xtk_scale_m: 200
+    w_xtk: 1.0
+    track_scale_deg: 30
+    w_track: 0.5
+    completion_bonus: 500

@@ -876,8 +876,28 @@ Goal (owner, 2026-10-08): build up from correct coordinates to GPS navigation. S
     levels. Checked headless at 0.5, 2, 5 and 20 nm. Not checked: that the map's rivers
     match the 3D view's to the metre (the port mirrors the GPU's float32 hash).
   - [ ] Optional corner inset in the 3D view (reusing `drawMap`).
-- [ ] **Waypoint navigation tasks:** fly a route of waypoints (cross-country legs);
-  config-defined waypoints in latitude/longitude, an autopilot and RL-ready task.
+- [x] **Waypoint navigation task and route autopilot** (2026-10-08; owner's choices: random
+  and named routes, fly-by by default with optional fly-over, one cruise altitude, stop at
+  the last waypoint). `envs/route.py`: routes (map metres; named waypoints may be given in
+  latitude/longitude), legs, GPS-style sequencing (fly-by turn anticipation R tan(turn/2)
+  with R from the planned bank and the turn's fastest ground speed, TAS + estimated wind;
+  fly-over, the last waypoint and turns over 150 deg when abeam) and the turn arc as part
+  of the path (desired track and cross-track error against the arc), seeded random routes
+  (3-6 legs of 5-15 km, turns 30-150 deg). `envs/navigation.py` (NavigationEnv, made for
+  configs with a `route` section): observations add cross-track error, track angle error,
+  distance to go and the next turn; reward on altitude, airspeed, cross-track and track
+  error; ends at the last waypoint (completion bonus), off course (> 2 nm), the base
+  limits or the episode time. Configs `navigation.yaml` (calm, 3000 ft, turns planned at
+  20 deg) and `navigation_wind.yaml`. Route autopilot `control/route.py` +
+  `configs/route_autopilot.yaml` (policy `route`): LNAV over the PID loops, intercept
+  atan(xtk / L) (L = 20 s of ground speed, at least 500 m, at most 30 deg), crab from the
+  filtered drift, bank feed-forward in turns. Batch rows carry route columns (format 8).
+  Trials on seeds 1000-1019: calm 20/20, cross-track RMS 6.6 m, max 26 m (before the turn
+  arcs: 90 / 810 m); wind 20/20, RMS 15 m, max 55 m (worst 125 m). Tests:
+  `tests/test_navigation.py`.
+  - [ ] 1000-seed batches, calm and wind (seeds 0-999).
+  - [ ] Viewer: route on the map, GPS desired track and cross-track error, HUD desired
+    track bug, "Fly a route" scenarios and a "Watch the route autopilot" source.
 - [ ] **Real airfield placement:** the origin at a real airfield (runway true heading,
   elevation and magnetic variation; runway numbers from magnetic heading). Ties in with
   real-world scenery (out of scope so far: needs a decision). Before a far-from-equator

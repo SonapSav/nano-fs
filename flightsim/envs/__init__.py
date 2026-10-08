@@ -5,9 +5,13 @@ from flightsim.envs.config import EnvConfig, load_env_config
 
 
 def make_env(cfg: EnvConfig, record: bool = False) -> AltitudeHeadingHoldEnv:
-    """The task a config describes: the circuit if it has a `circuit` section, approach and
+    """The task a config describes: navigation if it has a `route` section, the circuit if it has a `circuit` section, approach and
     landing if it has an `approach` section, takeoff if it has a `takeoff` section,
     otherwise altitude and heading hold."""
+    if cfg.route is not None:
+        from flightsim.envs.navigation import NavigationEnv
+
+        return NavigationEnv(cfg, record=record)
     if cfg.circuit is not None:
         from flightsim.envs.circuit import CircuitEnv
 
