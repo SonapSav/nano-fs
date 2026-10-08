@@ -36,15 +36,6 @@ NAV_OBS_SCALES = {
 }
 
 
-def turn_speed_mps(s: State) -> float:
-    """The fastest ground speed of a turn: true airspeed + the wind speed, the wind estimated
-    as ground velocity - air velocity (along the heading; sideslip and climb ignored), as a
-    GPS navigator with an air data input would. The viewer's nav.js does the same."""
-    wn = s.v_north_mps - s.tas_mps * math.cos(s.psi_rad)
-    we = s.v_east_mps - s.tas_mps * math.sin(s.psi_rad)
-    return s.tas_mps + math.hypot(wn, we)
-
-
 def _wrap_pi(a: float) -> float:
     return (a + math.pi) % (2.0 * math.pi) - math.pi
 
@@ -82,6 +73,11 @@ class NavigationEnv(AltitudeHeadingHoldEnv):
         return ic, r.cruise_alt_m, (self.route.courses[0] + conv) % (2 * math.pi)
 
     def _on_reset(self) -> None:
+        # Turns are planned for the fastest ground speed of a turn with the flight's mean
+        # wind (trim TAS + the steady wind speed), fixed for the flight as a flight
+        # management system plans with its forecast wind: free of gust noise, and the
+        # viewer gets the same value with the route.
+        self.turn_speed_mps = self.trim_state.tas_mps + self.wind["speed_mps"]
         self.route_done = False
         self._bonus_paid = False
         self._xtk_sq = self._alt_sq = 0.0
@@ -106,7 +102,7 @@ class NavigationEnv(AltitudeHeadingHoldEnv):
         s = super()._sim_step(u)
         north, east, _ = self._map_track(s)
         leg = self.navigator.active
-        self.navigator.update(north, east, math.hypot(s.v_north_mps, s.v_east_mps), s.t_s, turn_speed_mps(s))
+        self.navigator.update(north, east, math.hypot(s.v_north_mps, s.v_east_mps), s.t_s, self.turn_speed_mps)
         if self.navigator.active != leg:
             # The new leg's desired track (true) becomes the heading target.
             conv = self.cfg.geodesy.convergence_rad(s.lat_rad, s.lon_rad)
@@ -182,7 +178,8 @@ class NavigationEnv(AltitudeHeadingHoldEnv):
     def route_info(self) -> dict:
         """The route for displays and controllers (map metres; the viewer's nav.js sequences it)."""
         r = self.cfg.route
-        return {"name": r.name, **self.route.as_dict(), "turn_bank_deg": math.degrees(r.turn_bank_rad), "geodesy": self.cfg.geodesy.as_dict()}
+        return {"name": r.name, **self.route.as_dict(), "turn_bank_deg": math.degrees(r.turn_bank_rad), "turn_speed_mps": self.turn_speed_mps,
+                "geodesy": self.cfg.geodesy.as_dict()}  # fmt: skip
 
     def route_summary(self) -> dict:
         n = max(1, self._samples)

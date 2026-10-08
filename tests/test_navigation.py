@@ -108,8 +108,6 @@ def test_viewer_navigation_port_agrees():
     import shutil
     import subprocess
 
-    from flightsim.envs.navigation import turn_speed_mps
-
     node = shutil.which("node")
     if node is None:
         pytest.skip("node not installed")
@@ -123,30 +121,52 @@ def test_viewer_navigation_port_agrees():
     for s in states[::4]:  # 30 Hz, as the viewer sees frames
         n, e = geo.to_map(s.lat_rad, s.lon_rad)
         track = math.atan2(s.v_east_mps, s.v_north_mps) - geo.convergence_rad(s.lat_rad, s.lon_rad)
-        samples.append([n, e, math.hypot(s.v_north_mps, s.v_east_mps), turn_speed_mps(s), track,
-                        s.v_north_mps, s.v_east_mps, s.tas_mps, s.psi_rad])  # fmt: skip
+        samples.append([n, e, math.hypot(s.v_north_mps, s.v_east_mps), track])
     py = Navigator(route, env.cfg.route.turn_bank_rad)
     expected = []
-    for n, e, gs, ts, track, *_ in samples:
-        py.update(n, e, gs, 0.0, ts)
+    for n, e, gs, track in samples:
+        py.update(n, e, gs, 0.0, env.turn_speed_mps)
         q = py.quantities(n, e, track)
         expected.append([q["leg"], q["turning"], q["dtk_map_rad"], q["xtk_m"], py.done])
     viewer = Path(__file__).parent.parent / "flightsim" / "viewer"
     script = f"""
     const nav = await import({json.dumps((viewer / "nav.js").as_uri())});
     const route = new nav.Route({json.dumps(env.route_info())});
+    const info = {json.dumps(env.route_info())};
     const nv = new nav.Navigator(route, {env.cfg.route.turn_bank_rad});
-    const out = [], ts = [];
-    for (const [n, e, gs, tsp, track, vn, ve, tas, psi] of {json.dumps(samples)}) {{
-      ts.push(nav.turnSpeed({{ v_north_mps: vn, v_east_mps: ve, tas_mps: tas, psi_rad: psi }}) - tsp);
-      nv.update(n, e, gs, tsp);
+    const out = [];
+    for (const [n, e, gs, track] of {json.dumps(samples)}) {{
+      nv.update(n, e, gs, info.turn_speed_mps);
       const q = nv.quantities(n, e, track);
       out.push([q.leg, q.turning, q.dtkMap, q.xtk, nv.done]);
     }}
-    console.log(JSON.stringify({{ out, maxTs: Math.max(...ts.map(Math.abs)) }}));
+    console.log(JSON.stringify({{ out }}));
     """
     got = json.loads(subprocess.run([node, "--input-type=module"], input=script, capture_output=True, text=True, check=True).stdout)
-    assert got["maxTs"] < 1e-9
     assert [g[:2] + [g[4]] for g in got["out"]] == [e[:2] + [e[4]] for e in expected]  # same legs, turns, completion
     assert np.allclose([g[2:4] for g in got["out"]], [e[2:4] for e in expected], atol=1e-6)
     assert max(e[0] for e in expected) >= 2 and any(e[1] for e in expected)  # several legs and turn arcs covered
+
+
+def test_sharp_turns_on_short_legs_do_not_skip_legs():
+    """A 150 deg turn back the way the aircraft came, then another sharp turn after a short
+    leg: each turn in order, and the anticipation never more than half a leg."""
+    r = Route(0.0, 0.0, [Waypoint("A", 11000, 0), Waypoint("B", 11000 - 5200 * math.cos(math.radians(150)) * -1, 5200 * math.sin(math.radians(150))),
+                         Waypoint("C", 0, 0)])  # fmt: skip
+    nav = Navigator(r, BANK)
+    legs_seen = []
+    n, e = 0.0, 0.0
+    # Fly the legs' lines (no turns flown): the sequencing must still go 0 -> 1 -> 2 in order.
+    for leg in range(r.legs):
+        (n0, e0), (n1, e1) = r.points[leg], r.points[leg + 1]
+        for k in range(1, 1001):
+            n, e = n0 + (n1 - n0) * k / 1000, e0 + (e1 - e0) * k / 1000
+            nav.update(n, e, 61.0, 0.0, 61.0)
+            if nav.arc is not None:
+                # anticipation = distance from the arc's start to the waypoint <= half the legs
+                assert nav.arc["radius"] * math.tan(abs(r.turn_rad(nav.active - 1)) / 2) <= 0.5 * min(r.lengths[nav.active - 1], r.lengths[nav.active]) + 1e-6
+                cn, ce = nav.arc["end"]
+                nav.update(cn + 1, ce + 1, 61.0, 0.0, 61.0)  # leave the arc at its end
+            if not legs_seen or legs_seen[-1] != nav.active:
+                legs_seen.append(nav.active)
+    assert legs_seen == [0, 1, 2]

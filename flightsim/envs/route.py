@@ -8,9 +8,15 @@ bearings; true bearing = map bearing + the grid convergence (zero at the default
 Sequencing, as a GPS navigator does it:
 - fly-by waypoints (default): the next leg becomes active when the distance to go along
   the leg falls to the turn anticipation, R tan(|turn| / 2) with the turn radius
-  R = ground speed^2 / (g tan(bank)), so a turn at that bank rolls out on the next leg;
+  R = speed^2 / (g tan(bank)) (speed: the turn's fastest ground speed, true airspeed +
+  wind), so a turn at that bank rolls out on the next leg;
 - fly-over waypoints, the last one, and turns over MAX_FLY_BY_DEG: when the aircraft
   passes abeam the waypoint (distance to go along the leg <= 0).
+
+Turns never overlap: the anticipation is at most half of each leg next to the waypoint
+(the arc's radius shrinks to match), and no further leg change happens while a turn's arc
+is in progress (a sharp turn back the way the aircraft came can otherwise make the next
+turn look due at once).
 
 During a fly-by turn the path is the arc tangent to both legs with that radius (fixed at
 the leg change): desired track and cross-track error are measured against the arc until
@@ -109,19 +115,24 @@ class Navigator:
     def update(self, north_m: float, east_m: float, ground_speed_mps: float, t_s: float, turn_speed_mps: float | None = None) -> None:
         """Sequence to the next leg when due, and end a turn at the arc's end (call at
         every simulation step). `turn_speed_mps`: the ground speed the turn arcs are sized
-        for (default: the current ground speed); with wind, the fastest of the turn, true
-        airspeed + wind speed, so a turn into a tailwind stays within the planned bank."""
+        for (default: the current ground speed); with wind, the fastest of a turn, true
+        airspeed + the wind speed, so a turn into a tailwind stays within the planned bank
+        (envs/navigation.py plans it once per flight from the mean wind)."""
         r = self.route
         if self.arc is not None:
             c = r.courses[self.active]
             bn, be = self.arc["end"]
             if (north_m - bn) * math.cos(c) + (east_m - be) * math.sin(c) >= 0.0:
                 self.arc = None
-        while not self.done:
+        while not self.done and self.arc is None:
             _, _, to_go = leg_geometry(r, self.active, north_m, east_m)
             fly_by = is_fly_by(r, self.active)
             radius = turn_radius_m(turn_speed_mps if turn_speed_mps is not None else ground_speed_mps, self.turn_bank_rad)
-            anticipation = radius * math.tan(abs(r.turn_rad(self.active)) / 2.0) if fly_by else 0.0
+            anticipation = 0.0
+            if fly_by:
+                half_tan = math.tan(abs(r.turn_rad(self.active)) / 2.0)
+                anticipation = min(radius * half_tan, 0.5 * r.lengths[self.active], 0.5 * r.lengths[self.active + 1])
+                radius = anticipation / half_tan if half_tan > 0 else radius
             if to_go > anticipation:
                 return
             self.sequenced_at.append(t_s)

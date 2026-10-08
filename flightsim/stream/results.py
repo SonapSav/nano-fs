@@ -24,7 +24,7 @@ from flightsim.datalog import read_log
 from flightsim.envs import make_env
 from flightsim.envs.config import env_config_from_raw
 
-RESULTS_VERSION = 2  # 2: navigation task (routes)
+RESULTS_VERSION = 3  # 2: navigation task (routes); 3: route turns planned per flight, never overlapping
 CACHE_NAME = "flight_results.json"
 MPS_TO_FPM = 196.850394
 MPS_TO_KT = 1.943844

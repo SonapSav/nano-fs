@@ -1,6 +1,7 @@
 // Route navigation in the viewer: a port of flightsim/envs/route.py (sequencing with fly-by
-// turn anticipation and turn arcs, sized for TAS + the estimated wind as in
-// envs/navigation.py turn_speed_mps), so the GPS, the map and the HUD show the active leg,
+// turn anticipation capped at half of each adjacent leg, one turn at a time, and turn arcs
+// sized for the flight's planned turn speed, `turn_speed_mps` in the route as
+// envs/navigation.py plans it), so the GPS, the map and the HUD show the active leg,
 // desired track and cross-track error the task uses. Tests compare it with Python.
 //
 // The viewer follows a flight frame by frame (30 a second), so a leg can change up to one
@@ -49,12 +50,6 @@ export function legGeometry(route, leg, n, e) {
 
 export const turnRadius = (speed, bank) => (speed * speed) / (G0 * Math.tan(bank));
 
-// TAS + the wind estimated as ground velocity - air velocity along the heading (true frame).
-export function turnSpeed(row) {
-  const wn = row.v_north_mps - row.tas_mps * Math.cos(row.psi_rad), we = row.v_east_mps - row.tas_mps * Math.sin(row.psi_rad);
-  return row.tas_mps + Math.hypot(wn, we);
-}
-
 export class Navigator {
   constructor(route, bankRad, active = 0) {
     this.route = route;
@@ -70,11 +65,16 @@ export class Navigator {
       const c = r.courses[this.active], [bn, be] = this.arc.end;
       if ((n - bn) * Math.cos(c) + (e - be) * Math.sin(c) >= 0) this.arc = null;
     }
-    while (!this.done) {
+    while (!this.done && !this.arc) {
       const toGo = legGeometry(r, this.active, n, e)[2];
       const flyBy = r.isFlyBy(this.active);
-      const radius = turnRadius(turnSpeedMps ?? gs, this.bank);
-      const anticipation = flyBy ? radius * Math.tan(Math.abs(r.turn(this.active)) / 2) : 0;
+      let radius = turnRadius(turnSpeedMps ?? gs, this.bank);
+      let anticipation = 0;
+      if (flyBy) {
+        const halfTan = Math.tan(Math.abs(r.turn(this.active)) / 2);
+        anticipation = Math.min(radius * halfTan, 0.5 * r.lengths[this.active], 0.5 * r.lengths[this.active + 1]);
+        if (halfTan > 0) radius = anticipation / halfTan;
+      }
       if (toGo > anticipation) return;
       if (this.active === r.legs - 1) {
         this.done = true;
@@ -134,6 +134,7 @@ export class NavTracker {
   constructor(routeInfo, geodesy) {
     this.route = new Route(routeInfo);
     this.bank = (routeInfo.turn_bank_deg * Math.PI) / 180;
+    this.turnSpeed = routeInfo.turn_speed_mps ?? null; // planned per flight (older logs: the ground speed)
     this.geodesy = geodesy;
     this.nav = null;
     this.lastT = null;
@@ -146,7 +147,7 @@ export class NavTracker {
     const jumped = this.lastT === null || row.t_s < this.lastT || row.t_s - this.lastT > 2;
     if (!this.nav || jumped) this.nav = new Navigator(this.route, this.bank, row.t_s < 0.5 ? 0 : nearestLeg(this.route, n, e));
     this.lastT = row.t_s;
-    this.nav.update(n, e, Math.hypot(row.v_north_mps, row.v_east_mps), turnSpeed(row));
+    this.nav.update(n, e, Math.hypot(row.v_north_mps, row.v_east_mps), this.turnSpeed);
     const q = this.nav.quantities(n, e, Math.atan2(row.v_east_mps, row.v_north_mps) - conv);
     return { ...q, dtkTrue: q.dtkMap + conv, done: this.nav.done, legs: this.route.legs };
   }
