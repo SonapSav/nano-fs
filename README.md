@@ -23,16 +23,24 @@ you can fly with a keyboard, gamepad or joystick.
   with wind shear and gusts, all seeded and reproducible.
 - **Tasks** (Gymnasium environments): hold altitude and heading; approach and landing on
   runway 09 with a full-stop rollout; takeoff and climb-out; a complete left-hand
-  circuit. Each in calm air or with crosswind and gusts.
+  circuit; GPS navigation along a route of waypoints (random per seed or named, in
+  latitude/longitude). Each in calm air or with wind, gusts and turbulence.
 - **Autopilots:** PID and gain-scheduled LQR for altitude and heading, plus approach,
-  takeoff and circuit autopilots that fly the tasks end to end. Reinforcement learning
-  with PPO (Stable-Baselines3) on the same interface.
+  takeoff, circuit and route autopilots that fly the tasks end to end. Reinforcement
+  learning with PPO (Stable-Baselines3) on the same interface.
+- **Earth model:** JSBSim flies on the WGS84 ellipsoid; the world map is a transverse
+  Mercator projection around a configurable origin, with true and map north kept apart,
+  so positions, distances and bearings are accurate to about a millimetre across the
+  simulated world.
 - **Logs:** one Parquet row per simulation step with a fixed, versioned schema in SI
   units; the same seed and config give byte-identical files.
 - **Viewer:** Three.js in the browser, offline. Chase and cockpit views, the six-pack,
-  tachometer and control positions, an optional head-up display, an instruments window
-  for a second monitor, procedural scenery with an airfield, PAPI and windsock, time of
-  day, clouds, the aircraft's real shadow and synthesized sound. Replays of any recorded
+  tachometer and control positions, a GPS unit (position, ground speed, track, distance,
+  bearing and time to the runway or the next waypoint, desired track and cross-track
+  error), an optional head-up display, an instruments window and a moving-map window for
+  more monitors (terrain, villages, roads, the route and your track), a corner map,
+  procedural scenery with an airfield, PAPI and windsock, time of day, clouds, the
+  aircraft's real shadow and synthesized sound. Replays of any recorded
   flight, and a list of your past flights with their results (landed, nose wheel first,
   climbed out…).
 
@@ -69,8 +77,8 @@ The first start designs the LQR gain schedule (about 15 s) and caches it in `dat
 
 ## Flying
 
-Open **Flights** (or press `L`), pick a scenario (free flight, approach, takeoff or
-circuit, calm or windy, with a seed) and press **Fly**. Your flights are saved as
+Open **Flights** (or press `L`), pick a scenario (free flight, approach, takeoff,
+circuit or a GPS route, calm or windy, with a seed) and press **Fly**. Your flights are saved as
 demonstrations in `data/demos/` and listed under **Past flights**.
 
 | Keys | |
@@ -85,9 +93,14 @@ demonstrations in `data/demos/` and listed under **Past flights**.
 | `H` | head-up display (cockpit view) |
 | `R` or double-click | re-centre the view |
 | `L` | flights |
+| `I` | corner map (wheel to zoom, click for north up / track up) |
 | `P` | frame rate readout |
 | `M` | sound on / off |
 | Space | pause |
+
+**More monitors:** **Instruments window** opens the panel on its own and **Map window** a
+moving map (`+` / `−` zoom, `N` north up / track up); press F11 there for full screen.
+Keys typed in either window still fly the aircraft.
 
 **Gamepads and joysticks** (tested with an Xbox pad and a Thrustmaster T.Flight HOTAS X):
 open **Stick settings**, map each axis and button with **Detect**, calibrate the
@@ -98,6 +111,9 @@ centre, and set sensitivity and expo per device.
 ```sh
 # 1000 seeded episodes of a task and policy, in parallel, with statistics
 uv run python scripts/batch_run.py --env-config configs/envs/approach_landing_crosswind.yaml --policy approach --seeds 0:1000
+
+# The route autopilot on 1000 random GPS routes in wind and turbulence
+uv run python scripts/batch_run.py --env-config configs/envs/navigation_wind.yaml --policy route --seeds 0:1000
 
 # Compare the PID and LQR autopilots
 uv run python scripts/compare_controllers.py --episodes 100
@@ -135,8 +151,9 @@ physics only as policy actions through the environment, at the fixed decision ra
 |---|---|
 | `flightsim/core/` | JSBSim wrapper; the only place JSBSim is used (SI units outside) |
 | `flightsim/aircraft/` | the tuned C172P model (LGPL, see its README) |
-| `flightsim/envs/` | tasks: altitude/heading hold, approach, takeoff, circuit |
-| `flightsim/control/` | PID, LQR, approach, takeoff and circuit autopilots; human input |
+| `flightsim/envs/` | tasks: altitude/heading hold, approach, takeoff, circuit, navigation (routes) |
+| `flightsim/control/` | PID, LQR, approach, takeoff, circuit and route autopilots; human input |
+| `flightsim/world/` | WGS84 geodesy and map projection; the terrain shared with the viewer |
 | `flightsim/datalog/` | log schema and Parquet reading and writing |
 | `flightsim/stream/` | WebSocket server, live and replay sources, flight results |
 | `flightsim/viewer/` | the browser viewer (no build step; three.js and the font vendored) |
@@ -151,7 +168,7 @@ physics only as policy actions through the environment, at the fixed decision ra
 uv run pytest
 ```
 
-About 300 tests: physics validation against the POH with stated tolerances,
+About 330 tests: physics validation against the POH with stated tolerances,
 reproducibility of logs, the tasks and autopilots, the stream protocol, and the viewer's
 JavaScript (run with Node when it is installed).
 
