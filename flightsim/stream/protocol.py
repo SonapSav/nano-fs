@@ -13,7 +13,10 @@ Server -> client messages (JSON):
    "pattern" (circuit task: the circuit autopilot's pattern height, crosswind turn margin and
               downwind offset, for drawing; else null),
    "visual" ({"time_of_day", "visibility", "clouds", "cloud_seed"}: the flight's viewer
-             conditions, envs visual_conditions; null when unknown: viewer defaults)}
+             conditions, envs visual_conditions; null when unknown: viewer defaults),
+   "world" ({"model": "wgs84" | "sphere", "origin_lat_deg", "origin_lon_deg"}: how the
+            flight's latitude/longitude map to metres, world/geo.py and viewer/geo.js;
+            null when unknown: the original sphere)}
   {"type": "frame", "row": {<log column>: value, ...}}
   {"type": "preview", "id", "hello": {<hello message>}, "row": {<log column>: value, ...}}
       Answer to a client "preview": the flight's hello and its starting state (live and

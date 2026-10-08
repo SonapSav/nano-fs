@@ -34,7 +34,6 @@ from flightsim.envs.approach import ApproachLandingEnv, isa_density_ratio
 from flightsim.envs.config import KT_TO_MPS, EnvConfig
 from flightsim.envs.runway import STRIKES, WHEELS, LowAltitudeGusts, draw_low_altitude_wind
 from flightsim.envs.takeoff import FIFTY_FT_M, SANK_BACK_M
-from flightsim.world.terrain import R_EARTH_M
 
 
 class CircuitEnv(ApproachLandingEnv):
@@ -56,12 +55,13 @@ class CircuitEnv(ApproachLandingEnv):
         # Draw order is part of reproducibility: lateral, heading, then the wind.
         lateral = rng.uniform(-c.randomize_lateral_m, c.randomize_lateral_m)
         heading = wrap_angle_rad(a.runway_heading_rad + rng.uniform(-c.randomize_heading_rad, c.randomize_heading_rad))
-        self.runway_elevation_m = self._ground_m(a.threshold_north_m / R_EARTH_M, a.threshold_east_m / R_EARTH_M)
+        self.runway_elevation_m = self._ground_m(*self.cfg.geodesy.to_geodetic(a.threshold_north_m, a.threshold_east_m))
         north, east = self.runway.position(c.start_along_m, lateral)
+        start_lat, start_lon = self.cfg.geodesy.to_geodetic(north, east)
         self.approach_wind = draw_low_altitude_wind(a.wind, a.runway_heading_rad, rng)
         ic = InitialConditions(
             alt_msl_m=self.runway_elevation_m + 1.4, tas_mps=0.0, heading_rad=heading % (2 * math.pi),
-            lat_rad=north / R_EARTH_M, lon_rad=east / R_EARTH_M,
+            lat_rad=start_lat, lon_rad=start_lon,
         )  # fmt: skip
         self.start_offsets = {"lateral_m": lateral, "heading_deg": math.degrees(heading)}
         return ic, self.runway_elevation_m + c.min_height_m, a.runway_heading_rad % (2 * math.pi)

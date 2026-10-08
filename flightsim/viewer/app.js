@@ -327,6 +327,7 @@ function applyHello(msg) {
   pendingSeek = null;
   updateSeekable();
   scene.reset();
+  scene.setGeodesy(msg.world ?? null);
   scene.setTargets(msg.targets);
   scene.setApproach(msg.approach ?? null);
   scene.setPattern(msg.pattern ?? null);
@@ -801,7 +802,7 @@ function drawHudLayer() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
   if (!hudInView() || !shown || !benchHud) return;
-  drawHud(ctx, w, h, { camera: scene.camera, aircraftMatrix: scene.aircraft.matrix, row: shown, ...hudTask(shown) });
+  drawHud(ctx, w, h, { camera: scene.camera, aircraftMatrix: scene.aircraft.matrix, row: shown, convergence: scene.convergence, ...hudTask(shown) });
 }
 
 // What the HUD shows for the task: free flight its altitude and heading targets; runway
@@ -815,7 +816,7 @@ function hudTask(row) {
   if (!a && !tk) return { targets: session?.targets };
   const takeoffBugs = [{ kt: ROTATE_KT, label: "R" }, { kt: CLIMB_KT, label: "C" }];
   if (tk) return { runway: tk, speedBugs: takeoffBugs };
-  const towardRunway = Math.cos(row.psi_rad - (a.heading_deg * Math.PI) / 180) > 0.8;
+  const towardRunway = Math.cos(row.psi_rad - scene.convergence - (a.heading_deg * Math.PI) / 180) > 0.8; // runway heading is on the map
   const onApproach = a.task !== "circuit" || (panel.climbedOut && towardRunway);
   const gustKt = (a.wind?.gust_factor_mps ?? 0) * 1.943844;
   const vapp = a.target_kias != null ? [{ kt: a.target_kias + Math.min(10, 0.5 * gustKt), label: "A" }] : [];

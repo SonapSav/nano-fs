@@ -1,12 +1,14 @@
 // Three.js scene: flat-earth local frame, simple C172 model, trail, target line, chase camera.
 //
-// World frame: x = east, y = up, z = south (three.js is y-up, right-handed), origin at
-// latitude 0, longitude 0 at sea level, where every task starts (so the procedural
-// scenery and its airfield are always in the same place). Over the tens of km a flight
-// covers, the flat-earth approximation is far below anything visible.
+// World frame: x = east, y = up, z = south (three.js is y-up, right-handed): the flight's
+// map (geo.js; metres north and east of the world's origin, where the procedural scenery
+// and its airfield are) and height above the ellipsoid. Headings and velocities are true
+// (north); on the map they turn by the grid convergence (zero on the origin's meridian
+// and at the equator).
 
 import * as THREE from "three";
 import { DEFAULT_ORBIT, RECENTRE_S, recentreView } from "./view.js";
+import { Geodesy } from "./geo.js";
 import { Papi, Windsock, addAirfield, addAirfieldDetail, addGroundFallback, addRunwayLights } from "./scenery.js";
 import { SkyController, TIMES } from "./sky.js";
 import { CloudField } from "./clouds.js";
@@ -16,7 +18,6 @@ import { groundDetailStrength } from "./groundDetail.js";
 import { buildC172 } from "./aircraft.js";
 import { buildPattern } from "./pattern.js";
 
-const R_EARTH = 6371000;
 const TRAIL_POINTS = 4000;
 
 // NED vector -> world vector.
@@ -153,7 +154,8 @@ export class FlightScene {
   }
 
   reset() {
-    this.origin = { lat: 0, lon: 0 }; // fixed, see the header
+    this.geodesy ??= new Geodesy(null); // set per flight (setGeodesy)
+    this.convergence = 0;
     this.lastT = null;
     this.model.update({}); // surfaces neutral, propeller still
     this.trailCount = 0;
@@ -315,19 +317,25 @@ export class FlightScene {
     r.setClearColor(clear, alpha);
   }
 
-  update(row) {
-    const n = (row.lat_rad - this.origin.lat) * R_EARTH;
-    const e = (row.lon_rad - this.origin.lon) * R_EARTH * Math.cos(this.origin.lat);
-    this.position = nedToWorld(n, e, -row.alt_msl_m);
+  // The flight's geodesy (the stream's `world`; null: the original sphere, older flights).
+  setGeodesy(world) {
+    this.geodesy = new Geodesy(world);
+  }
 
-    // Body axes in NED from ZYX Euler angles, mapped to world. The model is built in body
-    // axes, so these three vectors are its basis.
-    const [cf, sf, ct, st, cp, sp] = [row.phi_rad, row.theta_rad, row.psi_rad].flatMap((a) => [Math.cos(a), Math.sin(a)]);
+  update(row) {
+    const [n, e] = this.geodesy.toMap(row.lat_rad, row.lon_rad);
+    this.position = nedToWorld(n, e, -row.alt_msl_m);
+    this.convergence = this.geodesy.convergence(row.lat_rad, row.lon_rad);
+
+    // Body axes in NED from ZYX Euler angles (heading on the map), mapped to world. The
+    // model is built in body axes, so these three vectors are its basis.
+    const psiMap = row.psi_rad - this.convergence;
+    const [cf, sf, ct, st, cp, sp] = [row.phi_rad, row.theta_rad, psiMap].flatMap((a) => [Math.cos(a), Math.sin(a)]);
     const xb = nedToWorld(ct * cp, ct * sp, -st);
     const yb = nedToWorld(sf * st * cp - cf * sp, sf * st * sp + cf * cp, sf * ct);
     const zb = nedToWorld(cf * st * cp + sf * sp, cf * st * sp - sf * cp, cf * ct);
     this.aircraft.matrix.makeBasis(xb, yb, zb).setPosition(this.position);
-    this.heading = row.psi_rad;
+    this.heading = psiMap;
     // Control surfaces and propeller; dt from the frame times (0 after a jump, e.g. a seek).
     const dt = this.lastT === null || row.t_s < this.lastT || row.t_s - this.lastT > 1 ? 0 : row.t_s - this.lastT;
     this.lastT = row.t_s;
@@ -349,7 +357,7 @@ export class FlightScene {
 
     this.updateShadow();
     if (this.targets && !this.approach) {
-      const h = this.targets.heading_rad;
+      const h = this.targets.heading_rad - this.convergence;
       const start = new THREE.Vector3(this.position.x, this.targets.alt_msl_m, this.position.z);
       const end = start.clone().add(nedToWorld(Math.cos(h), Math.sin(h), 0).multiplyScalar(3000));
       this.targetLine.geometry.setFromPoints([start, end]);

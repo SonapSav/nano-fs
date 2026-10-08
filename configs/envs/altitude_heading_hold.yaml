@@ -3,6 +3,11 @@
 # Each episode: trim at a randomized cruise condition, then draw new targets offset
 # from it. Randomness comes only from the seed passed to reset(seed=...).
 aircraft: c172p_tuned  # c172p with a POH-tuned propeller and brakes (flightsim/aircraft, docs/VALIDATION_c172p_tuned.md)
+world:                     # where the world sits on the Earth (flightsim/world/geo.py)
+  geodesy: wgs84           # WGS84 ellipsoid, transverse Mercator map around the origin (configs without
+                           #   this block, e.g. logs before 2026-10-08, used a 6371 km sphere)
+  origin_lat_deg: 0.0      # the airfield (runway 09/27 centre) and the procedural world's origin
+  origin_lon_deg: 0.0
 sim_rate_hz: 120
 control_rate_hz: 20        # agent/autopilot decision rate; each action is held for 6 sim steps
 episode_s: 120

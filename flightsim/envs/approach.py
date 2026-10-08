@@ -38,7 +38,6 @@ from flightsim.envs.altitude_heading import AltitudeHeadingHoldEnv, load_factor
 from flightsim.envs.config import FPM_TO_MPS, KT_TO_MPS, EnvConfig
 from flightsim.envs.runway import STRIKES, WHEELS, LowAltitudeGusts, Runway, draw_low_altitude_wind, wind_report
 from flightsim.world import ground_elevation_m
-from flightsim.world.terrain import R_EARTH_M
 
 # Observation name -> scale it is divided by.
 APPROACH_OBS_SCALES = {
@@ -69,13 +68,14 @@ def approach_geometry(cfg: EnvConfig) -> dict | None:
     if a is None:
         return None
     elevation = (
-        ground_elevation_m(a.threshold_north_m / R_EARTH_M, a.threshold_east_m / R_EARTH_M) if cfg.terrain == "procedural" else 0.0
+        ground_elevation_m(*cfg.geodesy.to_geodetic(a.threshold_north_m, a.threshold_east_m), cfg.geodesy) if cfg.terrain == "procedural" else 0.0
     )
     return {
         "threshold_north_m": a.threshold_north_m, "threshold_east_m": a.threshold_east_m,
         "heading_deg": math.degrees(a.runway_heading_rad), "length_m": a.runway_length_m, "width_m": a.runway_width_m,
         "aim_point_m": a.aim_point_m, "glide_path_deg": math.degrees(a.glide_path_rad), "elevation_m": elevation,
         "touchdown_zone_m": list(a.touchdown_zone_m), "target_kias": a.target_cas_mps / KT_TO_MPS,
+        "geodesy": cfg.geodesy.as_dict(),
     }  # fmt: skip
 
 
@@ -93,7 +93,7 @@ class ApproachLandingEnv(AltitudeHeadingHoldEnv):
         self.obs_names = (*APPROACH_OBS_SCALES, *(f"prev_{n}" for n in self.action_names))
         self.observation_space = gym.spaces.Box(-np.inf, np.inf, shape=(len(self.obs_names),), dtype=np.float32)
         self._scales = np.array([APPROACH_OBS_SCALES.get(n, 1.0) for n in self.obs_names])
-        self.runway = Runway(a.threshold_north_m, a.threshold_east_m, a.runway_heading_rad, a.runway_length_m, a.runway_width_m)
+        self.runway = Runway(a.threshold_north_m, a.threshold_east_m, a.runway_heading_rad, a.runway_length_m, a.runway_width_m, cfg.geodesy)
         self._along, self._right = self.runway.along_unit, self.runway.right_unit
         self._tan_gp = math.tan(a.glide_path_rad)
         self._geometry = approach_geometry(cfg)
@@ -119,10 +119,11 @@ class ApproachLandingEnv(AltitudeHeadingHoldEnv):
         vertical = rng.uniform(-a.randomize_vertical_m, a.randomize_vertical_m)
         kias = a.start_kias + rng.uniform(-a.randomize_kias, a.randomize_kias)
         heading = wrap_angle_rad(a.runway_heading_rad + rng.uniform(-a.randomize_heading_rad, a.randomize_heading_rad))
-        self.runway_elevation_m = self._ground_m(a.threshold_north_m / R_EARTH_M, a.threshold_east_m / R_EARTH_M)
+        self.runway_elevation_m = self._ground_m(*self.cfg.geodesy.to_geodetic(a.threshold_north_m, a.threshold_east_m))
         back = a.aim_point_m - a.start_distance_m  # along-runway position of the start (negative: before the threshold)
         north = a.threshold_north_m + back * self._along[0] + lateral * self._right[0]
         east = a.threshold_east_m + back * self._along[1] + lateral * self._right[1]
+        start_lat, start_lon = self.cfg.geodesy.to_geodetic(north, east)
         alt = self.runway_elevation_m + a.start_distance_m * self._tan_gp + vertical
         tas = kias * KT_TO_MPS / math.sqrt(isa_density_ratio(alt))  # the model has no position error: IAS = CAS
         # Wind (drawn last, and only when configured, so calm episodes keep their draws).
@@ -149,8 +150,8 @@ class ApproachLandingEnv(AltitudeHeadingHoldEnv):
             tas_mps=tas,
             heading_rad=heading % (2 * math.pi),
             flight_path_rad=flight_path,
-            lat_rad=north / R_EARTH_M,
-            lon_rad=east / R_EARTH_M,
+            lat_rad=start_lat,
+            lon_rad=start_lon,
             wind_north_mps=wind_n,
             wind_east_mps=wind_e,
         )

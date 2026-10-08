@@ -5,15 +5,16 @@ last bit: the same seeded integer hash (JavaScript's 32-bit integer semantics), 
 floating-point operations in the same order, and only correctly rounded functions
 (sqrt, floor). tests/test_world_terrain.py compares both on a grid of points.
 
-Frames: the viewer's world x = east, z = south (metres), origin at latitude/longitude
-(0, 0), mapped with the viewer's spherical radius R_EARTH_M.
+Frames: the viewer's world x = east, z = south (metres) from the world's origin; the map
+position of a latitude/longitude comes from the task's geodesy (world/geo.py).
 """
 
 import math
 
+from flightsim.world.geo import SPHERE, Geodesy
+
 WORLD_SEED = 172  # terrain.js WORLD_SEED
 WATER_LEVEL_M = -0.5  # terrain.js WATER_LEVEL_M: lakes are flat water at this level
-R_EARTH_M = 6371000.0  # scene.js R_EARTH
 AIRFIELD_FLAT_RADIUS_M = 1400.0  # terrain.js AIRFIELD.flatRadiusM (airfield at x = z = 0)
 _MASK = 0xFFFFFFFF
 
@@ -70,7 +71,12 @@ def height_m(x: float, z: float) -> float:
     return h * _smoothstep(AIRFIELD_FLAT_RADIUS_M, AIRFIELD_FLAT_RADIUS_M + 1200, r)
 
 
-def ground_elevation_m(lat_rad: float, lon_rad: float) -> float:
+def ground_elevation_m(lat_rad: float, lon_rad: float, geodesy: Geodesy = SPHERE) -> float:
     """Surface the aircraft can touch: terrain, or the water surface over lakes."""
-    north, east = lat_rad * R_EARTH_M, lon_rad * R_EARTH_M  # the viewer's mapping (origin 0, 0)
+    north, east = geodesy.to_map(lat_rad, lon_rad)
     return max(height_m(east, -north), WATER_LEVEL_M)
+
+
+def ground_elevation_at_m(north_m: float, east_m: float) -> float:
+    """The same surface at a map position."""
+    return max(height_m(east_m, -north_m), WATER_LEVEL_M)

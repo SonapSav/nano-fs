@@ -39,6 +39,7 @@ class Source:
     takeoff_result: dict | None = None  # takeoff task: the result, sent with the end message
     visual: dict | None = None  # viewer conditions (envs: visual_conditions); None: viewer defaults
     pilot_name: str | None = None  # who flies a live flight: "pid", "lqr" or "human"
+    world: dict | None = None  # the geodesy (world/geo.py) for the viewer's map; None: the original sphere
 
     def frames(self) -> Iterator[tuple[float, dict]]:
         raise NotImplementedError
@@ -92,6 +93,7 @@ class ReplaySource(Source):
         self.approach = _logged_approach(meta, self._rows[0]["seed"] if self._rows else None, env)
         self.takeoff = env.runway_info() if env is not None and hasattr(env, "runway_info") else None
         if env is not None:
+            self.world = env.cfg.geodesy.as_dict()
             self.visual = env.visual_conditions()
             t = env.targets
             self.targets = {"alt_msl_m": t.alt_msl_m, "heading_rad": t.heading_rad, "tas_mps": t.tas_mps}
@@ -131,6 +133,7 @@ class LiveSource(Source):
         self.approach = self._env.approach_info() if hasattr(self._env, "approach_info") else None
         self.takeoff = self._env.runway_info() if hasattr(self._env, "runway_info") else None
         self.visual = self._env.visual_conditions()
+        self.world = env_cfg.geodesy.as_dict()
         self._config_hash = env_cfg.config_hash
 
     def first_frame(self) -> dict:

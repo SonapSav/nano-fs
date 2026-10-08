@@ -61,10 +61,16 @@ def test_terrain_shape():
     assert min(ground) == terrain.WATER_LEVEL_M  # lakes are flat water for the physics
 
 
-def test_ground_elevation_uses_the_viewers_lat_lon_mapping():
+def test_ground_elevation_uses_the_map_of_the_geodesy():
+    from flightsim.world.geo import SPHERE, Geodesy
+
     north, east = 5000.0, -12000.0
-    lat, lon = north / terrain.R_EARTH_M, east / terrain.R_EARTH_M
-    assert terrain.ground_elevation_m(lat, lon) == max(terrain.height_m(east, -north), terrain.WATER_LEVEL_M)
+    expected = max(terrain.height_m(east, -north), terrain.WATER_LEVEL_M)
+    lat, lon = SPHERE.to_geodetic(north, east)
+    assert terrain.ground_elevation_m(lat, lon) == expected  # the original mapping, exactly
+    wgs = Geodesy("wgs84", 38.0, 23.7)
+    assert terrain.ground_elevation_m(*wgs.to_geodetic(north, east), wgs) == pytest.approx(expected, abs=1e-4)
+    assert terrain.ground_elevation_at_m(north, east) == expected
     assert math.isfinite(terrain.ground_elevation_m(0.0, 0.0))
 
 
@@ -88,7 +94,7 @@ def _hill_env(terrain_model, alt_m, **extra):
 
 
 def test_height_above_ground_follows_the_terrain():
-    ground = terrain.ground_elevation_m(HILL_NORTH_M / terrain.R_EARTH_M, HILL_EAST_M / terrain.R_EARTH_M)
+    ground = terrain.ground_elevation_at_m(HILL_NORTH_M, HILL_EAST_M)
     assert ground == pytest.approx(248.5, abs=0.5)
     _, info = _hill_env("procedural", 400.0).reset(seed=0)
     assert info["state"].alt_agl_m == pytest.approx(400.0 - ground, abs=0.5)
@@ -107,11 +113,14 @@ def test_flying_into_the_hill_ends_the_flight():
 
 
 def test_the_gear_rests_on_the_hillside():
-    lat, lon = HILL_NORTH_M / terrain.R_EARTH_M, HILL_EAST_M / terrain.R_EARTH_M
-    ground = terrain.ground_elevation_m(lat, lon)
+    from flightsim.world.geo import Geodesy
+
+    geo = Geodesy("wgs84")
+    lat, lon = geo.to_geodetic(HILL_NORTH_M, HILL_EAST_M)
+    ground = terrain.ground_elevation_m(lat, lon, geo)
     core = JSBSimCore("c172p", 1 / 120)
     core.reset(InitialConditions(ground + 2.0, 0.0, 0.0, lat_rad=lat, lon_rad=lon), ground_elevation_m=ground)
     for _ in range(120 * 5):
-        core.set_ground_elevation_m(terrain.ground_elevation_m(core.state().lat_rad, core.state().lon_rad))
+        core.set_ground_elevation_m(terrain.ground_elevation_m(core.state().lat_rad, core.state().lon_rad, geo))
         s = core.step(Controls(throttle=0.0))
     assert s.alt_msl_m - ground == pytest.approx(4.36 * 0.3048, abs=0.05)  # CG height on the gear, as on flat ground

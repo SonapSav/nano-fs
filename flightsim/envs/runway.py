@@ -12,14 +12,16 @@ import numpy as np
 from flightsim.atmosphere.turbulence import LowAltitudeTurbulence, low_altitude_parameters, to_ned, wind_at_height_mps
 from flightsim.core import State
 from flightsim.envs.config import KT_TO_MPS
-from flightsim.world.terrain import R_EARTH_M
+from flightsim.world.geo import SPHERE, Geodesy
 
 WHEELS = ("NOSE", "LEFT_MAIN", "RIGHT_MAIN")
 STRIKES = {"TAIL_SKID": "tail_strike", "LEFT_TIP": "wingtip_strike", "RIGHT_TIP": "wingtip_strike", "NOSE_SKID": "nose_strike"}
 
 
 class Runway:
-    def __init__(self, threshold_north_m: float, threshold_east_m: float, heading_rad: float, length_m: float, width_m: float):
+    def __init__(self, threshold_north_m: float, threshold_east_m: float, heading_rad: float, length_m: float, width_m: float, geodesy: Geodesy = SPHERE):
+        """Threshold position and heading on the map (map north: see world/geo.py)."""
+        self.geodesy = geodesy
         self.threshold_north_m, self.threshold_east_m = threshold_north_m, threshold_east_m
         self.heading_rad, self.length_m, self.width_m = heading_rad, length_m, width_m
         self.along_unit = (math.cos(heading_rad), math.sin(heading_rad))  # (north, east) unit vectors
@@ -27,7 +29,8 @@ class Runway:
 
     def coords(self, s: State) -> tuple[float, float]:
         """(along, cross): metres past the threshold and right of the centreline."""
-        dn, de = s.lat_rad * R_EARTH_M - self.threshold_north_m, s.lon_rad * R_EARTH_M - self.threshold_east_m
+        north, east = self.geodesy.to_map(s.lat_rad, s.lon_rad)
+        dn, de = north - self.threshold_north_m, east - self.threshold_east_m
         return dn * self.along_unit[0] + de * self.along_unit[1], dn * self.right_unit[0] + de * self.right_unit[1]
 
     def position(self, along: float, cross: float) -> tuple[float, float]:
@@ -35,6 +38,13 @@ class Runway:
         north = self.threshold_north_m + along * self.along_unit[0] + cross * self.right_unit[0]
         east = self.threshold_east_m + along * self.along_unit[1] + cross * self.right_unit[1]
         return north, east
+
+    @classmethod
+    def from_geometry(cls, g: dict) -> "Runway":
+        """From a task's runway geometry (approach_geometry, takeoff_geometry), as the
+        controllers get it."""
+        return cls(g["threshold_north_m"], g["threshold_east_m"], math.radians(g["heading_deg"]), g["length_m"], g["width_m"],
+                   Geodesy(**g["geodesy"]) if g.get("geodesy") else SPHERE)  # fmt: skip
 
     def on_surface(self, along: float, cross: float) -> bool:
         return 0.0 <= along <= self.length_m and abs(cross) <= self.width_m / 2

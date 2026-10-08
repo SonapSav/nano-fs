@@ -131,8 +131,8 @@ def main() -> None:
         print(f"\ntakeoffs: {len(climbed)}/{len(rows)} climbed" + (f"; failures {fails}" if fails else ""))
         if climbed:
             def span(key, scale=1.0):
-                v = [r[key] * scale for r in climbed]
-                return f"mean {sum(v) / len(v):.1f}, range {min(v):.1f} .. {max(v):.1f}"
+                v = [r[key] * scale for r in climbed if r[key] is not None]  # e.g. no ground offset for circuits
+                return f"mean {sum(v) / len(v):.1f}, range {min(v):.1f} .. {max(v):.1f}" if v else "n/a"
             print(f"  ground roll m:              {span('liftoff_ground_roll_m')}")
             print(f"  lift-off KCAS:              {span('liftoff_cas_mps', 1.943844)}")
             print(f"  lift-off pitch deg:         {span('liftoff_pitch_deg')}")

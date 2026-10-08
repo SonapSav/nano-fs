@@ -73,6 +73,7 @@ Work through these in order. Finish and validate each step before starting the n
   - No wall-clock timestamps and a deterministic `run_id` (`<config_hash[:12]>-s<seed>`), so the same seed, config and code give byte-identical files. Local and Docker runs give identical data and the same source hash. Docker has no `.git`: images built through `scripts/docker.py` record the commit they were built from (`git_source: build`); plain `docker compose build` images have null git fields.
 - **Units:** use SI internally (meters, m/s, radians, kg). JSBSim works in imperial units (ft, slug, lbf), so all conversion happens inside the JSBSim wrapper in `core/`; everything outside `core/` is SI. The logging schema is strictly SI so swapping the physics core never changes the logs. Name variables with units where ambiguous (e.g. `alt_m`, `tas_mps`; imperial names like `alt_ft` only inside `core/`).
 - **Time:** fixed timestep only. No variable dt anywhere in the physics path.
+- **Positions:** JSBSim integrates latitude/longitude on WGS84; tasks, terrain and the viewer work on a flat map in metres north/east of the world's origin plus height above the ellipsoid. Convert only through `flightsim/world/geo.py` (`Geodesy` from the env config's `world` block; `viewer/geo.js` in the browser), never with an Earth radius by hand. Configs without a `world` block (all logs before 2026-10-08) use the original 6371 km sphere, so old logs replay and re-fly exactly. Headings, wind directions and velocities are true; map bearing = true bearing - grid convergence (zero at the default origin 0, 0).
 - **Config over code:** aircraft, initial conditions, wind, and task parameters live in config files (YAML or JSON), not hard-coded. Variants extend a base file (`base: other.yaml`); changes go through `overrides` (dotted keys allowed) so they are part of the config hash. Never `dataclasses.replace()` a loaded config to change behaviour.
 - **Controllers act through the env:** baselines and learned agents use the same action interface and decision rate (`flightsim/envs/policies.py`), so comparisons are fair. Episode logs use the same Parquet schema, one file per episode, seed = episode seed.
 - **Tests:** physics validation checks (trim, stall speed, oscillation periods) are automated tests with stated tolerances, not one-off notebooks.
@@ -102,7 +103,8 @@ flightsim/          # installable package (uv_build backend)
                     #   sound.js: synthesized engine, wind, stall horn, flap motor (Web Audio, driven by frames)
   analysis/         # mode identification, validation maneuvers, validation checks
   atmosphere/       # Dryden turbulence (MIL-F-8785C)
-  world/            # terrain height shared with the viewer (bit-identical port of viewer/terrainCore.js)
+  world/            # terrain height shared with the viewer (bit-identical port of viewer/terrainCore.js);
+                    #   geo.py: WGS84 latitude/longitude <-> map metres around the world's origin (viewer/geo.js the same)
   batch.py          # parallel seeded episode batches
   config.py         # YAML loading (base: inheritance, overrides) + config hash
   runner.py         # headless run loop

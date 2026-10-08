@@ -30,7 +30,7 @@ from flightsim.control.approach import ApproachAutopilot, ApproachGains, approac
 from flightsim.control.heading_hold import wrap_angle_rad
 from flightsim.control.takeoff import TakeoffAutopilot, TakeoffGains, takeoff_gains_from_raw
 from flightsim.core import Controls, State
-from flightsim.world.terrain import R_EARTH_M
+from flightsim.envs.runway import Runway
 
 KT_TO_MPS = 1852.0 / 3600.0
 G = 9.80665
@@ -160,6 +160,7 @@ class CircuitAutopilot:
         h = math.radians(geometry["heading_deg"])
         self._rwy = h
         self._along = (math.cos(h), math.sin(h))
+        self._runway = Runway.from_geometry(geometry)
         self._right = (-math.sin(h), math.cos(h))
         self._tan_gp = math.tan(math.radians(geometry["glide_path_deg"]))
         self._elev = geometry["elevation_m"]
@@ -177,9 +178,7 @@ class CircuitAutopilot:
         self._last = trim
 
     def runway_coords(self, s: State) -> tuple[float, float]:
-        g = self.geo
-        dn, de = s.lat_rad * R_EARTH_M - g["threshold_north_m"], s.lon_rad * R_EARTH_M - g["threshold_east_m"]
-        return dn * self._along[0] + de * self._along[1], dn * self._right[0] + de * self._right[1]
+        return self._runway.coords(s)
 
     # --- Leg geometry ----------------------------------------------------------------
 

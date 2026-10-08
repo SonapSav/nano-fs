@@ -32,7 +32,6 @@ from flightsim.envs.altitude_heading import AltitudeHeadingHoldEnv, load_factor
 from flightsim.envs.config import EnvConfig
 from flightsim.envs.runway import STRIKES, WHEELS, LowAltitudeGusts, Runway, draw_low_altitude_wind, wind_report
 from flightsim.world import ground_elevation_m
-from flightsim.world.terrain import R_EARTH_M
 
 # Observation name -> scale it is divided by.
 TAKEOFF_OBS_SCALES = {
@@ -63,13 +62,14 @@ def takeoff_geometry(cfg: EnvConfig) -> dict | None:
     if t is None:
         return None
     elevation = (
-        ground_elevation_m(t.threshold_north_m / R_EARTH_M, t.threshold_east_m / R_EARTH_M) if cfg.terrain == "procedural" else 0.0
+        ground_elevation_m(*cfg.geodesy.to_geodetic(t.threshold_north_m, t.threshold_east_m), cfg.geodesy) if cfg.terrain == "procedural" else 0.0
     )
     return {
         "task": "takeoff",
         "threshold_north_m": t.threshold_north_m, "threshold_east_m": t.threshold_east_m,
         "heading_deg": math.degrees(t.runway_heading_rad), "length_m": t.runway_length_m, "width_m": t.runway_width_m,
         "elevation_m": elevation, "start_along_m": t.start_along_m, "target_height_m": t.target_height_m,
+        "geodesy": cfg.geodesy.as_dict(),
     }  # fmt: skip
 
 
@@ -82,7 +82,7 @@ class TakeoffEnv(AltitudeHeadingHoldEnv):
         self.obs_names = (*TAKEOFF_OBS_SCALES, *(f"prev_{n}" for n in self.action_names))
         self.observation_space = gym.spaces.Box(-np.inf, np.inf, shape=(len(self.obs_names),), dtype=np.float32)
         self._scales = np.array([TAKEOFF_OBS_SCALES.get(n, 1.0) for n in self.obs_names])
-        self.runway = Runway(t.threshold_north_m, t.threshold_east_m, t.runway_heading_rad, t.runway_length_m, t.runway_width_m)
+        self.runway = Runway(t.threshold_north_m, t.threshold_east_m, t.runway_heading_rad, t.runway_length_m, t.runway_width_m, cfg.geodesy)
         self._geometry = takeoff_geometry(cfg)
 
     def runway_coords(self, s: State | None = None) -> tuple[float, float]:
@@ -101,12 +101,13 @@ class TakeoffEnv(AltitudeHeadingHoldEnv):
         # Draw order is part of reproducibility: lateral, heading, then the wind.
         lateral = rng.uniform(-t.randomize_lateral_m, t.randomize_lateral_m)
         heading = wrap_angle_rad(t.runway_heading_rad + rng.uniform(-t.randomize_heading_rad, t.randomize_heading_rad))
-        self.runway_elevation_m = self._ground_m(t.threshold_north_m / R_EARTH_M, t.threshold_east_m / R_EARTH_M)
+        self.runway_elevation_m = self._ground_m(*self.cfg.geodesy.to_geodetic(t.threshold_north_m, t.threshold_east_m))
         north, east = self.runway.position(t.start_along_m, lateral)
+        start_lat, start_lon = self.cfg.geodesy.to_geodetic(north, east)
         self.takeoff_wind = draw_low_altitude_wind(t.wind, t.runway_heading_rad, rng)
         ic = InitialConditions(
             alt_msl_m=self.runway_elevation_m + 1.4, tas_mps=0.0, heading_rad=heading % (2 * math.pi),
-            lat_rad=north / R_EARTH_M, lon_rad=east / R_EARTH_M,
+            lat_rad=start_lat, lon_rad=start_lon,
         )  # fmt: skip
         self.start_offsets = {"lateral_m": lateral, "heading_deg": math.degrees(heading)}
         return ic, self.runway_elevation_m + t.target_height_m, t.runway_heading_rad % (2 * math.pi)

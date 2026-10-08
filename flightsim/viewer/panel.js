@@ -12,6 +12,7 @@
 // own, so flying with the keyboard keeps working).
 
 import { drawAll, indicatedKt, units } from "./gauges.js";
+import { Geodesy } from "./geo.js";
 
 export const PANEL_CHANNEL = "flightsim-panel";
 export const PANEL_TIMEOUT_MS = 3000; // the other window is gone after this long without a message
@@ -98,9 +99,11 @@ function showApproachRows(p, kind) {
   }
 }
 
+// Runway frame on the map of the runway's geodesy (geo.js; none: the original sphere).
 function approachDeviations(row, a) {
-  const R_EARTH = 6371000, h = (a.heading_deg * Math.PI) / 180;
-  const dn = row.lat_rad * R_EARTH - a.threshold_north_m, de = row.lon_rad * R_EARTH - a.threshold_east_m;
+  const h = (a.heading_deg * Math.PI) / 180;
+  const [north, east] = new Geodesy(a.geodesy ?? null).toMap(row.lat_rad, row.lon_rad);
+  const dn = north - a.threshold_north_m, de = east - a.threshold_east_m;
   const along = dn * Math.cos(h) + de * Math.sin(h), cross = -dn * Math.sin(h) + de * Math.cos(h);
   const gp = row.alt_msl_m - (a.elevation_m + Math.max(0, a.aim_point_m - along) * Math.tan((a.glide_path_deg * Math.PI) / 180));
   return { along, cross, gp };

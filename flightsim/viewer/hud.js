@@ -65,8 +65,10 @@ export function runwayPoint(rw, along, cross) {
 }
 
 // World direction of the flight path (ground velocity), or null when too slow.
-export function flightPathDirection(row) {
-  const v = nedToWorld(row.v_north_mps, row.v_east_mps, row.v_down_mps);
+// `convergence`: true north to map north (geo.js); the velocity is true.
+export function flightPathDirection(row, convergence = 0) {
+  const c = Math.cos(convergence), s = Math.sin(convergence);
+  const v = nedToWorld(row.v_north_mps * c + row.v_east_mps * s, row.v_east_mps * c - row.v_north_mps * s, row.v_down_mps);
   return v.length() < FPV_MIN_SPEED_MPS ? null : v.normalize();
 }
 
@@ -75,9 +77,9 @@ const pad3 = (deg) => String(Math.round(((deg % 360) + 360) % 360) % 360).padSta
 // Draw the HUD for a frame. `aircraftMatrix`: the scene's aircraft matrix (body axes as
 // its basis). Runway tasks: `runway` (the hello's approach or takeoff geometry),
 // `approach` (true to show the aim point and glide path reference), `speedBugs`
-// ([{kt, label}]); `contrast`: "outline" (default), "shadow" or "none". Returns false when
+// ([{kt, label}]); `convergence`: true north to map north (geo.js); `contrast`: "outline" (default), "shadow" or "none". Returns false when
 // the combiner is out of view (looking away).
-export function drawHud(ctx, w, h, { camera, aircraftMatrix, row, targets, runway = null, approach = false, speedBugs = [], contrast = "outline" }) {
+export function drawHud(ctx, w, h, { camera, aircraftMatrix, row, targets, runway = null, approach = false, speedBugs = [], contrast = "outline", convergence = 0 }) {
   const rot = new THREE.Matrix4().extractRotation(aircraftMatrix);
   const body = (az, el) => project(bodyVector(az, el).applyMatrix4(rot), camera, w, h);
   const F = HUD_FIELD;
@@ -148,7 +150,7 @@ export function drawHud(ctx, w, h, { camera, aircraftMatrix, row, targets, runwa
   ctx.beginPath();
   ctx.rect(centre.x - 14 * pxPerDeg, centre.y - 11.5 * pxPerDeg, 28 * pxPerDeg, 40 * pxPerDeg);
   ctx.clip();
-  const psi = row.psi_rad;
+  const psi = row.psi_rad - convergence; // on the map (the world the ladder is drawn in)
   const right = nedToWorld(-Math.sin(psi), Math.cos(psi), 0);
   const along = (centreDir, offDeg) => project(centreDir.clone().addScaledVector(right, Math.tan(offDeg * D2R)).normalize(), camera, w, h);
   let horizonAngle = 0;
@@ -205,7 +207,7 @@ export function drawHud(ctx, w, h, { camera, aircraftMatrix, row, targets, runwa
   }
 
   // --- Conformal: flight path marker (where the aircraft is going). --------------------
-  const fpDir = flightPathDirection(row);
+  const fpDir = flightPathDirection(row, convergence);
   const fp = fpDir && project(fpDir, camera, w, h);
   if (fp) {
     const r = fs * 0.45, ca = Math.cos(horizonAngle), sa = Math.sin(horizonAngle);
@@ -283,7 +285,7 @@ export function drawHud(ctx, w, h, { camera, aircraftMatrix, row, targets, runwa
 
   // Heading tape, top.
   const hy = body(0, 13.5)?.y ?? centre.y - 13.5 * pxPerDeg;
-  const hdg = (((psi / D2R) % 360) + 360) % 360;
+  const hdg = (((row.psi_rad / D2R) % 360) + 360) % 360; // true heading on the tape
   const pxPerHdg = pxPerDeg * 0.7, halfW = 11 * pxPerDeg;
   line([{ x: centre.x - halfW, y: hy }, { x: centre.x + halfW, y: hy }]);
   for (let d = Math.ceil((hdg - 15) / 5) * 5; d <= hdg + 15; d += 5) {

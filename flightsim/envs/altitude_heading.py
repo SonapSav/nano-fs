@@ -178,11 +178,11 @@ class AltitudeHeadingHoldEnv(gym.Env):
         return self._observation(), reward, bool(reason), truncated, info
 
     def _ground_m(self, lat_rad: float, lon_rad: float) -> float:
-        return ground_elevation_m(lat_rad, lon_rad) if self.cfg.terrain == "procedural" else 0.0
+        return ground_elevation_m(lat_rad, lon_rad, self.cfg.geodesy) if self.cfg.terrain == "procedural" else 0.0
 
     def _sim_step(self, u: Controls) -> State:
         if self.cfg.terrain == "procedural":
-            self._core.set_ground_elevation_m(ground_elevation_m(self._state.lat_rad, self._state.lon_rad))
+            self._core.set_ground_elevation_m(ground_elevation_m(self._state.lat_rad, self._state.lon_rad, self.cfg.geodesy))
         if self._turbulence is not None:
             self._core.set_gust_ned_mps(*to_ned(*self._turbulence.step(), self._state.psi_rad))
         self._state = self._core.step(u)

@@ -809,6 +809,53 @@ owner before work can start.
   (2026-10-07), so a GPL model such as FlightGear's c172p (AC3D, needs glTF conversion)
   would not fit; look for a CC0 or CC-BY model instead (attribution in THIRD_PARTY.md).
 
+### Geography and navigation (GPS)
+
+Goal (owner, 2026-10-08): build up from correct coordinates to GPS navigation. Steps:
+
+- [x] **Coordinate foundation** (2026-10-08): `flightsim/world/geo.py` (and the identical
+  `viewer/geo.js`): `Geodesy` maps geodetic latitude/longitude (what JSBSim integrates,
+  WGS84) to the flat map the tasks, terrain and viewer use (metres north/east of the
+  world's origin) and back, plus the grid convergence (map bearing = true bearing -
+  convergence). Model "wgs84": transverse Mercator around the origin's meridian (Krueger
+  series, docs/REFERENCES.md); "sphere": the original 6371 km mapping. The env config's
+  `world` block (`geodesy`, `origin_lat_deg`, `origin_lon_deg`; in
+  `configs/envs/altitude_heading_hold.yaml`, so every task) selects it; configs without
+  one (every log before this change) get the sphere, so old flights replay and re-fly
+  exactly (checked on the owner's demonstrations). Every conversion goes through it:
+  task start positions and runway frames, the autopilots' runway frames
+  (`Runway.from_geometry`), terrain under the aircraft, the stream's new hello `world`,
+  the viewer's scene (positions, map heading), panel readouts and HUD (ladder and flight
+  path marker on the map, tape in true heading). The sphere was 0.56 % short north-south
+  and 0.11 % long east-west against WGS84 at the equator (5556 m north was 5525 m).
+  Tests: `tests/test_geo.py` (round trip < 1 mm at 30 km, meridian arc by integration,
+  scale and conformality, convergence by finite differences, four origins, Python vs JS).
+  Autopilots on WGS84 (seeds 0-999, 2026-10-08), unchanged within run-to-run spread:
+
+  | Batch | Before (sphere) | WGS84 |
+  |---|---|---|
+  | Approach calm | 1000/1000 | 1000/1000 (`4fd93d449da3`; touchdown 382-393 m, 92-94 fpm) |
+  | Approach crosswind | 978 | 984 (`84c40c40827d`; side load 11, nose first 4, stall 1) |
+  | Takeoff calm | 1000/1000 | 1000/1000 (`9a59767e1050`) |
+  | Takeoff crosswind | 999 | 998 (`c774ac5b208b`; tail strike 2, the known breakaway kick) |
+  | Circuit calm | 1000/1000 | 1000/1000 (`a8f4c8b267f8`) |
+  | Circuit crosswind | 981 | 979 (`03fd1ac2b55b`; side load 15, nose first 5, tail strike 1) |
+
+  (Also fixed: `scripts/batch_run.py` crashed printing circuit summaries, whose takeoff
+  part has no ground centreline offset.)
+- [ ] **GPS readout:** latitude/longitude, ground speed and track, distance and bearing
+  to the runway (and later to a waypoint), in the panel and the HUD.
+- [ ] **Moving map:** the aircraft, runway, pattern and track on a map, in the panel or
+  the instruments window.
+- [ ] **Waypoint navigation tasks:** fly a route of waypoints (cross-country legs);
+  config-defined waypoints in latitude/longitude, an autopilot and RL-ready task.
+- [ ] **Real airfield placement:** the origin at a real airfield (runway true heading,
+  elevation and magnetic variation; runway numbers from magnetic heading). Ties in with
+  real-world scenery (out of scope so far: needs a decision). Before a far-from-equator
+  origin is used: the autopilots compare true heading with the runway's map heading,
+  which differ by the convergence away from the origin's meridian (~0.05 deg at 5 km
+  east at 38 N); handle it then.
+
 ### Licence and documentation
 
 - [x] **Licence and README** (2026-10-07): MIT (`LICENSE`, copyright Panos Vasilopoulos;

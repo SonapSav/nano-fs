@@ -6,7 +6,7 @@ from pathlib import Path
 
 from flightsim.config import canonical_json, config_hash, load_raw, parse_loading
 from flightsim.core import InitialConditions, Loading
-from flightsim.world.terrain import R_EARTH_M
+from flightsim.world.geo import Geodesy
 
 
 # Controls a task may give its pilot, in action-vector order. Every task has the first four;
@@ -143,6 +143,9 @@ class EnvConfig:
     # Viewer conditions (visual only, never the physics): time_of_day, visibility, clouds;
     # each "auto" unless set (see VISUAL_OPTIONS). Part of the config, so replays match.
     visual: tuple[tuple[str, str], ...] = ()
+    # Where the world sits on the Earth and how positions map to metres (world/geo.py);
+    # configs without a `world` block (logs before 2026-10-08) use the original sphere.
+    geodesy: Geodesy = Geodesy()
 
     @property
     def sim_steps_per_action(self) -> int:
@@ -171,6 +174,8 @@ def _parse_terrain(name) -> str:
 
 def env_config_from_raw(raw: dict) -> EnvConfig:
     ic, rnd, tg, rw, term = (raw[k] for k in ("initial_conditions", "randomize", "targets", "reward", "termination"))
+    geodesy = Geodesy.from_config(raw.get("world"))
+    start_lat, start_lon = geodesy.to_geodetic(float(ic.get("north_m", 0.0)), float(ic.get("east_m", 0.0)))
     return EnvConfig(
         aircraft=raw["aircraft"],
         sim_rate_hz=float(raw["sim_rate_hz"]),
@@ -179,7 +184,7 @@ def env_config_from_raw(raw: dict) -> EnvConfig:
         nominal=InitialConditions(
             alt_msl_m=float(ic["alt_msl_m"]), tas_mps=float(ic["tas_mps"]), heading_rad=math.radians(ic["heading_deg"]),
             # Optional start position, metres north and east of the airfield (the world origin).
-            lat_rad=float(ic.get("north_m", 0.0)) / R_EARTH_M, lon_rad=float(ic.get("east_m", 0.0)) / R_EARTH_M,
+            lat_rad=start_lat, lon_rad=start_lon,
         ),
         randomize_alt_m=float(rnd["alt_msl_m"]),
         randomize_tas_mps=float(rnd["tas_mps"]),
@@ -214,6 +219,7 @@ def env_config_from_raw(raw: dict) -> EnvConfig:
         wind=_parse_wind(raw.get("wind")),
         actions=_parse_actions(raw.get("actions")),
         terrain=_parse_terrain(raw.get("terrain", "flat")),
+        geodesy=geodesy,
         approach=_parse_approach(raw.get("approach")),
         takeoff=_parse_takeoff(raw.get("takeoff")),
         circuit=_parse_circuit(raw.get("circuit")),

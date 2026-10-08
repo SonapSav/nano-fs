@@ -25,7 +25,7 @@ from pathlib import Path
 from flightsim.config import load_raw
 from flightsim.control.heading_hold import wrap_angle_rad
 from flightsim.core import Controls, State
-from flightsim.world.terrain import R_EARTH_M
+from flightsim.envs.runway import Runway
 
 KT_TO_MPS = 1852.0 / 3600.0
 
@@ -112,6 +112,7 @@ class TakeoffAutopilot:
         h = math.radians(geometry["heading_deg"])
         self._rwy = h
         self._along = (math.cos(h), math.sin(h))
+        self._runway = Runway.from_geometry(geometry)
         self._right = (-math.sin(h), math.cos(h))
         self._parked_cg_msl = parked.alt_msl_m  # wheels on the runway
         self.phase = "roll"
@@ -123,9 +124,7 @@ class TakeoffAutopilot:
         self._last_rudder = trim.rudder
 
     def runway_coords(self, s: State) -> tuple[float, float]:
-        g = self.geo
-        dn, de = s.lat_rad * R_EARTH_M - g["threshold_north_m"], s.lon_rad * R_EARTH_M - g["threshold_east_m"]
-        return dn * self._along[0] + de * self._along[1], dn * self._right[0] + de * self._right[1]
+        return self._runway.coords(s)
 
     def __call__(self, s: State, on_ground: bool) -> Controls:
         g, trim, dt = self.g, self.trim, self.dt_s

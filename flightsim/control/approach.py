@@ -25,7 +25,7 @@ from pathlib import Path
 from flightsim.config import load_raw
 from flightsim.control.heading_hold import wrap_angle_rad
 from flightsim.core import Controls, State
-from flightsim.world.terrain import R_EARTH_M
+from flightsim.envs.runway import Runway
 
 KT_TO_MPS = 1852.0 / 3600.0
 
@@ -156,6 +156,7 @@ class ApproachAutopilot:
         h = math.radians(geometry["heading_deg"])
         self._rwy = h
         self._along = (math.cos(h), math.sin(h))
+        self._runway = Runway.from_geometry(geometry)
         self._right = (-math.sin(h), math.cos(h))
         self._tan_gp = math.tan(math.radians(geometry["glide_path_deg"]))
         self.phase = "approach"
@@ -169,9 +170,7 @@ class ApproachAutopilot:
         self._rollout_theta: float | None = None  # rollout: the falling pitch command
 
     def runway_coords(self, s: State) -> tuple[float, float]:
-        g = self.geo
-        dn, de = s.lat_rad * R_EARTH_M - g["threshold_north_m"], s.lon_rad * R_EARTH_M - g["threshold_east_m"]
-        return dn * self._along[0] + de * self._along[1], dn * self._right[0] + de * self._right[1]
+        return self._runway.coords(s)
 
     def __call__(self, s: State, touched_down: bool, nose_wheel_down: bool = False) -> Controls:
         g, trim, dt = self.g, self.trim, self.dt_s
