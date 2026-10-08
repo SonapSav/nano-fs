@@ -26,7 +26,8 @@ const LIVE_LQR = "live_lqr";
 const LIVE_APPROACH = "live_approach";
 const LIVE_TAKEOFF = "live_takeoff";
 const LIVE_CIRCUIT = "live_circuit";
-const LIVE_AUTOPILOT = { [LIVE]: "pid", [LIVE_LQR]: "lqr", [LIVE_APPROACH]: "approach", [LIVE_TAKEOFF]: "takeoff", [LIVE_CIRCUIT]: "circuit" };
+const LIVE_ROUTE = "live_route";
+const LIVE_AUTOPILOT = { [LIVE]: "pid", [LIVE_LQR]: "lqr", [LIVE_APPROACH]: "approach", [LIVE_TAKEOFF]: "takeoff", [LIVE_CIRCUIT]: "circuit", [LIVE_ROUTE]: "route" };
 const isLive = (v) => v in LIVE_AUTOPILOT;
 const MANUAL = "manual"; // calm air
 const MANUAL_WIND = "manual_wind";
@@ -36,10 +37,13 @@ const MANUAL_TAKEOFF = "manual_takeoff";
 const MANUAL_TAKEOFF_XW = "manual_takeoff_crosswind";
 const MANUAL_CIRCUIT = "manual_circuit";
 const MANUAL_CIRCUIT_XW = "manual_circuit_crosswind";
+const MANUAL_ROUTE = "manual_route";
+const MANUAL_ROUTE_WIND = "manual_route_wind";
 const MANUAL_CONDITIONS = {
   [MANUAL]: "calm", [MANUAL_WIND]: "windy", [MANUAL_APPROACH]: "approach", [MANUAL_CROSSWIND]: "approach_crosswind",
   [MANUAL_TAKEOFF]: "takeoff", [MANUAL_TAKEOFF_XW]: "takeoff_crosswind",
   [MANUAL_CIRCUIT]: "circuit", [MANUAL_CIRCUIT_XW]: "circuit_crosswind",
+  [MANUAL_ROUTE]: "route", [MANUAL_ROUTE_WIND]: "route_wind",
 };
 const isManual = (v) => v in MANUAL_CONDITIONS;
 // The Flights drawer's scenarios: [value, title, detail].
@@ -52,6 +56,8 @@ const SCENARIOS_FLY = [
   [MANUAL_TAKEOFF_XW, "Takeoff in crosswind", "Runway 09, wind and gusts (vary by seed)"],
   [MANUAL_CIRCUIT, "Circuit", "Takeoff, left-hand pattern, land on 09 (calm)"],
   [MANUAL_CIRCUIT_XW, "Circuit in crosswind", "The circuit with wind and gusts (vary by seed)"],
+  [MANUAL_ROUTE, "Route", "Fly a GPS route of 3-6 waypoints at 3000 ft (varies by seed)"],
+  [MANUAL_ROUTE_WIND, "Route in wind", "The route with wind and turbulence (vary by seed)"],
 ];
 const SCENARIOS_WATCH = [
   [LIVE, "PID autopilot", "Holds altitude and heading"],
@@ -59,6 +65,7 @@ const SCENARIOS_WATCH = [
   [LIVE_APPROACH, "Approach autopilot", "Lands on runway 09"],
   [LIVE_TAKEOFF, "Takeoff autopilot", "Takes off from runway 09 (wind varies by seed)"],
   [LIVE_CIRCUIT, "Circuit autopilot", "A whole circuit (wind varies by seed)"],
+  [LIVE_ROUTE, "Route autopilot", "Flies a GPS route of waypoints (route and wind vary by seed)"],
 ];
 const SCENARIO_TITLES = Object.fromEntries([...SCENARIOS_FLY, ...SCENARIOS_WATCH].map(([v, t]) => [v, t]));
 // Why an approach ended (envs/approach.py failure reasons), for the message line.
@@ -334,10 +341,12 @@ function applyHello(msg) {
   applySky();
   if (msg.takeoff) scene.windsock.setWind(msg.takeoff.wind?.from_deg ?? 0, (msg.takeoff.wind?.u20_mps ?? 0) * 1.943844);
   panel.setSession(msg);
-  const pilotName = { pid: "PID", lqr: "LQR", approach: "Approach", takeoff: "Takeoff", circuit: "Circuit" }[msg.pilot ?? "pid"] ?? msg.pilot;
+  const pilotName = { pid: "PID", lqr: "LQR", approach: "Approach", takeoff: "Takeoff", circuit: "Circuit", route: "Route" }[msg.pilot ?? "pid"] ?? msg.pilot;
   panel.setRunText(`${msg.source === "live" ? `${pilotName} autopilot` : { manual: "You are flying", replay: "Replay" }[msg.source]} ${msg.run_id}`);
   say(msg.source === "manual"
-    ? msg.approach?.task === "circuit"
+    ? msg.route
+      ? `Fly the magenta route (${msg.route.waypoints.length} waypoints) at ${Math.round((msg.targets?.alt_msl_m ?? 0) * 3.28084 / 100) * 100} ft: follow the GPS desired track (DTK) and keep the cross-track error (XTK) small; turns start before each waypoint. The Map window shows the route.`
+      : msg.approach?.task === "circuit"
       ? "Take off, climb straight ahead past the runway end, turn left at 700 ft, fly downwind at 1000 ft about 1 nm north, descend from abeam the threshold, turn base at 45 degrees and land on 09." + (msg.approach.wind ? " Crosswind and gusts." : "")
       : msg.approach
       ? "Follow the glide path to runway 09 (ahead), flare and land main wheels first." + (msg.approach.wind ? " Crosswind: crab on the approach, then line up with rudder and hold a wing low into the wind." : "")
@@ -816,6 +825,7 @@ function drawHudLayer() {
 // ch. 9, docs/REFERENCES.md; as configs/approach_autopilot.yaml).
 function hudTask(row) {
   const a = session?.approach, tk = session?.takeoff;
+  if (session?.route) return { targets: { alt_msl_m: session.targets?.alt_msl_m, heading_rad: panel.nav?.dtkTrue ?? null } }; // desired track bug
   if (!a && !tk) return { targets: session?.targets };
   const takeoffBugs = [{ kt: ROTATE_KT, label: "R" }, { kt: CLIMB_KT, label: "C" }];
   if (tk) return { runway: tk, speedBugs: takeoffBugs };

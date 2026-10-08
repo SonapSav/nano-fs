@@ -7,8 +7,9 @@ The re-flight must reproduce the log (same physics and code); a log that does no
 older version) gets outcome "unknown".
 
 Outcomes: "landed" (with touchdown and rollout numbers), "climbed" (takeoff), "completed"
-(free flight to the end), "failed" (with the task's reason), "stopped" (ended early by the
-pilot; a touchdown, if any, is included), "unknown".
+(free flight to the end; a route to its last waypoint, with legs and cross-track error),
+"failed" (with the task's reason), "stopped" (ended early by the pilot; a touchdown or the
+legs flown, if any, are included), "unknown".
 
 Results are cached on disk (data/cache/flight_results.json) by path, size and modification
 time, plus RESULTS_VERSION: bump it when the tasks' rules change.
@@ -23,7 +24,7 @@ from flightsim.datalog import read_log
 from flightsim.envs import make_env
 from flightsim.envs.config import env_config_from_raw
 
-RESULTS_VERSION = 1
+RESULTS_VERSION = 2  # 2: navigation task (routes)
 CACHE_NAME = "flight_results.json"
 MPS_TO_FPM = 196.850394
 MPS_TO_KT = 1.943844
@@ -58,10 +59,16 @@ def flight_result(path: str | Path) -> dict:
     reason = getattr(env, "failure", None) or env._termination_reason()
     landing = env.landing_summary() if hasattr(env, "landing_summary") else None
     td = _touchdown(landing.get("touchdown")) if landing else None
+    route = None
+    if hasattr(env, "route_summary"):
+        rs = env.route_summary()
+        route = {"legs": rs["legs"], "legs_done": rs["legs_done"], "xtk_max_m": round(rs["xtk_max_m"], 1)}
     if reason:
         out = {"outcome": "failed", "reason": reason}
         if td:
             out["touchdown"] = td
+        if route:
+            out["route"] = route
         return out
     if landing is not None:
         if landing["landed"]:
@@ -69,6 +76,8 @@ def flight_result(path: str | Path) -> dict:
             return {"outcome": "landed", "touchdown": td, "bounces": landing.get("bounces", 0),
                     "stop_along_m": round(r["stop_along_m"]) if "stop_along_m" in r else None}  # fmt: skip
         return {"outcome": "stopped", **({"touchdown": td} if td else {})}
+    if route is not None:
+        return {"outcome": "completed" if env.route_done else "stopped", "route": route}
     if hasattr(env, "takeoff_summary"):
         return {"outcome": "climbed"} if env.takeoff_summary()["climbed"] else {"outcome": "stopped"}
     episode_s = float(raw.get("episode_s", 0))

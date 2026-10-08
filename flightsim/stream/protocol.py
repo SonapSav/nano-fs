@@ -16,7 +16,10 @@ Server -> client messages (JSON):
              conditions, envs visual_conditions; null when unknown: viewer defaults),
    "world" ({"model": "wgs84" | "sphere", "origin_lat_deg", "origin_lon_deg"}: how the
             flight's latitude/longitude map to metres, world/geo.py and viewer/geo.js;
-            null when unknown: the original sphere)}
+            null when unknown: the original sphere),
+   "route" (navigation task: {"name", "start": {north_m, east_m}, "waypoints": [{name, north_m,
+            east_m, fly_over}], "turn_bank_deg", "geodesy"}, envs.navigation; the viewer
+            sequences it with nav.js; else null)}
   {"type": "frame", "row": {<log column>: value, ...}}
   {"type": "preview", "id", "hello": {<hello message>}, "row": {<log column>: value, ...}}
       Answer to a client "preview": the flight's hello and its starting state (live and
@@ -39,9 +42,9 @@ Server -> client messages (JSON):
 Client -> server messages:
   {"type": "list"}
   {"type": "play", "source": "replay", "path": "<relative to the data dir>", "speed": 1.0, "start_s"?: 0.0}
-  {"type": "play", "source": "live", "autopilot": "pid" | "lqr" | "approach" | "takeoff" | "circuit" (default "pid"), "seed": 0, "speed": 1.0}
+  {"type": "play", "source": "live", "autopilot": "pid" | "lqr" | "approach" | "takeoff" | "circuit" | "route" (default "pid"), "seed": 0, "speed": 1.0}
   {"type": "play", "source": "manual", "conditions": "calm" | "windy" | "approach" | "approach_crosswind" | "takeoff"
-   | "takeoff_crosswind" | "circuit" | "circuit_crosswind", "seed": 0, "record": true, "aids"?: {"hud": false}}
+   | "takeoff_crosswind" | "circuit" | "circuit_crosswind" | "route" | "route_wind", "seed": 0, "record": true, "aids"?: {"hud": false}}
       (speed is capped at 1)
   {"type": "preview", "id"?, <the fields of a "play" message>}
       The starting state of that flight without starting it (shown when a flight is

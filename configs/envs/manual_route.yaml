@@ -1,0 +1,5 @@
+# Manual flight: the navigation task (a random route per seed) with
+# flaps and pitch trim added to the pilot's controls. Used by the viewer's "Fly a route" mode.
+base: navigation.yaml
+
+actions: [elevator, aileron, rudder, throttle, flaps, pitch_trim]

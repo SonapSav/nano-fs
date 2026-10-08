@@ -10,6 +10,7 @@ import { Geodesy } from "./geo.js";
 import { PANEL_CHANNEL, PANEL_TIMEOUT_MS } from "./panel.js";
 import { RANGES_NM, Track, drawMap } from "./map.js";
 import { MapBackground } from "./mapTiles.js";
+import { NavTracker } from "./nav.js";
 
 const canvas = document.getElementById("map");
 const status = document.getElementById("status");
@@ -31,6 +32,7 @@ const save = () => {
 };
 
 let hello = null, row = null, geodesy = new Geodesy(null), heardAt = 0, dirty = true;
+let navTracker = null, nav = null; // a route's navigation (nav.js), fed every frame
 const track = new Track();
 let background = null;
 try {
@@ -42,6 +44,7 @@ try {
 function addToTrack(r) {
   const [n, e] = geodesy.toMap(r.lat_rad, r.lon_rad);
   track.add(r.t_s, n, e);
+  nav = navTracker ? navTracker.update(r) : null;
 }
 
 channel.addEventListener("message", (e) => {
@@ -51,6 +54,8 @@ channel.addEventListener("message", (e) => {
     if (m.hello?.run_id !== hello?.run_id || m.hello?.source !== hello?.source) track.clear();
     hello = m.hello;
     geodesy = new Geodesy(hello?.world ?? null);
+    navTracker = hello?.route ? new NavTracker(hello.route, geodesy) : null;
+    nav = null;
     row = m.row;
     if (row) addToTrack(row);
     dirty = true;
@@ -108,7 +113,7 @@ function frame() {
     }
     const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm: RANGES_NM[settings.rangeIndex], northUp: settings.northUp, background });
+    drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm: RANGES_NM[settings.rangeIndex], northUp: settings.northUp, background, nav });
   }
   requestAnimationFrame(frame);
 }

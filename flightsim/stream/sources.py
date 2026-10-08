@@ -40,6 +40,7 @@ class Source:
     visual: dict | None = None  # viewer conditions (envs: visual_conditions); None: viewer defaults
     pilot_name: str | None = None  # who flies a live flight: "pid", "lqr" or "human"
     world: dict | None = None  # the geodesy (world/geo.py) for the viewer's map; None: the original sphere
+    route: dict | None = None  # navigation task: the route (envs.navigation.NavigationEnv.route_info)
 
     def frames(self) -> Iterator[tuple[float, dict]]:
         raise NotImplementedError
@@ -94,6 +95,7 @@ class ReplaySource(Source):
         self.takeoff = env.runway_info() if env is not None and hasattr(env, "runway_info") else None
         if env is not None:
             self.world = env.cfg.geodesy.as_dict()
+            self.route = env.route_info() if hasattr(env, "route_info") else None
             self.visual = env.visual_conditions()
             t = env.targets
             self.targets = {"alt_msl_m": t.alt_msl_m, "heading_rad": t.heading_rad, "tas_mps": t.tas_mps}
@@ -134,6 +136,7 @@ class LiveSource(Source):
         self.takeoff = self._env.runway_info() if hasattr(self._env, "runway_info") else None
         self.visual = self._env.visual_conditions()
         self.world = env_cfg.geodesy.as_dict()
+        self.route = self._env.route_info() if hasattr(self._env, "route_info") else None
         self._config_hash = env_cfg.config_hash
 
     def first_frame(self) -> dict:
@@ -254,7 +257,7 @@ def _log_info(path: Path) -> dict | None:
 
 
 def _task_of(config_json: str | None) -> tuple[str | None, bool | None]:
-    """The task of a log ("free", "approach", "takeoff", "circuit") and whether it flew in
+    """The task of a log ("free", "approach", "takeoff", "circuit", "route") and whether it flew in
     wind, from its config (None, None if unreadable)."""
     try:
         raw = json.loads(config_json or "null")
@@ -262,6 +265,9 @@ def _task_of(config_json: str | None) -> tuple[str | None, bool | None]:
         return None, None
     if not isinstance(raw, dict):
         return None, None
+    if raw.get("route"):
+        speeds = (raw.get("wind") or {}).get("steady_speed_mps") or [0]
+        return "route", max(speeds) > 0
     for task in ("circuit", "takeoff", "approach"):
         if raw.get(task):
             return task, any(isinstance(raw.get(k), dict) and bool(raw[k].get("wind")) for k in ("circuit", "takeoff", "approach"))

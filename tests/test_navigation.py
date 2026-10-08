@@ -100,3 +100,53 @@ def test_route_autopilot_flies_a_named_route():
     assert s["completed"] and s["legs_done"] == 3
     assert s["xtk_max_m"] < 60 and s["alt_rms_m"] < 5
     assert [w["name"] for w in env.route_info()["waypoints"]] == ["NORTH", "EAST", "HOME"]
+
+
+def test_viewer_navigation_port_agrees():
+    """nav.js gives the same legs, arcs and quantities as envs/route.py for the same samples."""
+    import json
+    import shutil
+    import subprocess
+
+    from flightsim.envs.navigation import turn_speed_mps
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node not installed")
+    over = {"episode_s": 600.0}
+    env = make_env(load_env_config(NAV, over), record=True)
+    policy = RoutePolicy(route_gains_from_raw(load_route_raw(ROOT / "configs" / "route_autopilot.yaml")), env.cfg.control_rate_hz)
+    run_episode(env, policy, seed=7)
+    states, _ = env.recorded
+    geo, route = env.cfg.geodesy, env.route
+    samples = []
+    for s in states[::4]:  # 30 Hz, as the viewer sees frames
+        n, e = geo.to_map(s.lat_rad, s.lon_rad)
+        track = math.atan2(s.v_east_mps, s.v_north_mps) - geo.convergence_rad(s.lat_rad, s.lon_rad)
+        samples.append([n, e, math.hypot(s.v_north_mps, s.v_east_mps), turn_speed_mps(s), track,
+                        s.v_north_mps, s.v_east_mps, s.tas_mps, s.psi_rad])  # fmt: skip
+    py = Navigator(route, env.cfg.route.turn_bank_rad)
+    expected = []
+    for n, e, gs, ts, track, *_ in samples:
+        py.update(n, e, gs, 0.0, ts)
+        q = py.quantities(n, e, track)
+        expected.append([q["leg"], q["turning"], q["dtk_map_rad"], q["xtk_m"], py.done])
+    viewer = Path(__file__).parent.parent / "flightsim" / "viewer"
+    script = f"""
+    const nav = await import({json.dumps((viewer / "nav.js").as_uri())});
+    const route = new nav.Route({json.dumps(env.route_info())});
+    const nv = new nav.Navigator(route, {env.cfg.route.turn_bank_rad});
+    const out = [], ts = [];
+    for (const [n, e, gs, tsp, track, vn, ve, tas, psi] of {json.dumps(samples)}) {{
+      ts.push(nav.turnSpeed({{ v_north_mps: vn, v_east_mps: ve, tas_mps: tas, psi_rad: psi }}) - tsp);
+      nv.update(n, e, gs, tsp);
+      const q = nv.quantities(n, e, track);
+      out.push([q.leg, q.turning, q.dtkMap, q.xtk, nv.done]);
+    }}
+    console.log(JSON.stringify({{ out, maxTs: Math.max(...ts.map(Math.abs)) }}));
+    """
+    got = json.loads(subprocess.run([node, "--input-type=module"], input=script, capture_output=True, text=True, check=True).stdout)
+    assert got["maxTs"] < 1e-9
+    assert [g[:2] + [g[4]] for g in got["out"]] == [e[:2] + [e[4]] for e in expected]  # same legs, turns, completion
+    assert np.allclose([g[2:4] for g in got["out"]], [e[2:4] for e in expected], atol=1e-6)
+    assert max(e[0] for e in expected) >= 2 and any(e[1] for e in expected)  # several legs and turn arcs covered

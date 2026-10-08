@@ -14,6 +14,7 @@
 import { drawAll, indicatedKt, units } from "./gauges.js";
 import { Geodesy } from "./geo.js";
 import { drawGps, gpsData, gpsTarget } from "./gps.js";
+import { NavTracker } from "./nav.js";
 
 export const PANEL_CHANNEL = "flightsim-panel";
 export const PANEL_TIMEOUT_MS = 3000; // the other window is gone after this long without a message
@@ -73,8 +74,16 @@ export class InstrumentPanel {
     this.session = hello;
     this.geodesy = new Geodesy(hello?.world ?? null);
     this.gpsTarget = gpsTarget(hello);
+    this.navTracker = hello?.route ? new NavTracker(hello.route, this.geodesy) : null;
+    this.nav = null; // the route's GPS quantities for the newest frame (nav.js)
     this.circuitClimbed = false;
-    showApproachRows(this, hello?.approach ? "approach" : hello?.takeoff ? "takeoff" : null);
+    showApproachRows(this, hello?.route ? "route" : hello?.approach ? "approach" : hello?.takeoff ? "takeoff" : null);
+  }
+
+  // GPS target of a route: the active waypoint.
+  navTarget(nav) {
+    const w = this.session.route.waypoints[nav.leg];
+    return { name: w.name, north_m: w.north_m, east_m: w.east_m };
   }
 
   setRunText(text) {
@@ -83,7 +92,9 @@ export class InstrumentPanel {
 
   draw(row) {
     drawAll(this.gauges, row, this.session?.targets);
-    drawGps(this.gauges.gps, row ? gpsData(row, this.geodesy, this.gpsTarget) : null);
+    this.nav = row && this.navTracker ? this.navTracker.update(row) : null;
+    const target = this.nav ? this.navTarget(this.nav) : this.gpsTarget;
+    drawGps(this.gauges.gps, row ? gpsData(row, this.geodesy, target, this.nav) : null);
     updateReadout(this, row);
   }
 }
@@ -93,9 +104,15 @@ function showApproachRows(p, kind) {
   const $ = p.$, session = p.session;
   const on = Boolean(kind);
   $("l-talt").textContent = { approach: "Glide path", takeoff: "Climb speed" }[kind] ?? "Altitude target";
-  $("l-thdg").textContent = on ? "Centreline" : "Heading target";
-  $("l-dist").textContent = kind === "takeoff" ? "Runway left" : "To threshold";
+  $("l-thdg").textContent = kind === "route" ? "Desired track" : on ? "Centreline" : "Heading target";
+  $("l-dist").textContent = { takeoff: "Runway left", route: "Cross-track" }[kind] ?? "To threshold";
   $("l-dist").hidden = $("r-dist").hidden = !on;
+  if (kind === "route") {
+    $("l-wind").textContent = "Waypoint";
+    $("l-wind").hidden = $("r-wind").hidden = false;
+    return;
+  }
+  $("l-wind").textContent = "Wind (20 ft)";
   const w = on ? (session?.approach ?? session?.takeoff)?.wind : null;
   $("l-wind").hidden = $("r-wind").hidden = !w;
   if (w) {
@@ -152,11 +169,17 @@ function updateReadout(p, row) {
       readout.talt.textContent = readout.thdg.textContent = $("r-dist").textContent = "–";
     }
   }
+  if (session?.route) {
+    const nav = p.nav;
+    readout.thdg.textContent = nav ? `${String(Math.round(deg360(nav.dtkTrue)) % 360).padStart(3, "0")}°` : "–";
+    $("r-dist").textContent = !nav ? "–" : Math.abs(nav.xtk) < 10 ? "on track" : `${Math.round(Math.abs(nav.xtk))} m ${nav.xtk > 0 ? "right" : "left"}`;
+    $("r-wind").textContent = !nav ? "–" : nav.done ? "route complete" : `${nav.waypoint} (${nav.leg + 1} of ${nav.legs})${nav.turning ? ", turning" : ""}`;
+  }
   const t = a ? null : session?.targets;
   readout.alt.textContent = row ? `${Math.round(row.alt_msl_m * units.M_TO_FT).toLocaleString("en-US")} ft` : "–";
   if (!a) readout.talt.textContent = t ? `${Math.round(t.alt_msl_m * units.M_TO_FT).toLocaleString("en-US")} ft` : "–";
   readout.hdg.textContent = row ? `${String(Math.round(deg360(row.psi_rad)) % 360).padStart(3, "0")}°` : "–";
-  if (!a) readout.thdg.textContent = t ? `${String(Math.round(deg360(t.heading_rad)) % 360).padStart(3, "0")}°` : "–";
+  if (!a && !session?.route) readout.thdg.textContent = t ? `${String(Math.round(deg360(t.heading_rad)) % 360).padStart(3, "0")}°` : "–";
   readout.kias.textContent = row ? `${indicatedKt(row).toFixed(0)} kt` : "–";
   readout.aoa.textContent = row ? `${(row.alpha_rad * units.DEG).toFixed(1)}°` : "–";
   readout.g.textContent = row ? `${(-row.az_mps2 / units.G).toFixed(2)} g` : "–";

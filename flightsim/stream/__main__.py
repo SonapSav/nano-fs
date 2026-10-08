@@ -9,6 +9,7 @@ from flightsim.control.approach import load_approach_gains
 from flightsim.control.circuit import circuit_gains_from_raw, load_circuit_raw
 from flightsim.control.takeoff import load_takeoff_gains
 from flightsim.control.autopilot import load_autopilot_gains
+from flightsim.control.route import load_route_raw, route_gains_from_raw
 from flightsim.envs import load_env_config
 from flightsim.stream.server import ServerConfig, run_server
 
@@ -30,6 +31,10 @@ def main() -> None:
     parser.add_argument("--circuit-autopilot", default="configs/circuit_autopilot.yaml", help="circuit autopilot")
     parser.add_argument("--manual-circuit-config", default="configs/envs/circuit.yaml", help="manual circuit")
     parser.add_argument("--manual-circuit-crosswind-config", default="configs/envs/circuit_crosswind.yaml", help="manual circuit, wind")
+    parser.add_argument("--route-config", default="configs/envs/navigation_wind.yaml", help="navigation task for the route autopilot")
+    parser.add_argument("--route-autopilot", default="configs/route_autopilot.yaml", help="route autopilot")
+    parser.add_argument("--manual-route-config", default="configs/envs/manual_route.yaml", help="manual route")
+    parser.add_argument("--manual-route-wind-config", default="configs/envs/manual_route_wind.yaml", help="manual route, wind")
     parser.add_argument("--manual-config", default="configs/envs/manual.yaml", help="manual flight, calm air")
     parser.add_argument("--manual-wind-config", default="configs/envs/manual_wind.yaml", help="manual flight, wind and turbulence")
     parser.add_argument("--manual-approach-config", default="configs/envs/manual_approach.yaml", help="manual approach and landing")
@@ -53,6 +58,8 @@ def main() -> None:
             "takeoff_crosswind": load_env_config(args.manual_takeoff_crosswind_config),
             "circuit": load_env_config(args.manual_circuit_config),
             "circuit_crosswind": load_env_config(args.manual_circuit_crosswind_config),
+            "route": load_env_config(args.manual_route_config),
+            "route_wind": load_env_config(args.manual_route_wind_config),
         },
         lqr_raw=load_raw(args.lqr),
         approach_env_cfg=load_env_config(args.approach_config),
@@ -61,6 +68,8 @@ def main() -> None:
         takeoff_gains=load_takeoff_gains(args.takeoff_autopilot),
         circuit_env_cfg=load_env_config(args.circuit_config),
         circuit_gains=circuit_gains_from_raw(load_circuit_raw(args.circuit_autopilot)),
+        route_env_cfg=load_env_config(args.route_config),
+        route_gains=route_gains_from_raw(load_route_raw(args.route_autopilot)),
         flight_results=not args.no_flight_results,
     )
     # Design the LQR gain schedule now (or load it from data/cache/lqr), so the first

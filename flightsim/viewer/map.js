@@ -97,9 +97,10 @@ export function ringStepNm(rangeNm) {
   return [0.1, 0.25, 0.5, 1, 2, 5, 10].find((s) => s >= raw * 0.99) ?? 10;
 }
 
-// Draw the map. `state`: {hello, row, geodesy, track (Track), rangeNm, northUp, background}
-// (`background`: optional, a mapTiles.js MapBackground: terrain, villages and roads).
-export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northUp, background = null }) {
+// Draw the map. `state`: {hello, row, geodesy, track (Track), rangeNm, northUp, background,
+// nav} (`background`: optional, a mapTiles.js MapBackground: terrain, villages and roads;
+// `nav`: a route's GPS quantities for this frame, nav.js).
+export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northUp, background = null, nav = null }) {
   ctx.fillStyle = C.ground;
   ctx.fillRect(0, 0, w, h);
   const font = (size, weight = 500) => `${weight} ${size}px "Barlow Condensed", "Roboto Condensed", "Arial Narrow", sans-serif`;
@@ -165,6 +166,35 @@ export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northU
     text(runwayNumber(hdg), x, y, 15, C.runway, "center", 600);
   }
 
+  // Route (navigation task): legs flown dim, the active leg bright, waypoints with names.
+  const route = hello?.route;
+  if (route) {
+    const pts = [[route.start.north_m, route.start.east_m], ...route.waypoints.map((wp) => [wp.north_m, wp.east_m])];
+    const active = nav ? (nav.done ? route.waypoints.length : nav.leg) : 0;
+    for (let i = 0; i + 1 < pts.length; i++) {
+      line([pts[i], pts[i + 1]], i < active ? "rgba(224, 112, 216, 0.45)" : C.pattern, i === active ? 4 : 2.5);
+    }
+    route.waypoints.forEach((wp, i) => {
+      const [x, y] = v.toScreen(wp.north_m, wp.east_m), next = i === active;
+      ctx.fillStyle = next ? C.predict : C.pattern;
+      ctx.strokeStyle = "#1d1d1d";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 7); ctx.lineTo(x + 7, y); ctx.lineTo(x, y + 7); ctx.lineTo(x - 7, y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      if (next) {
+        ctx.strokeStyle = C.predict;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, 13, 0, 2 * Math.PI);
+        ctx.stroke();
+      }
+      text(wp.name, x + 12, y - 14, 15, C.text, "left", 600);
+    });
+  }
+
   // Flown track, predicted path, aircraft.
   line([...track.points, [north, east]], C.track, 2);
   line(predictedPath(row, conv, PREDICT_S, north, east), C.predict, 2, [4, 4]);
@@ -199,8 +229,10 @@ export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northU
 
   // Info: mode and range top left; GPS line at the bottom.
   text(`${northUp ? "NORTH UP" : "TRACK UP"}   ${rangeNm} nm`, 14, 22, 17, C.text, "left", 600);
-  const g = gpsData(row, geodesy, gpsTarget(hello));
+  const target = nav && route ? { name: route.waypoints[nav.leg].name, north_m: route.waypoints[nav.leg].north_m, east_m: route.waypoints[nav.leg].east_m } : gpsTarget(hello);
+  const g = gpsData(row, geodesy, target, nav);
   const pad3 = (d) => String(Math.round(d) % 360).padStart(3, "0");
-  text(`GS ${Math.round(g.gsKt)} kt   TRK ${g.trackDeg === null ? "---" : pad3(g.trackDeg)}°   ${g.target} ${g.distNm < 10 ? g.distNm.toFixed(2) : g.distNm.toFixed(1)} nm ${pad3(g.bearingDeg)}°`, 14, h - 18, 17, C.text, "left", 600);
+  const xtk = nav ? `   DTK ${pad3(g.dtkDeg)}°   XTK ${(Math.abs(g.xtkM) / M_PER_NM).toFixed(2)} nm${Math.abs(g.xtkM) >= 9 ? (g.xtkM > 0 ? " R" : " L") : ""}` : "";
+  text(`GS ${Math.round(g.gsKt)} kt   TRK ${g.trackDeg === null ? "---" : pad3(g.trackDeg)}°   ${g.target} ${g.distNm < 10 ? g.distNm.toFixed(2) : g.distNm.toFixed(1)} nm ${pad3(g.bearingDeg)}°${xtk}`, 14, h - 18, 17, C.text, "left", 600);
   text("+ / − zoom   N north up / track up", w - 14, h - 18, 14, C.dim, "right");
 }

@@ -896,8 +896,16 @@ Goal (owner, 2026-10-08): build up from correct coordinates to GPS navigation. S
   arcs: 90 / 810 m); wind 20/20, RMS 15 m, max 55 m (worst 125 m). Tests:
   `tests/test_navigation.py`.
   - [ ] 1000-seed batches, calm and wind (seeds 0-999).
-  - [ ] Viewer: route on the map, GPS desired track and cross-track error, HUD desired
-    track bug, "Fly a route" scenarios and a "Watch the route autopilot" source.
+  - [x] Viewer (2026-10-08): the hello carries the route; `viewer/nav.js` (a port of the
+    sequencing, turn arcs and quantities, fed every frame; after a seek it starts from
+    the nearest leg; a test feeds a recorded autopilot flight to both and gets the same
+    legs, arcs, desired tracks and cross-track errors) drives: the map (route, legs
+    flown dim, active leg bright, waypoints named, the next one circled; GPS line with
+    DTK and XTK), the GPS unit (TO the active waypoint, DTK, XTK), the panel (desired
+    track, cross-track, "WP3 (3 of 3), turning") and the HUD (desired-track bug).
+    Scenarios: "Route" and "Route in wind" (fly yourself, `manual_route*.yaml`), "Route
+    autopilot" (watch, `navigation_wind.yaml`). Past flights: task "Route", results
+    "Route flown, 5 legs, max 23 m off track" / "Off course, 2/5 legs".
 - [ ] **Real airfield placement:** the origin at a real airfield (runway true heading,
   elevation and magnetic variation; runway numbers from magnetic heading). Ties in with
   real-world scenery (out of scope so far: needs a decision). Before a far-from-equator

@@ -34,8 +34,9 @@ export function gpsTarget(session) {
 }
 
 // {latDeg, lonDeg, gsKt, trackDeg (null when slow), target, distNm, bearingDeg, eteS
-// (null when not closing)} for a frame row, with `geodesy` a geo.js Geodesy.
-export function gpsData(row, geodesy, target) {
+// (null when not closing), dtkDeg and xtkM (routes: from `nav`, nav.js quantities)} for a
+// frame row, with `geodesy` a geo.js Geodesy.
+export function gpsData(row, geodesy, target, nav = null) {
   const [north, east] = geodesy.toMap(row.lat_rad, row.lon_rad);
   const gs = Math.hypot(row.v_north_mps, row.v_east_mps);
   const dn = target.north_m - north, de = target.east_m - east;
@@ -48,6 +49,7 @@ export function gpsData(row, geodesy, target) {
     latDeg: row.lat_rad * DEG, lonDeg: row.lon_rad * DEG,
     gsKt: gs * MPS_TO_KT, trackDeg: gs < MIN_TRACK_MPS ? null : wrap360(Math.atan2(row.v_east_mps, row.v_north_mps) * DEG),
     target: target.name, distNm: dist / M_PER_NM, bearingDeg: bearing, eteS: closing > 1 && dist > 30 ? dist / closing : null,
+    dtkDeg: nav ? wrap360(nav.dtkTrue * DEG) : null, xtkM: nav ? nav.xtk : null,
   };
 }
 
@@ -97,6 +99,11 @@ export function drawGps(canvas, data) {
     ["BRG", `${pad(Math.round(data.bearingDeg) % 360, 3)}°`, MAGENTA, 24],
     ["ETE", fmtEte(data.eteS), MAGENTA, 24],
   ];
+  if (data.dtkDeg !== null) {
+    const x = Math.abs(data.xtkM) / M_PER_NM;
+    rows.push(["DTK", `${pad(Math.round(data.dtkDeg) % 360, 3)}°`, MAGENTA, 24]);
+    rows.push(["XTK", `${x < 0.005 ? "0.00" : x.toFixed(2)} nm ${x < 0.005 ? "" : data.xtkM > 0 ? "R" : "L"}`.trim(), MAGENTA, 24]);
+  }
   const top = 50, step = (H - top - 22) / rows.length;
   rows.forEach(([label, value, color, size], i) => {
     const y = top + step * (i + 0.5);

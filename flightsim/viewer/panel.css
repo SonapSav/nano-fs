@@ -16,7 +16,8 @@
   display: flex; flex-direction: column; justify-content: center; gap: 6px;
   min-width: 11em; padding: 0 6px; font-variant-numeric: tabular-nums;
 }
-.panel .readout dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: 2px 12px; }
+.panel .readout dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: 0 12px; line-height: 1.25;
+  font-size: clamp(13px, 1.9vh, 16px); } /* up to 13 rows within two gauges' height */
 .panel .readout dt { color: var(--dim); }
 .panel .readout dd { margin: 0; text-align: right; }
 .panel .readout .target { color: var(--bug); }

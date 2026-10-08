@@ -24,7 +24,8 @@ from flightsim.envs import EnvConfig
 from flightsim.control.approach import ApproachGains
 from flightsim.control.circuit import CircuitGains
 from flightsim.control.takeoff import TakeoffGains
-from flightsim.envs.policies import ApproachPolicy, CircuitPolicy, LQRPolicy, PIDPolicy, TakeoffPolicy
+from flightsim.control.route import RouteGains
+from flightsim.envs.policies import ApproachPolicy, CircuitPolicy, LQRPolicy, PIDPolicy, RoutePolicy, TakeoffPolicy
 from flightsim.stream.protocol import PROTOCOL_VERSION, encode
 from flightsim.stream.results import ResultCache, flight_result
 from flightsim.stream.sources import LiveSource, ManualSource, ReplaySource, Source, list_logs
@@ -48,6 +49,8 @@ class ServerConfig:
     takeoff_gains: TakeoffGains | None = None
     circuit_env_cfg: EnvConfig | None = None  # circuit task flown by the circuit autopilot
     circuit_gains: CircuitGains | None = None
+    route_env_cfg: EnvConfig | None = None  # navigation task flown by the route autopilot
+    route_gains: "RouteGains | None" = None
     # Past flight results (stream/results.py): computed in the background for logs outside
     # batches and sent with the log list. Off by default (tests); the viewer server turns it on.
     flight_results: bool = False
@@ -74,10 +77,13 @@ class ServerConfig:
             return ApproachPolicy(self.approach_gains, self.approach_env_cfg.control_rate_hz)
         if name == "takeoff" and self.takeoff_gains is not None:
             return TakeoffPolicy(self.takeoff_gains, self.takeoff_env_cfg.control_rate_hz)
+        if name == "route" and self.route_gains is not None:
+            return RoutePolicy(self.route_gains, self.route_env_cfg.control_rate_hz)
         if name == "circuit" and self.circuit_gains is not None:
             return CircuitPolicy(self.circuit_gains, self.circuit_env_cfg.control_rate_hz)
         names = (["pid"] + (["lqr"] if self.lqr_raw else []) + (["approach"] if self.approach_gains else [])
-                 + (["takeoff"] if self.takeoff_gains else []) + (["circuit"] if self.circuit_gains else []))  # fmt: skip
+                 + (["takeoff"] if self.takeoff_gains else []) + (["circuit"] if self.circuit_gains else [])
+                 + (["route"] if self.route_gains else []))  # fmt: skip
         raise ValueError(f"unknown autopilot {name!r}; choose from {names}")
 
 
@@ -160,7 +166,8 @@ class Session:
         if msg.get("source") == "live":
             name = str(msg.get("autopilot", "pid"))
             policy = self.cfg.autopilot(name)
-            env_cfg = {"approach": self.cfg.approach_env_cfg, "takeoff": self.cfg.takeoff_env_cfg, "circuit": self.cfg.circuit_env_cfg}.get(
+            env_cfg = {"approach": self.cfg.approach_env_cfg, "takeoff": self.cfg.takeoff_env_cfg, "circuit": self.cfg.circuit_env_cfg,
+                       "route": self.cfg.route_env_cfg}.get(
                 name, self.cfg.env_cfg
             )
             return LiveSource(env_cfg, None, int(msg.get("seed", 0)), policy=policy)
@@ -289,7 +296,7 @@ class Session:
             "aircraft": source.aircraft, "sim_rate_hz": source.sim_rate_hz, "frame_rate_hz": self.cfg.frame_rate_hz,
             "duration_s": source.duration_s, "targets": source.targets, "meta": source.meta,
             "pilot": source.pilot_name, "approach": source.approach, "takeoff": source.takeoff, "visual": source.visual,
-            "world": source.world,
+            "world": source.world, "route": source.route,
             "pattern": self.cfg.pattern_info() if (source.approach or {}).get("task") == "circuit" else None,
         }  # fmt: skip
 

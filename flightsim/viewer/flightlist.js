@@ -4,7 +4,7 @@
 
 export const GROUP_CAP = 50; // options shown per group before "… N more"
 // Task names of past flights (the server reads them from each log's config).
-export const TASK_TITLES = { free: "Free flight", approach: "Approach and landing", takeoff: "Takeoff", circuit: "Circuit" };
+export const TASK_TITLES = { free: "Free flight", approach: "Approach and landing", takeoff: "Takeoff", circuit: "Circuit", route: "Route" };
 
 const pad2 = (n) => String(n).padStart(2, "0");
 export const fmtDuration = (s) => `${Math.floor(s / 60)}:${pad2(Math.floor(s % 60))}`;
@@ -18,7 +18,7 @@ function fmtDate(epochS) {
 const FAILURES = {
   nose_first: "Nose wheel first", wing_low: "Wing low at touchdown", hard_landing: "Hard landing", off_runway: "Ran off the runway",
   undershoot: "Short of the runway", side_load: "Touched down crabbed", tail_strike: "Tail strike", wingtip_strike: "Wingtip strike",
-  nose_strike: "Nose strike", lost_approach: "Lost the approach", overrun: "Ran off the end", no_stop: "Did not stop in time",
+  nose_strike: "Nose strike", off_course: "Off course", lost_approach: "Lost the approach", overrun: "Ran off the end", no_stop: "Did not stop in time",
   no_liftoff: "No lift-off", sank_back: "Sank back after lift-off", lost: "Off the centreline", alpha: "Stalled",
   bank: "Bank limit", load_factor: "Load limit",
 };
@@ -27,18 +27,18 @@ const FAILURES = {
 export function resultText(r) {
   if (!r || r.outcome === "unknown") return null;
   const td = r.touchdown;
-  const where = td ? ` ${Math.round(td.along_m)} m, ${td.sink_fpm} fpm` : "";
+  const where = td ? ` ${Math.round(td.along_m)} m, ${td.sink_fpm} fpm` : r.route ? `, ${r.route.legs_done}/${r.route.legs} legs` : "";
   switch (r.outcome) {
     case "landed":
       return { text: `Landed${where}${r.bounces ? `, ${r.bounces} bounce${r.bounces > 1 ? "s" : ""}` : ""}`, kind: "good" };
     case "climbed":
       return { text: "Climbed out", kind: "good" };
     case "completed":
-      return { text: "Completed", kind: "good" };
+      return { text: r.route ? `Route flown, ${r.route.legs} legs, max ${Math.round(r.route.xtk_max_m)} m off track` : "Completed", kind: "good" };
     case "failed":
       return { text: `${FAILURES[r.reason] ?? r.reason.replace(/_/g, " ")}${where}`, kind: "bad" };
     case "stopped":
-      return { text: td ? `Stopped after touchdown${where}` : "Stopped early", kind: "plain" };
+      return { text: td ? `Stopped after touchdown${where}` : r.route ? `Stopped${where}` : "Stopped early", kind: "plain" };
     default:
       return null;
   }
