@@ -1,5 +1,6 @@
 // Route navigation in the viewer: a port of flightsim/envs/route.py (sequencing with fly-by
-// turn anticipation capped at half of each adjacent leg, one turn at a time, and turn arcs
+// turn anticipation, a leg shared by its two turns when they would overlap, one turn at a
+// time, and turn arcs
 // sized for the flight's planned turn speed, `turn_speed_mps` in the route as
 // envs/navigation.py plans it), so the GPS, the map and the HUD show the active leg,
 // desired track and cross-track error the task uses. Tests compare it with Python.
@@ -50,6 +51,19 @@ export function legGeometry(route, leg, n, e) {
 
 export const turnRadius = (speed, bank) => (speed * speed) / (G0 * Math.tan(bank));
 
+const wantedAnticipation = (route, leg, radius) => (leg >= 0 && route.isFlyBy(leg) ? radius * Math.tan(Math.abs(route.turn(leg)) / 2) : 0);
+
+// route.py anticipation_m: what the turn wants, or its share of a leg shared with a neighbouring turn.
+export function anticipation(route, leg, radius) {
+  const want = wantedAnticipation(route, leg, radius);
+  if (want === 0) return 0;
+  let a = want;
+  for (const [k, other] of [[leg, wantedAnticipation(route, leg - 1, radius)], [leg + 1, wantedAnticipation(route, leg + 1, radius)]]) {
+    if (want + other > route.lengths[k]) a = Math.min(a, (route.lengths[k] * want) / (want + other));
+  }
+  return a;
+}
+
 export class Navigator {
   constructor(route, bankRad, active = 0) {
     this.route = route;
@@ -69,18 +83,14 @@ export class Navigator {
       const toGo = legGeometry(r, this.active, n, e)[2];
       const flyBy = r.isFlyBy(this.active);
       let radius = turnRadius(turnSpeedMps ?? gs, this.bank);
-      let anticipation = 0;
-      if (flyBy) {
-        const halfTan = Math.tan(Math.abs(r.turn(this.active)) / 2);
-        anticipation = Math.min(radius * halfTan, 0.5 * r.lengths[this.active], 0.5 * r.lengths[this.active + 1]);
-        if (halfTan > 0) radius = anticipation / halfTan;
-      }
-      if (toGo > anticipation) return;
+      const ant = anticipation(r, this.active, radius);
+      if (ant > 0) radius = ant / Math.tan(Math.abs(r.turn(this.active)) / 2);
+      if (toGo > ant) return;
       if (this.active === r.legs - 1) {
         this.done = true;
         return;
       }
-      if (flyBy && anticipation > 1) this.arc = this._arc(this.active, radius, anticipation);
+      if (flyBy && ant > 1) this.arc = this._arc(this.active, radius, ant);
       this.active += 1;
     }
   }

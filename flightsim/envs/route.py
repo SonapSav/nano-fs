@@ -13,10 +13,11 @@ Sequencing, as a GPS navigator does it:
 - fly-over waypoints, the last one, and turns over MAX_FLY_BY_DEG: when the aircraft
   passes abeam the waypoint (distance to go along the leg <= 0).
 
-Turns never overlap: the anticipation is at most half of each leg next to the waypoint
-(the arc's radius shrinks to match), and no further leg change happens while a turn's arc
-is in progress (a sharp turn back the way the aircraft came can otherwise make the next
-turn look due at once).
+Turns never overlap: when the anticipations of the turns at both ends of a leg add up to
+more than the leg, the leg is shared between them in proportion to what each wants (the
+arc's radius shrinks to match), and no further leg change happens while a turn's arc is in
+progress (a sharp turn back the way the aircraft came can otherwise make the next turn
+look due at once).
 
 During a fly-by turn the path is the arc tangent to both legs with that radius (fixed at
 the leg change): desired track and cross-track error are measured against the arc until
@@ -101,6 +102,25 @@ def is_fly_by(route: "Route", leg: int) -> bool:
     return leg + 1 < route.legs and not route.waypoints[leg].fly_over and abs(route.turn_rad(leg)) <= math.radians(MAX_FLY_BY_DEG)
 
 
+def _wanted_anticipation(route: "Route", leg: int, radius_m: float) -> float:
+    """The anticipation the turn at the end of `leg` wants (0 when it is not flown by)."""
+    return radius_m * math.tan(abs(route.turn_rad(leg)) / 2.0) if 0 <= leg and is_fly_by(route, leg) else 0.0
+
+
+def anticipation_m(route: "Route", leg: int, radius_m: float) -> float:
+    """The anticipation of the turn at the end of `leg` with turns of `radius_m`: what it
+    wants, or its share of a leg it would otherwise overlap a neighbouring turn on (the
+    leg split between its two turns in proportion to what they want)."""
+    want = _wanted_anticipation(route, leg, radius_m)
+    if want == 0.0:
+        return 0.0
+    a = want
+    for k, other in ((leg, _wanted_anticipation(route, leg - 1, radius_m)), (leg + 1, _wanted_anticipation(route, leg + 1, radius_m))):
+        if want + other > route.lengths[k]:
+            a = min(a, route.lengths[k] * want / (want + other))
+    return a
+
+
 class Navigator:
     """The active leg of a route as the aircraft flies it, and the GPS quantities."""
 
@@ -128,11 +148,9 @@ class Navigator:
             _, _, to_go = leg_geometry(r, self.active, north_m, east_m)
             fly_by = is_fly_by(r, self.active)
             radius = turn_radius_m(turn_speed_mps if turn_speed_mps is not None else ground_speed_mps, self.turn_bank_rad)
-            anticipation = 0.0
-            if fly_by:
-                half_tan = math.tan(abs(r.turn_rad(self.active)) / 2.0)
-                anticipation = min(radius * half_tan, 0.5 * r.lengths[self.active], 0.5 * r.lengths[self.active + 1])
-                radius = anticipation / half_tan if half_tan > 0 else radius
+            anticipation = anticipation_m(r, self.active, radius)
+            if anticipation > 0.0:
+                radius = anticipation / math.tan(abs(r.turn_rad(self.active)) / 2.0)
             if to_go > anticipation:
                 return
             self.sequenced_at.append(t_s)

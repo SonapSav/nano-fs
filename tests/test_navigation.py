@@ -13,7 +13,7 @@ from flightsim.envs import load_env_config, make_env
 from flightsim.envs.evaluate import run_episode
 from flightsim.envs.navigation import NavigationEnv
 from flightsim.envs.policies import RoutePolicy
-from flightsim.envs.route import Navigator, Route, Waypoint, leg_geometry, random_route, turn_anticipation_m, turn_radius_m
+from flightsim.envs.route import Navigator, Route, Waypoint, anticipation_m, leg_geometry, random_route, turn_anticipation_m, turn_radius_m
 
 ROOT = Path(__file__).parent.parent
 NAV = ROOT / "configs" / "envs" / "navigation.yaml"
@@ -150,7 +150,7 @@ def test_viewer_navigation_port_agrees():
 
 def test_sharp_turns_on_short_legs_do_not_skip_legs():
     """A 150 deg turn back the way the aircraft came, then another sharp turn after a short
-    leg: each turn in order, and the anticipation never more than half a leg."""
+    leg: each turn in order, and neighbouring turns never overlap."""
     r = Route(0.0, 0.0, [Waypoint("A", 11000, 0), Waypoint("B", 11000 - 5200 * math.cos(math.radians(150)) * -1, 5200 * math.sin(math.radians(150))),
                          Waypoint("C", 0, 0)])  # fmt: skip
     nav = Navigator(r, BANK)
@@ -163,10 +163,35 @@ def test_sharp_turns_on_short_legs_do_not_skip_legs():
             n, e = n0 + (n1 - n0) * k / 1000, e0 + (e1 - e0) * k / 1000
             nav.update(n, e, 61.0, 0.0, 61.0)
             if nav.arc is not None:
-                # anticipation = distance from the arc's start to the waypoint <= half the legs
-                assert nav.arc["radius"] * math.tan(abs(r.turn_rad(nav.active - 1)) / 2) <= 0.5 * min(r.lengths[nav.active - 1], r.lengths[nav.active]) + 1e-6
+                # the arcs of neighbouring turns never overlap on a leg
+                k = nav.active - 1
+                here = nav.arc["radius"] * math.tan(abs(r.turn_rad(k)) / 2)
+                for leg, other in ((k, k - 1), (k + 1, k + 1)):
+                    assert here + anticipation_m(r, other, turn_radius_m(61.0, BANK)) <= r.lengths[leg] + 1e-6
                 cn, ce = nav.arc["end"]
                 nav.update(cn + 1, ce + 1, 61.0, 0.0, 61.0)  # leave the arc at its end
             if not legs_seen or legs_seen[-1] != nav.active:
                 legs_seen.append(nav.active)
     assert legs_seen == [0, 1, 2]
+
+
+def test_anticipation_shares_a_leg_only_when_turns_overlap():
+    """A short leg between two sharp turns is shared; a sharp turn next to a gentle one
+    keeps its full anticipation (and its planned bank)."""
+    R = turn_radius_m(61.0, BANK)
+    want = lambda deg: R * math.tan(math.radians(deg) / 2)  # noqa: E731
+
+    def route(turns_deg, legs_m):
+        pts, n, e, c = [], 0.0, 0.0, 0.0
+        for k, length in enumerate(legs_m):
+            if k:
+                c += math.radians(turns_deg[k - 1])
+            n, e = n + length * math.cos(c), e + length * math.sin(c)
+            pts.append(Waypoint(f"W{k}", n, e))
+        return Route(0.0, 0.0, pts)
+
+    gentle = route([-31, 140], [8000, 2 * want(140) - 10, 8000])  # the 140 deg turn alone fits
+    assert anticipation_m(gentle, 1, R) == pytest.approx(want(140))
+    tight = route([140, 140], [8000, want(140), 8000])  # two equal turns on a leg that fits one
+    assert anticipation_m(tight, 0, R) == pytest.approx(want(140) / 2)
+    assert anticipation_m(tight, 1, R) == pytest.approx(want(140) / 2)
