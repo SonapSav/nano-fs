@@ -100,6 +100,7 @@ flightsim/          # installable package (uv_build backend)
                     #   groundDetail.js: close-up ground texture (shader noise)
                     #   panel.js / panel.html: instrument panel, also in its own window (BroadcastChannel mirror)
                     #   hud.js: optional head-up display in the cockpit view (conformal, fixed to the aircraft)
+                    #   geo.js / gps.js: WGS84 map (port of world/geo.py); GPS unit in the panel
                     #   sound.js: synthesized engine, wind, stall horn, flap motor (Web Audio, driven by frames)
   analysis/         # mode identification, validation maneuvers, validation checks
   atmosphere/       # Dryden turbulence (MIL-F-8785C)

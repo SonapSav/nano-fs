@@ -1,7 +1,7 @@
 /* The instrument panel (panel.js), on the viewer page and in the instruments window. */
 .panel {
   display: grid; gap: 12px 18px; padding: 12px 16px 14px;
-  grid-template-columns: repeat(3, var(--g)) auto var(--g);
+  grid-template-columns: repeat(3, var(--g)) auto var(--g) var(--g);
   grid-template-rows: repeat(2, var(--g));
   --g: min(17vh, 150px);
   justify-content: center; align-items: center;
@@ -10,6 +10,7 @@
 .panel .gauge { width: var(--g); height: var(--g); display: block; }
 .panel [data-g="tach"] { grid-column: 5; grid-row: 1; }
 .panel [data-g="controls"] { grid-column: 5; grid-row: 2; }
+.panel .gps { grid-column: 6; grid-row: 1 / span 2; width: var(--g); height: 100%; display: block; align-self: stretch; }
 .panel .readout {
   grid-column: 4; grid-row: 1 / span 2; align-self: stretch;
   display: flex; flex-direction: column; justify-content: center; gap: 6px;

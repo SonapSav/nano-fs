@@ -843,8 +843,16 @@ Goal (owner, 2026-10-08): build up from correct coordinates to GPS navigation. S
 
   (Also fixed: `scripts/batch_run.py` crashed printing circuit summaries, whose takeoff
   part has no ground centreline offset.)
-- [ ] **GPS readout:** latitude/longitude, ground speed and track, distance and bearing
-  to the runway (and later to a waypoint), in the panel and the HUD.
+- [x] **GPS readout** (2026-10-08): a GPS unit in the instrument panel (a sixth column,
+  the height of two gauges; also in the instruments window): position in degrees and
+  decimal minutes, ground speed, true track, and to the target (the task's runway
+  threshold, "RWY 09", else the airfield) distance, true bearing and time en route
+  (from the closing speed). Bearings are true: map bearing + the grid convergence at
+  the aircraft. The HUD shows GS above the speed tape. `viewer/gps.js` (pure functions
+  plus the drawing); Node tests (formatting and rounding, runway designator, on final,
+  a target due true north 20 km off the origin's meridian at 38 N: bearing 000 within
+  0.01 deg where the map says 0.13 deg). Runway numbers use the true heading until
+  magnetic variation is modelled (real airfield step).
 - [ ] **Moving map:** the aircraft, runway, pattern and track on a map, in the panel or
   the instruments window.
 - [ ] **Waypoint navigation tasks:** fly a route of waypoints (cross-country legs);

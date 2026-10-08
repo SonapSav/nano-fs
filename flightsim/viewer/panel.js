@@ -13,6 +13,7 @@
 
 import { drawAll, indicatedKt, units } from "./gauges.js";
 import { Geodesy } from "./geo.js";
+import { drawGps, gpsData, gpsTarget } from "./gps.js";
 
 export const PANEL_CHANNEL = "flightsim-panel";
 export const PANEL_TIMEOUT_MS = 3000; // the other window is gone after this long without a message
@@ -28,6 +29,7 @@ const PANEL_HTML = `
   <canvas class="gauge" data-g="vsi" aria-label="Vertical speed"></canvas>
   <canvas class="gauge" data-g="tach" aria-label="Engine RPM"></canvas>
   <canvas class="gauge" data-g="controls" aria-label="Control positions"></canvas>
+  <canvas class="gps" data-g="gps" aria-label="GPS"></canvas>
   <div class="readout">
     <dl>
       <dt>Altitude</dt><dd data-r="alt">–</dd>
@@ -56,6 +58,8 @@ export class InstrumentPanel {
     this.$ = (id) => q(id.startsWith("r-") ? `[data-r="${id.slice(2)}"]` : `[data-l="${id.slice(2)}"]`);
     this.run = q(".run");
     this.session = null;
+    this.geodesy = new Geodesy(null);
+    this.gpsTarget = gpsTarget(null);
     this.circuitClimbed = false; // a circuit is on final only after climbing out
   }
 
@@ -67,6 +71,8 @@ export class InstrumentPanel {
   // A new flight (its hello message, or null for none).
   setSession(hello) {
     this.session = hello;
+    this.geodesy = new Geodesy(hello?.world ?? null);
+    this.gpsTarget = gpsTarget(hello);
     this.circuitClimbed = false;
     showApproachRows(this, hello?.approach ? "approach" : hello?.takeoff ? "takeoff" : null);
   }
@@ -77,6 +83,7 @@ export class InstrumentPanel {
 
   draw(row) {
     drawAll(this.gauges, row, this.session?.targets);
+    drawGps(this.gauges.gps, row ? gpsData(row, this.geodesy, this.gpsTarget) : null);
     updateReadout(this, row);
   }
 }

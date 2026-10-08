@@ -262,6 +262,8 @@ export function drawHud(ctx, w, h, { camera, aircraftMatrix, row, targets, runwa
   const sx = body(-17, 0)?.x ?? centre.x - 17 * pxPerDeg;
   const pxPerKt = tape(sx, kias, 25, 5, 10, -1, (v) => (v >= 0 ? String(v) : ""));
   box(sx - fs * 0.4, centre.y, `${Math.max(0, Math.round(kias))}`, "right");
+  // Ground speed (GPS) above the speed tape, as the target altitude sits above the altitude tape.
+  text(`GS ${Math.round(Math.hypot(row.v_north_mps, row.v_east_mps) * units.MPS_TO_KT)}`, sx - fs * 0.4, centre.y - halfTape - fs * 0.9, "right");
   for (const bug of speedBugs) {
     const y = centre.y - (bug.kt - kias) * pxPerKt;
     if (!(Math.abs(y - centre.y) <= halfTape)) continue; // off the tape

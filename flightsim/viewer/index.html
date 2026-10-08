@@ -137,6 +137,7 @@
     body { height: auto; min-height: 100dvh; overflow: auto; grid-template-rows: auto 45vh auto; }
     .panel { --g: min(28vw, 120px); grid-template-columns: repeat(3, var(--g)); grid-template-rows: none; }
     .panel [data-g] { grid-column: auto; grid-row: auto; }
+    .panel .gps { grid-row: span 2; height: calc(2 * var(--g)); }
     .panel .readout { grid-column: 1 / -1; grid-row: auto; order: 1; }
     #hint { display: none; }
   }

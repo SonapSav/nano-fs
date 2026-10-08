@@ -14,8 +14,8 @@
     background: var(--panel); color: var(--marking); font: 500 clamp(16px, 2.4vh, 30px)/1.35 var(--font);
     display: grid; place-content: center; height: 100dvh; overflow: hidden;
   }
-  /* Fill the window: gauges as large as height and width allow (four columns plus readouts). */
-  .panel { --g: min(42vh, calc((100vw - 16em) / 4.4)); border-top: 0; gap: 2.5vh 2vw; }
+  /* Fill the window: gauges as large as height and width allow (five columns plus readouts). */
+  .panel { --g: min(42vh, calc((100vw - 16em) / 5.4)); border-top: 0; gap: 2.5vh 2vw; }
   .panel .readout { min-width: 12em; }
   .panel .run { font-size: 0.8em; }
   #status { position: fixed; left: 16px; top: 12px; color: var(--dim); font-size: 16px; }
