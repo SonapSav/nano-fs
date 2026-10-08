@@ -1,5 +1,6 @@
 // Moving map: a top view of the flight on the world's map (geo.js), drawn on a canvas in
-// the map window (map.html). North up or track up; zoom by range. Shows range rings, the
+// the map window (map.html). North up or track up; zoom by range. Shows the terrain
+// background (mapTiles.js: relief, lakes, forests, rivers, villages, roads), range rings, the
 // airfield's runway with its numbers, the task's extended centreline and traffic pattern,
 // the flown track, a one-minute predicted path (curved by the turn rate) and the aircraft.
 // Display only. Pure geometry and bookkeeping are exported for tests (Node).
@@ -16,7 +17,7 @@ const PREDICT_S = 60;
 const DEG = 180 / Math.PI;
 
 const C = {
-  ground: "#1d2a22", ring: "#3b4d41", ringText: "#7f9a87", runway: "#d9dcd6", centreline: "#c7c9c2",
+  ground: "#1d2a22", ring: "rgba(255, 255, 255, 0.35)", ringText: "rgba(255, 255, 255, 0.85)", runway: "#d9dcd6", centreline: "#c7c9c2",
   pattern: "#d23cc8", track: "#5fd3f3", predict: "#e070d8", aircraft: "#f2a33a", text: "#ecede8", dim: "#9aa3a9",
 };
 
@@ -96,8 +97,9 @@ export function ringStepNm(rangeNm) {
   return [0.1, 0.25, 0.5, 1, 2, 5, 10].find((s) => s >= raw * 0.99) ?? 10;
 }
 
-// Draw the map. `state`: {hello, row, geodesy, track (Track), rangeNm, northUp}.
-export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northUp }) {
+// Draw the map. `state`: {hello, row, geodesy, track (Track), rangeNm, northUp, background}
+// (`background`: optional, a mapTiles.js MapBackground: terrain, villages and roads).
+export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northUp, background = null }) {
   ctx.fillStyle = C.ground;
   ctx.fillRect(0, 0, w, h);
   const font = (size, weight = 500) => `${weight} ${size}px "Barlow Condensed", "Roboto Condensed", "Arial Narrow", sans-serif`;
@@ -118,6 +120,7 @@ export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northU
   const trackMapDeg = gs > 2 ? Math.atan2(row.v_east_mps, row.v_north_mps) * DEG - conv * DEG : row.psi_rad * DEG - conv * DEG;
   const upDeg = northUp ? -conv * DEG : trackMapDeg; // north up: true north at the top
   const v = makeView(w, h, north, east, upDeg, rangeNm);
+  background?.draw(ctx, { w, h, cx: v.cx, cy: v.cy, x: east, z: -north, angle: upDeg / DEG, mPerPx: v.mPerPx });
   const line = (pts, color, width, dash = []) => {
     if (pts.length < 2) return;
     ctx.strokeStyle = color;

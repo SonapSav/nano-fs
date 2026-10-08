@@ -9,6 +9,7 @@
 import { Geodesy } from "./geo.js";
 import { PANEL_CHANNEL, PANEL_TIMEOUT_MS } from "./panel.js";
 import { RANGES_NM, Track, drawMap } from "./map.js";
+import { MapBackground } from "./mapTiles.js";
 
 const canvas = document.getElementById("map");
 const status = document.getElementById("status");
@@ -31,6 +32,12 @@ const save = () => {
 
 let hello = null, row = null, geodesy = new Geodesy(null), heardAt = 0, dirty = true;
 const track = new Track();
+let background = null;
+try {
+  background = new MapBackground(() => (dirty = true));
+} catch {
+  background = null; // no module workers: the plain map
+}
 
 function addToTrack(r) {
   const [n, e] = geodesy.toMap(r.lat_rad, r.lon_rad);
@@ -101,7 +108,7 @@ function frame() {
     }
     const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm: RANGES_NM[settings.rangeIndex], northUp: settings.northUp });
+    drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm: RANGES_NM[settings.rangeIndex], northUp: settings.northUp, background });
   }
   requestAnimationFrame(frame);
 }

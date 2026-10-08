@@ -7,37 +7,14 @@
 
 import * as THREE from "three";
 import { addGroundDetail } from "./groundDetail.js";
-import { VILLAGE_CELL_M, WATER_LEVEL_M, height, villageCentre } from "./terrain.js";
+import { VILLAGE_CELL_M, WATER_LEVEL_M, height } from "./terrain.js";
+import { roadSegments } from "./roadNet.js";
 
-const REACH_CELLS = 5; // villages this many cells around the camera's cell
-const LINK_M = 5000;
+export { AIRFIELD_GATE, roadSegments } from "./roadNet.js";
+
 const WIDTH_M = 7;
 const STEP_M = 25; // drape sample spacing
 const LIFT_M = 0.6; // above the terrain (the coarser far tiles can sit a little higher)
-export const AIRFIELD_GATE = [40, -330]; // the end of the airfield's access road (scenery.js), behind the hangars
-
-// Road segments [[x0, z0], [x1, z1]] for the villages around a cell (deterministic).
-export function roadSegments(ci, cj) {
-  const villages = [];
-  for (let i = ci - REACH_CELLS - 2; i <= ci + REACH_CELLS + 2; i++)
-    for (let j = cj - REACH_CELLS - 2; j <= cj + REACH_CELLS + 2; j++) {
-      const v = villageCentre(i, j);
-      if (v) villages.push({ v, near: Math.abs(i - ci) <= REACH_CELLS && Math.abs(j - cj) <= REACH_CELLS });
-    }
-  const dist = (a, b) => Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2);
-  const edges = new Map();
-  for (const a of villages) {
-    if (!a.near) continue;
-    const others = villages.filter((b) => b !== a).map((b) => [dist(a.v, b.v), b.v]).filter(([d]) => d <= LINK_M).sort((p, q) => p[0] - q[0]);
-    for (const [, b] of others.slice(0, 2)) {
-      const key = [a.v, b].map((p) => p.join(",")).sort().join(";");
-      edges.set(key, [a.v, b]);
-    }
-  }
-  const nearest = villages.map((a) => [dist(a.v, AIRFIELD_GATE), a.v]).sort((p, q) => p[0] - q[0])[0];
-  if (nearest && nearest[0] <= LINK_M * 1.6) edges.set("airfield", [AIRFIELD_GATE, nearest[1]]);
-  return [...edges.values()];
-}
 
 function ribbon(segments) {
   const pos = [], nrm = [], idx = [];

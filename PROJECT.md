@@ -864,8 +864,17 @@ Goal (owner, 2026-10-08): build up from correct coordinates to GPS navigation. S
   track, distance and bearing to the target). Other keys are forwarded to the viewer.
   `viewer/map.js` (geometry tested with Node), `mapwindow.js`; the pattern geometry moved
   to `patternPath.js` (no three.js). Checked headless with a circuit autopilot flight.
-  - [ ] Terrain background: lakes, rivers, villages and roads, forests, hills shaded by
-    height, from the same deterministic terrain (map images per tile in the worker).
+  - [x] Terrain background (2026-10-08): `mapTerrain.js` draws 256 px tiles from the
+    shared terrain (relief shaded from the north-west with slopes x3, tinted by height;
+    lakes where the ground is below the lake level; forests; rivers from a float32 port of
+    the terrain shader's river field, at least about a pixel wide), in a worker
+    (`mapTileWorker.js`, ~0.1 s a tile); levels of 4-64 m a pixel by range, cached (160
+    tiles), nearest first, coarser tiles shown while finer ones load, one pixel of
+    overlap against seams (`mapTiles.js`). Villages (dots) and roads (lines) on top as
+    vectors from `roadNet.js` (the road network moved out of roads.js, no three.js).
+    Node tests: pixels follow the terrain (water, forest), rivers only on valley floors,
+    levels. Checked headless at 0.5, 2, 5 and 20 nm. Not checked: that the map's rivers
+    match the 3D view's to the metre (the port mirrors the GPU's float32 hash).
   - [ ] Optional corner inset in the 3D view (reusing `drawMap`).
 - [ ] **Waypoint navigation tasks:** fly a route of waypoints (cross-country legs);
   config-defined waypoints in latitude/longitude, an autopilot and RL-ready task.
