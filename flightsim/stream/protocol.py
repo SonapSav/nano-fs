@@ -24,10 +24,11 @@ Server -> client messages (JSON):
   {"type": "preview", "id", "hello": {<hello message>}, "row": {<log column>: value, ...}}
       Answer to a client "preview": the flight's hello and its starting state (live and
       manual: the reset state, commands null; replay: the first row), nothing streamed.
-  {"type": "end", "reason": "finished" | "landed" | "climbed" | "stopped" | "terminated:<why>",
-   "landing"?: {...}, "takeoff"?: {...}}
+  {"type": "end", "reason": "finished" | "landed" | "climbed" | "route_complete" | "stopped" | "terminated:<why>",
+   "landing"?: {...}, "takeoff"?: {...}, "route"?: {...}}
       landing: the approach task's result (touchdown point, sink rate, ...), approach only
       takeoff: the takeoff task's result (lift-off, 50 ft point, ...), takeoff only
+      route: the navigation task's route summary (legs, time, cross-track RMS and max), routes only
   {"type": "logs", "logs": [{"path", "group", "run_id", "aircraft", "rows", "duration_s", "seed",
                              "pilot", "mtime", "task", "windy", "hud", "result"?}, ...]}
       group: "demos", "batch/<id>" or the top directory under the data dir.

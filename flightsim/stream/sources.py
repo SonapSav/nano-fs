@@ -37,6 +37,7 @@ class Source:
     approach: dict | None = None  # approach task: runway and glide path (envs.approach.approach_geometry)
     takeoff: dict | None = None  # takeoff task: runway and wind (envs.takeoff.TakeoffEnv.runway_info)
     takeoff_result: dict | None = None  # takeoff task: the result, sent with the end message
+    route_result: dict | None = None  # navigation task: the route summary, sent with the end message
     visual: dict | None = None  # viewer conditions (envs: visual_conditions); None: viewer defaults
     pilot_name: str | None = None  # who flies a live flight: "pid", "lqr" or "human"
     world: dict | None = None  # the geodesy (world/geo.py) for the viewer's map; None: the original sphere
@@ -158,6 +159,10 @@ class LiveSource(Source):
                     self.landing = self._info["landing"]
                     if truncated and self.landing["landed"]:
                         self.end_reason = "landed"
+                if "route_done" in self._info:
+                    self.route_result = self._env.route_summary()
+                    if truncated and self._info["route_done"]:
+                        self.end_reason = "route_complete"
                 if "takeoff" in self._info:
                     self.takeoff_result = self._info["takeoff"]
                     if truncated and self.takeoff_result["climbed"]:

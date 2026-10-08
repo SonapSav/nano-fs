@@ -8,6 +8,8 @@ import { drawHud } from "./hud.js";
 import { FrameStats } from "./perf.js";
 import { benchReport, runBench } from "./bench.js";
 import { FrameBuffer } from "./smooth.js";
+import { RANGES_NM, Track, drawMap } from "./map.js";
+import { MapBackground } from "./mapTiles.js";
 import { HANDLED_KEYS, PilotInput } from "./input.js";
 import { AXES, BUTTONS, CONTROLS, DEFAULTS, MAX_CALIBRATION_SPREAD, MAX_CENTRE, buttonValue, controlValue, copyFeel, defaultProfile, detectAxis, detectButton, saveSettings } from "./stick.js";
 import { groupLogs } from "./flightlist.js";
@@ -86,9 +88,11 @@ const LANDING_FAILURES = {
   no_liftoff: "did not lift off in time (full throttle, lift the nose wheel at 55 kt)",
   sank_back: "touched the ground again before climbing out (hold the attitude until climbing)",
   lost: "too far off the extended centreline",
+  // Navigation (envs/navigation.py)
+  off_course: "too far off the route (the task's cross-track limit)",
 };
 const INPUT_SEND_HZ = 30;
-const VIEW_HINT = "L for flights; drag to look around, scroll to zoom, R or double-click to re-centre, space to pause, C for cockpit view (H: HUD), M for sound";
+const VIEW_HINT = "L for flights, I for the corner map; drag to look around, scroll to zoom, R or double-click to re-centre, space to pause, C for cockpit view (H: HUD), M for sound";
 const FLY_HINT = "Arrows pitch and roll; Z/X rudder and nosewheel; W/S throttle; F/V flaps; T/G trim; B brakes; hold a key to build it up, Shift for full deflection; R re-centres the view, H HUD (cockpit view). Gamepad: LB/RB flaps, D-pad trim, B brakes, Y view, X HUD (buttons: Stick settings)";
 
 // Graphics quality (terrain.js QUALITY), remembered in this browser only.
@@ -329,6 +333,7 @@ function stopInput() {
 // readouts and the task instructions. Used for playback and for previews.
 function applyHello(msg) {
   session = msg;
+  minimapState.track?.clear();
   latest = null;
   frames.reset();
   pendingSeek = null;
@@ -407,6 +412,10 @@ function handle(msg) {
       }
       latest = msg.row;
       frameStats.message(performance.now());
+      if (minimapState.track) {
+        const [mn, me] = scene.geodesy.toMap(latest.lat_rad, latest.lon_rad);
+        minimapState.track.add(latest.t_s, mn, me);
+      }
       frames.push(latest); // drawn smoothly by frame()
       tellPanel({ type: "frame", row: latest });
       if (!paused) sound.update(latest, { view: scene.view, distanceM: scene.orbit.distance });
@@ -426,6 +435,10 @@ function handle(msg) {
         const lo = msg.takeoff.liftoff, ff = msg.takeoff.fifty_ft;
         say(`Climbed to 1000 ft. Lift-off at ${Math.round(lo.cas_mps * 1.94384)} KCAS after a ${Math.round(lo.ground_roll_m)} m ground roll` +
           (ff ? `, 50 ft after ${Math.round(ff.distance_m)} m` : "") + ". Press Play to go again.");
+      } else if (msg.reason === "route_complete") {
+        const r = msg.route;
+        say(`Route complete: ${r.legs} legs, ${(r.length_m / 1852).toFixed(1)} nm in ${Math.floor(r.time_s / 60)} min ${Math.round(r.time_s % 60)} s; ` +
+          `cross-track ${Math.round(r.xtk_rms_m)} m RMS, at most ${Math.round(r.xtk_max_m)} m; altitude within ${Math.round(r.alt_rms_m * 3.28084)} ft RMS. Press Play to go again.`);
       } else if (msg.reason === "finished") say("Flight finished. Press Play to go again.");
       else if (msg.reason.startsWith("terminated:")) {
         const why = msg.reason.slice(11);
@@ -670,6 +683,10 @@ function keyDown(e, inForm) {
     setDrawer(drawer.hidden);
     return;
   }
+  if (e.code === "KeyI" && !inForm && !e.repeat) {
+    setMinimap($("minimap").hidden);
+    return;
+  }
   if (e.code === "KeyP" && !inForm && !e.repeat) {
     setPerf($("perf").hidden);
     return;
@@ -803,6 +820,67 @@ $("bench-copy").addEventListener("click", async () => {
   }
 });
 
+// Corner map (I, or Settings): the moving map (map.js) small in the 3D view, redrawn about
+// ten times a second; wheel to zoom, click for north up / track up. Remembered per browser.
+const MINIMAP_KEY = "flightsim.minimap";
+const minimapState = { track: new Track(), background: null, drawnAt: 0, rangeIndex: 2, northUp: false };
+try {
+  Object.assign(minimapState, JSON.parse(localStorage.getItem(MINIMAP_KEY) ?? "{}"));
+} catch {
+  // defaults
+}
+minimapState.track = new Track();
+minimapState.rangeIndex = Math.max(0, Math.min(RANGES_NM.length - 1, minimapState.rangeIndex | 0));
+function saveMinimap() {
+  try {
+    localStorage.setItem(MINIMAP_KEY, JSON.stringify({ on: !$("minimap").hidden, rangeIndex: minimapState.rangeIndex, northUp: minimapState.northUp }));
+  } catch {
+    // not remembered
+  }
+}
+function setMinimap(on) {
+  $("minimap").hidden = !on;
+  $("minimap-toggle").checked = on;
+  if (on && !minimapState.background) {
+    try {
+      minimapState.background = new MapBackground(() => (minimapState.drawnAt = 0));
+    } catch {
+      minimapState.background = null; // no module workers: the plain map
+    }
+  }
+  minimapState.drawnAt = 0;
+  saveMinimap();
+}
+$("minimap-toggle").addEventListener("change", (e) => setMinimap(e.target.checked));
+$("minimap").addEventListener("wheel", (e) => {
+  e.preventDefault();
+  minimapState.rangeIndex = Math.max(0, Math.min(RANGES_NM.length - 1, minimapState.rangeIndex + (e.deltaY > 0 ? 1 : -1)));
+  minimapState.drawnAt = 0;
+  saveMinimap();
+}, { passive: false });
+$("minimap").addEventListener("click", () => {
+  minimapState.northUp = !minimapState.northUp;
+  minimapState.drawnAt = 0;
+  saveMinimap();
+});
+setMinimap(Boolean(minimapState.on));
+function drawMinimap(now) {
+  const c = $("minimap");
+  if (c.hidden || now - minimapState.drawnAt < 100) return;
+  minimapState.drawnAt = now;
+  const dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) {
+    c.width = Math.round(w * dpr);
+    c.height = Math.round(h * dpr);
+  }
+  const ctx = c.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawMap(ctx, w, h, {
+    hello: session, row: latest, geodesy: scene.geodesy, track: minimapState.track, rangeNm: RANGES_NM[minimapState.rangeIndex],
+    northUp: minimapState.northUp, background: minimapState.background, nav: panel.nav, compact: true,
+  });
+}
+
 const hudCanvas = $("hud");
 function drawHudLayer() {
   const dpr = window.devicePixelRatio || 1, w = hudCanvas.clientWidth, h = hudCanvas.clientHeight;
@@ -869,6 +947,7 @@ function frame(now = performance.now()) {
   }
   scene.render();
   drawHudLayer();
+  drawMinimap(now);
   const bx = scene.boresightX();
   const marker = $("boresight");
   marker.style.display = bx === null ? "none" : "block";

@@ -336,6 +336,8 @@ class Session:
             end["landing"] = source.landing
         if source.takeoff_result is not None:
             end["takeoff"] = source.takeoff_result
+        if source.route_result is not None:
+            end["route"] = source.route_result
         await self.ws.send(encode(end))
 
 

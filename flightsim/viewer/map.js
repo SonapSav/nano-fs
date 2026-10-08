@@ -100,12 +100,13 @@ export function ringStepNm(rangeNm) {
 // Draw the map. `state`: {hello, row, geodesy, track (Track), rangeNm, northUp, background,
 // nav} (`background`: optional, a mapTiles.js MapBackground: terrain, villages and roads;
 // `nav`: a route's GPS quantities for this frame, nav.js).
-export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northUp, background = null, nav = null }) {
+// `compact`: the corner map in the 3D view (smaller text, no key help, a short info line).
+export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northUp, background = null, nav = null, compact = false }) {
   ctx.fillStyle = C.ground;
   ctx.fillRect(0, 0, w, h);
   const font = (size, weight = 500) => `${weight} ${size}px "Barlow Condensed", "Roboto Condensed", "Arial Narrow", sans-serif`;
   const text = (s, x, y, size, color, align = "center", weight = 500) => {
-    ctx.font = font(size, weight);
+    ctx.font = font(compact ? Math.round(size * 0.78) : size, weight);
     ctx.fillStyle = color;
     ctx.textAlign = align;
     ctx.textBaseline = "middle";
@@ -215,7 +216,7 @@ export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northU
   ctx.restore();
 
   // North arrow (true north), top right.
-  const na = (-conv * DEG - upDeg) / DEG, nx = w - 34, ny = 40;
+  const na = (-conv * DEG - upDeg) / DEG, nx = w - (compact ? 18 : 34), ny = compact ? 22 : 40;
   ctx.save();
   ctx.translate(nx, ny);
   ctx.rotate(na);
@@ -228,11 +229,15 @@ export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northU
   text("N", nx, ny + 24, 14, C.text, "center", 600);
 
   // Info: mode and range top left; GPS line at the bottom.
-  text(`${northUp ? "NORTH UP" : "TRACK UP"}   ${rangeNm} nm`, 14, 22, 17, C.text, "left", 600);
+  text(compact ? `${rangeNm} nm` : `${northUp ? "NORTH UP" : "TRACK UP"}   ${rangeNm} nm`, compact ? 8 : 14, compact ? 14 : 22, 17, C.text, "left", 600);
   const target = nav && route ? { name: route.waypoints[nav.leg].name, north_m: route.waypoints[nav.leg].north_m, east_m: route.waypoints[nav.leg].east_m } : gpsTarget(hello);
   const g = gpsData(row, geodesy, target, nav);
   const pad3 = (d) => String(Math.round(d) % 360).padStart(3, "0");
   const xtk = nav ? `   DTK ${pad3(g.dtkDeg)}°   XTK ${(Math.abs(g.xtkM) / M_PER_NM).toFixed(2)} nm${Math.abs(g.xtkM) >= 9 ? (g.xtkM > 0 ? " R" : " L") : ""}` : "";
+  if (compact) {
+    text(`${g.target} ${g.distNm < 10 ? g.distNm.toFixed(1) : g.distNm.toFixed(0)} nm ${pad3(g.bearingDeg)}°${nav ? `  XTK ${(Math.abs(g.xtkM) / M_PER_NM).toFixed(2)}` : ""}`, 8, h - 12, 16, C.text, "left", 600);
+    return;
+  }
   text(`GS ${Math.round(g.gsKt)} kt   TRK ${g.trackDeg === null ? "---" : pad3(g.trackDeg)}°   ${g.target} ${g.distNm < 10 ? g.distNm.toFixed(2) : g.distNm.toFixed(1)} nm ${pad3(g.bearingDeg)}°${xtk}`, 14, h - 18, 17, C.text, "left", 600);
   text("+ / − zoom   N north up / track up", w - 14, h - 18, 14, C.dim, "right");
 }

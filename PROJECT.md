@@ -875,7 +875,9 @@ Goal (owner, 2026-10-08): build up from correct coordinates to GPS navigation. S
     Node tests: pixels follow the terrain (water, forest), rivers only on valley floors,
     levels. Checked headless at 0.5, 2, 5 and 20 nm. Not checked: that the map's rivers
     match the 3D view's to the metre (the port mirrors the GPU's float32 hash).
-  - [ ] Optional corner inset in the 3D view (reusing `drawMap`).
+  - [x] Corner map in the 3D view (2026-10-08): I or Settings; `drawMap` in compact mode,
+    bottom right, about ten redraws a second, terrain from its own tile worker; wheel to
+    zoom, click for north up / track up; remembered per browser.
 - [x] **Waypoint navigation task and route autopilot** (2026-10-08; owner's choices: random
   and named routes, fly-by by default with optional fly-over, one cruise altitude, stop at
   the last waypoint). `envs/route.py`: routes (map metres; named waypoints may be given in
@@ -906,6 +908,9 @@ Goal (owner, 2026-10-08): build up from correct coordinates to GPS navigation. S
     Scenarios: "Route" and "Route in wind" (fly yourself, `manual_route*.yaml`), "Route
     autopilot" (watch, `navigation_wind.yaml`). Past flights: task "Route", results
     "Route flown, 5 legs, max 23 m off track" / "Off course, 2/5 legs".
+    End of a route in the viewer: "Route complete: 3 legs, 20.8 nm in 11 min 13 s;
+    cross-track 10 m RMS, at most 25 m; ..." (protocol: end reason `route_complete` with
+    the route summary).
 - [ ] **Real airfield placement:** the origin at a real airfield (runway true heading,
   elevation and magnetic variation; runway numbers from magnetic heading). Ties in with
   real-world scenery (out of scope so far: needs a decision). Before a far-from-equator
