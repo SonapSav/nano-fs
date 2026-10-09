@@ -265,6 +265,16 @@ export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northU
   const g = gpsData(row, geodesy, target, nav);
   const pad3 = (d) => String(Math.round(d) % 360).padStart(3, "0");
   const xtk = nav ? `   DTK ${pad3(g.dtkDeg)}°   XTK ${(Math.abs(g.xtkM) / M_PER_NM).toFixed(2)} nm${Math.abs(g.xtkM) >= 9 ? (g.xtkM > 0 ? " R" : " L") : ""}` : "";
+  // A real-world region's data credit (its manifest; OpenStreetMap asks for it on the map).
+  const credit = background?.credit;
+  if (credit) {
+    const label = compact ? "© OpenStreetMap contributors" : credit, y = compact ? h - 30 : 14, size = compact ? 11 : 12;
+    ctx.font = font(compact ? Math.round(size * 0.78) : size);
+    const tw = ctx.measureText(label).width;
+    ctx.fillStyle = "rgba(30, 33, 36, 0.6)";
+    ctx.fillRect(w / 2 - tw / 2 - 5, y - 8, tw + 10, 16);
+    text(label, w / 2, y, size, C.text);
+  }
   if (compact) {
     text(`${g.target} ${g.distNm < 10 ? g.distNm.toFixed(1) : g.distNm.toFixed(0)} nm ${pad3(g.bearingDeg)}°${nav ? `  XTK ${(Math.abs(g.xtkM) / M_PER_NM).toFixed(2)}` : ""}`, 8, h - 12, 16, C.text, "left", 600);
     return;

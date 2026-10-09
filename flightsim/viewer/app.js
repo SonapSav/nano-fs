@@ -373,6 +373,11 @@ function setWorld(msg) {
 }
 world.onChange(() => {
   scene.setWorld(world, worldNear);
+  // The region's data credit (full text as the tooltip; also in the README).
+  const credits = $("credits");
+  credits.textContent = world.manifest?.credit_short ?? "";
+  credits.title = (world.manifest?.credits ?? []).join("\n\n");
+  credits.hidden = !world.real;
   dirty = true;
 });
 
@@ -541,7 +546,7 @@ function requestPreview() {
   if (!els.stop.disabled) return; // a flight is running
   const req = flightRequest();
   if (!req) return;
-  const key = JSON.stringify([req.source, req.conditions, req.autopilot, req.path, req.source === "replay" ? null : req.seed]);
+  const key = JSON.stringify([req.source, req.conditions, req.autopilot, req.region ?? null, req.path, req.source === "replay" ? null : req.seed]);
   if (key === lastPreviewKey) return;
   lastPreviewKey = key;
   send({ type: "preview", id: ++previewId, ...req });
@@ -889,6 +894,19 @@ function showPerf(now) {
     `${info.calls} draw calls, ${(info.triangles / 1000).toFixed(0)}k triangles, tiles to build ${scene.terrain.pending}`;
 }
 
+// The performance test's real-world case: the Abu Dhabi approach start (on) or the
+// procedural one (off); resolves once the world is shown and its tiles are built (false
+// when the region is not available here).
+async function benchWorld(on) {
+  selectFlight(on ? `${AD}/${MANUAL_APPROACH}` : MANUAL_APPROACH);
+  const t0 = performance.now();
+  while (performance.now() - t0 < 30000) {
+    await new Promise((r) => setTimeout(r, 250));
+    if (world.real === on && (!on || world.manifest) && scene.terrain.pending === 0 && performance.now() - t0 > 1500) return true;
+  }
+  return false;
+}
+
 // Performance test (bench.js), from the readout: on the approach start, not during a flight.
 $("bench").addEventListener("click", async () => {
   if (!els.stop.disabled) {
@@ -908,6 +926,7 @@ $("bench").addEventListener("click", async () => {
       scene, setView, restoreClouds: applySky, progress: say, scriptTimes,
       setHud: (on) => (benchHud = on), setPanel: (on) => { benchPanel = on; dirty = true; },
       setCamera: (on) => setCameraInset(on), cameraOn: !$("camera-inset").hidden,
+      setReal: benchWorld,
     });
     const extra = `HUD ${hudOn ? "on" : "off"} (cockpit view); instruments window ${$("panel").hidden ? "open" : "closed"}; ` +
       `belly camera ${CAMERA_WIDTHS[camSettings.size]} px at ${camSettings.fps}/s, ${camSinks.size} picture(s) in view`;

@@ -105,12 +105,17 @@ flightsim/          # installable package (uv_build backend)
                     #   geo.js / gps.js: WGS84 map (port of world/geo.py); GPS unit in the panel
                     #   map.js / map.html: moving map in its own window (same channel as the instruments window)
                     #   sound.js: synthesized engine, wind, stall horn, flap motor (Web Audio, driven by frames)
+                    #   world.js: the flight's world (procedural or a real-world region) for every part of the viewer;
+                    #     demCore.js (bit-identical to world/dem.py), demTiles.js, featureGeometry.js (region tiles, OSM
+                    #     roads, paving and buildings, in the tile worker), realAirfields.js / runwayGeometry.js (its
+                    #     runways), mapRegion.js (its map tiles)
   analysis/         # mode identification, validation maneuvers, validation checks
   atmosphere/       # Dryden turbulence (MIL-F-8785C)
   world/            # terrain height shared with the viewer (bit-identical port of viewer/terrainCore.js);
                     #   geo.py: WGS84 latitude/longitude <-> map metres around the world's origin (viewer/geo.js the same)
                     #   scenery.py: built real-world regions (tile grid, files, manifest); scenery_build.py: the build
                     #   dem.py: a region's height and water (viewer/demCore.js the same); ground.py: the ground of a config
+                    #   scenery_osm.py: the build's OpenStreetMap runways and features
   batch.py          # parallel seeded episode batches
   config.py         # YAML loading (base: inheritance, overrides) + config hash
   runner.py         # headless run loop

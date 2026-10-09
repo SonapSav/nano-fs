@@ -1083,9 +1083,22 @@ water, mangroves and irrigated green: classes the procedural generator does not 
   shared empty buffer twice (DataCloneError, tiles fell back to the main thread, which
   then marked unloaded tiles empty: it now waits for them). Tests:
   `tests/test_scenery_features.py`, `tests/test_viewer_dem.py`.
-- [ ] **6. Buildings and attribution:** OSM footprints extruded (tagged height or floors,
-  else an estimate from type and size), merged per tile; attribution in the viewer and
-  README; a real-scenery case in the performance test.
+- [x] **6. Buildings and attribution** (2026-10-09): OSM building footprints extruded to
+  their tagged height (1,539), floors x 3.3 m + 1 m (4,329) or an estimate from type and
+  footprint (104,121: houses and villas 7 m, large footprints 12-15 m, others 9 m; project
+  choices), flat roofs, stone and render colours, blue-grey glass from 40 m; one mesh per
+  tile (featureGeometry.js): every building on the near tiles, 30 m and up on the next
+  ring, 60 m and up (the skyline) beyond. Credits checked against each source (FABDEM's
+  required Copernicus statement, WorldCover's attribution, OpenStreetMap's notice and
+  ODbL) in the region file and manifest; the viewer shows the short line at the bottom of
+  the 3D view (full text as its tooltip) and the map window's top (the corner map: the
+  OpenStreetMap notice); full text in the README. Performance test: an "Abu Dhabi
+  scenery" case (the region's approach start; skipped when the region is not built).
+  Headless (AMD Renoir, 1600 x 477 view): 60 fps in both views, script 3.2-3.7 ms per
+  frame against 4.0-4.3 ms on the procedural approach start (fewer draw calls); free
+  flight over the city 562k triangles, 178 draw calls. Fixed on the way: the preview of
+  a scenario ignored its region (Abu Dhabi and procedural approaches shared a preview).
+  Pending: the owner's run of the performance test on their graphics.
 
 ### Licence and documentation
 

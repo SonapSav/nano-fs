@@ -72,6 +72,11 @@ export class MapBackground {
       .catch(() => {});
   }
 
+  // The region's data credit for the map's corner (empty for the procedural world).
+  get credit() {
+    return this.scenery?.manifest?.credit_short ?? "";
+  }
+
   // A region tile's features (roads), loaded on demand.
   _features(ix, iz) {
     const s = this.scenery, key = `${ix},${iz}`, t = s.manifest.tiles;

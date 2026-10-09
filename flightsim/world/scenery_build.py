@@ -461,6 +461,7 @@ def write_manifest(spec: RegionSpec, sources: list[dict], out: Path) -> dict:
                   "height_cells": HEIGHT_CELLS, "landcover_cells": LANDCOVER_CELLS},
         "sources": [{k: f[k] for k in ("kind", "name", "url", "sha256")} for f in sources],
         "credits": spec.sources.get("credits", []),
+        "credit_short": spec.sources.get("credit_short", ""),
         "files": files,
     }  # fmt: skip
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n")

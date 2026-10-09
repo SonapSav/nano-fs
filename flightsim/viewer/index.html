@@ -107,6 +107,9 @@
   #hint { position: absolute; right: 16px; top: 12px; max-width: 46%; text-align: right; color: var(--marking);
     padding: 8px 12px; border-radius: 4px; background: rgba(44, 48, 52, .86); }
   #hint:empty { display: none; }
+  /* A real-world region's data credit (world.js manifest), bottom centre. */
+  #credits { position: absolute; left: 50%; bottom: 3px; transform: translateX(-50%); z-index: 2; max-width: 60%; text-align: center;
+    font-size: 11px; color: rgba(255, 255, 255, .8); text-shadow: 0 1px 2px rgba(0, 0, 0, .8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 
   /* Cockpit view: points up at the aircraft's straight-ahead direction, from the bottom edge. */
@@ -223,6 +226,7 @@
     <div id="perf" hidden aria-live="off"></div>
     <canvas id="camera-inset" hidden aria-label="Belly camera" title="Belly camera: drag to point, wheel to zoom, double-click for straight down (K to hide)"></canvas>
     <canvas id="minimap" hidden aria-label="Corner map" title="Corner map: wheel to zoom, click for north up / track up (I to hide)"></canvas>
+    <div id="credits" hidden></div>
     <div id="hint">Drag to look around, scroll to zoom, space to pause</div>
   </main>
 

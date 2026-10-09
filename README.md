@@ -32,6 +32,13 @@ you can fly with a keyboard, gamepad or joystick.
   Mercator projection around a configurable origin, with true and map north kept apart,
   so positions, distances and bearings are accurate to about a millimetre across the
   simulated world.
+- **Real-world scenery:** Abu Dhabi around Al Bateen Executive Airport (OMAD), 104 km
+  square, built offline from open data: bare-earth elevation (FABDEM) under the wheels
+  and in the view, ESA WorldCover land cover, and OpenStreetMap runways, roads,
+  taxiways, aprons and 110,000 buildings, with date palms and mangroves. The physics
+  flies on the same ground the viewer draws, touching the sea ends the flight, and every
+  log records the scenery it flew over. The same scenarios as the procedural world fly
+  there on runway 31 (fly them or watch the autopilots).
 - **Logs:** one Parquet row per simulation step with a fixed, versioned schema in SI
   units; the same seed and config give byte-identical files.
 - **Viewer:** Three.js in the browser, offline. Chase and cockpit views, the six-pack,
@@ -76,6 +83,15 @@ uv run python scripts/docker.py up -d --build viewer   # or: docker compose up -
 ```
 
 The first start designs the LQR gain schedule (about 15 s) and caches it in `data/`.
+
+The Abu Dhabi scenery is built once from its open data sources (downloads about 350 MB
+into `data/scenery/`, then about a minute):
+
+```sh
+uv run --group scenery python scripts/build_scenery.py configs/scenery/abu_dhabi.yaml
+```
+
+The Flights drawer then offers the Abu Dhabi scenarios (they need the built scenery).
 
 ## Flying
 
@@ -189,6 +205,21 @@ three.js (MIT) and the Barlow Condensed font (OFL) keep their licences; see
 [`THIRD_PARTY.md`](THIRD_PARTY.md).
 
 Built on [JSBSim](https://github.com/JSBSim-Team/jsbsim) and [three.js](https://threejs.org/).
+
+The real-world scenery is not part of the repository: `scripts/build_scenery.py`
+downloads and builds it on your machine, for non-commercial use, under these terms
+(shown in the viewer while flying there):
+
+- FABDEM V1-2 (Hawker et al. 2022, *A 30m global map of elevation with forests and
+  buildings removed*, Environmental Research Letters; University of Bristol), CC BY-NC-SA
+  4.0. FABDEM is produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus
+  Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and
+  ESA; all rights reserved. The organizations in charge of the Copernicus program by law
+  or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30.
+- © ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021)
+  processed by ESA WorldCover consortium (CC BY 4.0).
+- © OpenStreetMap contributors. The data is available under the Open Database License
+  (ODbL); extracts from Geofabrik.
 Reference data from the Cessna 172P Pilot's Operating Handbook, FAA handbooks and
 advisory circulars, MIL-F-8785C and the AAIB, cited in `docs/REFERENCES.md`.
 

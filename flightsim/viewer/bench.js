@@ -25,6 +25,7 @@ export const BENCH_CASES = [
   { label: "no HUD", off: { hud: true } },
   { label: "no instrument panel", off: { panel: true } },
   { label: "belly camera on", off: {}, on: { camera: true } },
+  { label: "Abu Dhabi scenery", off: {}, on: { real: true } }, // the real-world region's approach start, as set otherwise
   { label: "all of these off", off: { logDepth: true, antialias: true, effects: true, detail: true, clouds: true, pixelRatio1: true, hud: true, panel: true, camera: true } },
 ];
 
@@ -51,10 +52,12 @@ const median = (xs) => {
 
 // Run the test. `scene`: the FlightScene; `setView(view)`; `restoreClouds()`: put the sky's
 // clouds back; `setHud(on)` / `setPanel(on)` / `setCamera(on)`: draw them or not
-// (`cameraOn`: whether the belly camera is in view to begin with); `scriptTimes`: an array the
+// (`cameraOn`: whether the belly camera is in view to begin with); `setReal(on)`: show the
+// real-world region's approach start or back the procedural one, resolving once its tiles
+// are built (false: the region is not available); `scriptTimes`: an array the
 // viewer appends its per-frame script time (ms) to; `progress(text)`. Returns
 // {cases: [{label, view, fps, medianMs, p95Ms, worstMs, scriptMs, scriptP95Ms}], env}.
-export async function runBench({ scene, setView, restoreClouds, setHud, setPanel, setCamera = () => {}, cameraOn = false, scriptTimes, progress }) {
+export async function runBench({ scene, setView, restoreClouds, setHud, setPanel, setCamera = () => {}, cameraOn = false, setReal = null, scriptTimes, progress }) {
   const quality = scene.quality, startView = scene.view;
   const ratio = scene.renderer.getPixelRatio();
   const apply = (off, on = {}) => {
@@ -81,6 +84,10 @@ export async function runBench({ scene, setView, restoreClouds, setHud, setPanel
     for (const c of BENCH_CASES) {
       if (c.off.pixelRatio1 && ratio <= 1 && Object.keys(c.off).length === 1) continue; // already 1
       if (c.on?.camera && cameraOn) continue; // already in "as set"
+      if (c.on?.real && !(setReal && (await setReal(true)))) {
+        if (setReal) await setReal(false); // no region here: back to the approach start
+        continue;
+      }
       apply(c.off, c.on);
       for (const view of views) {
         progress(`Performance test ${++k}/${BENCH_CASES.length * views.length}: ${c.label}, ${view} view…`);
@@ -92,6 +99,7 @@ export async function runBench({ scene, setView, restoreClouds, setHud, setPanel
         const sorted = [...scriptTimes].sort((a, b) => a - b);
         results.push({ label: c.label, view, ...frame, scriptMs: median(scriptTimes), scriptP95Ms: sorted[Math.round(0.95 * (sorted.length - 1))] ?? 0 });
       }
+      if (c.on?.real) await setReal(false);
     }
   } finally {
     apply({});
