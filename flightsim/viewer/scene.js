@@ -16,6 +16,7 @@ import { CloudField } from "./clouds.js";
 import { RoadNetwork } from "./roads.js";
 import { QUALITY, Terrain, waterUniforms } from "./terrain.js";
 import { RealAirfields } from "./realAirfields.js";
+import { Landmarks } from "./landmarks.js";
 import { world } from "./world.js";
 import { groundDetailStrength } from "./groundDetail.js";
 import { buildC172 } from "./aircraft.js";
@@ -117,6 +118,7 @@ export class FlightScene {
     this.proceduralPapi = this.papi = new Papi(this.procedural);
     this.proceduralWindsock = this.windsock = new Windsock(this.procedural);
     this.realAirfields = new RealAirfields(this.scene);
+    this.landmarks = new Landmarks(this.scene);
     this.wind = [0, 0]; // the windsock's wind (from deg, kt), kept across a world change
     this.terrain = new Terrain(this.scene, quality);
     this._applyQuality(quality);
@@ -289,6 +291,7 @@ export class FlightScene {
     this.papi = this.proceduralPapi;
     this.windsock = this.proceduralWindsock;
     this.realAirfields.build(real ? w.airfields : null);
+    this.landmarks.build(real ? w.landmarks : null);
     const home = real ? this.realAirfields.nearest(near.x, near.z) : null;
     if (home) {
       this.papi = new Papi(this.scene, home);

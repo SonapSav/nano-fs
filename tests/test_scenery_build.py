@@ -185,3 +185,23 @@ def test_measured_building_heights(tmp_path):
     assert east[1][:2] == [12.0, "measured"]  # a house: capped
     assert east[2][:2] == [80.0, "height"]  # tagged heights stay
     assert tiles[(-1, 0)]["buildings"][0][:2] == [9.0, "estimate"]  # no buildings measured there: the estimate stays
+
+
+def test_landmarks(tmp_path):
+    import json
+
+    from flightsim.world.scenery_build import _inside, _landmarks
+
+    (tmp_path / "tiles").mkdir()
+    for iz in (-1, 0):
+        for ix in (-1, 0):
+            (tmp_path / heights_name(ix, iz)).write_bytes(np.full((HEIGHT_CELLS + 1) ** 2, 7.0, "<f4").tobytes())
+    ring = [0.0, 0.0, 400.0, 0.0, 400.0, 100.0, 0.0, 100.0]  # 400 m east-west, 100 m north-south
+    assert _inside(200, 50, ring) and not _inside(500, 50, ring)
+    tiles = {(0, 0): {"buildings": [[33, "height", [190, 40, 210, 40, 210, 60, 190, 60]], [9, "estimate", [600, 600, 610, 600, 610, 610, 600, 610]]]}}
+    marks = [{"name": "M", "kind": "grand_mosque", "osm": "relation/1", "replace": True}, {"name": "X", "kind": "flat_dome", "osm": "way/9"}]
+    _landmarks(SPEC, marks, {"relation/1": ring}, tiles, tmp_path, log=lambda *_: None)
+    (m,) = json.loads((tmp_path / "landmarks.json").read_text())  # the missing one is left out
+    assert m["centre"] == [200.0, 50.0] and m["axis_deg"] == 90.0 and m["ground_m"] == 7.0
+    assert 255 < m["qibla_deg"] < 265  # Mecca from Abu Dhabi: west by south
+    assert [b[0] for b in tiles[(0, 0)]["buildings"]] == [9]  # the box inside the footprint replaced

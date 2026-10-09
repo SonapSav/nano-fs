@@ -265,16 +265,19 @@ def _ring_area(ring: list[tuple[float, float]]) -> float:
     return 0.5 * abs(sum(x0 * z1 - x1 * z0 for (x0, z0), (x1, z1) in zip(ring, ring[1:] + ring[:1])))
 
 
-def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: float, tile_m: float) -> dict:
+def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: float, tile_m: float, capture: set | None = None) -> dict:
     """{(ix, iz): {"roads": {class: [polyline, ...]}, "rail": [...], "taxiway": [...],
     "apron": [ring, ...], "buildings": [[height_m, source, ring], ...]}} in world x (east),
     z (south) metres rounded to 0.1, for the tiles of the region. Lines are cut at tile
-    edges; areas go to the tile of their centroid (outer rings only)."""
+    edges; areas go to the tile of their centroid (outer rings only). `capture`: OSM
+    objects ("way/<id>", "relation/<id>") whose outer ring is also returned under the key
+    "captured" ({object: ring})."""
     import osmium
 
     s, w, n, e = bounds_deg
     inside_deg = lambda lat, lon: s <= lat <= n and w <= lon <= e  # noqa: E731
-    tiles: dict[tuple[int, int], dict] = {}
+    tiles: dict = {}
+    captured: dict[str, list[float]] = {}
 
     def tile(key):
         return tiles.setdefault(key, {"roads": {}, "rail": [], "taxiway": [], "apron": [], "buildings": []})
@@ -314,6 +317,9 @@ def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: fl
                     ring = [xz(nd.lat, nd.lon) for nd in outer][:-1]  # closed: drop the repeat
                 except osmium.InvalidLocationError:
                     break
+                obj = f"{'way' if o.from_way() else 'relation'}/{o.orig_id()}"
+                if capture and obj in capture and obj not in captured:
+                    captured[obj] = [c for p in ring for c in p]
                 if kind == "apron":
                     add_area("apron", ring)
                 else:
@@ -335,4 +341,6 @@ def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: fl
         except osmium.InvalidLocationError:
             continue
         add_lines(kind, pts, cls)
+    if capture:
+        tiles["captured"] = captured
     return tiles

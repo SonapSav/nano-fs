@@ -1194,6 +1194,16 @@ landmarks; later night lighting, shadows, haze.
     taxiway centrelines on every taxiway; at the home airport parked C172s on every third
     stand within 3 km (at most 8: each model has many parts) and hold-short bars (two
     solid, two dashed); the windsock at OSM's position. Sizes project choices.
+  - [x] 4d Landmarks (2026-10-09): `landmarks` in the region file (OSM object, kind,
+    dimensions); the build writes `landmarks.json` (footprint, centre, long axis, ground
+    height; the mosque's qibla bearing, 260.4 deg) and drops OSM's plain box inside a
+    `replace` landmark. `viewer/landmarks.js` models four kinds: Sheikh Zayed Grand Mosque
+    (85 m dome 32.2 m across, four 104 m minarets), Capital Gate (160 m, 18 deg lean west),
+    Louvre Abu Dhabi (180 m flat dome on four piers 110 m apart), Emirates Palace (central
+    dome). Dimensions from Wikipedia and architecture press (docs/REFERENCES.md); the
+    Louvre dome's height, the palace dome's size and the mosque's base height are project
+    choices. Etihad Towers already carry their OSM heights (305/278/260/234/218 m, matching
+    Wikipedia). Qasr Al Watan left out: its main building is not mapped in OSM.
 
 ### Licence and documentation
 

@@ -70,7 +70,8 @@ def load_spec(path: str | Path) -> RegionSpec:
     raw = yaml.safe_load(Path(path).read_text())
     return RegionSpec(
         name=raw["name"], origin_lat_deg=float(raw["origin_lat_deg"]), origin_lon_deg=float(raw["origin_lon_deg"]),
-        tiles_radius=int(raw["tiles_radius"]), sources=raw["sources"], pinned=raw.get("pinned", {}) or {},
+        tiles_radius=int(raw["tiles_radius"]), sources={**raw["sources"], "landmarks": raw.get("landmarks") or []},
+        pinned=raw.get("pinned", {}) or {},
         airports=raw.get("airports", {}) or {}, default_runway_width_m=float(raw.get("default_runway_width_m", 30.0)),
         origin_airport=raw.get("origin_airport"),
     )  # fmt: skip
@@ -491,6 +492,61 @@ def _measured_heights(spec: RegionSpec, g: geo.Geodesy, tiles: dict, raster: Pat
     log(f"building heights: {used} of {len(todo)} estimated buildings take the measured cell average")
 
 
+def _inside(x: float, z: float, ring: list[float]) -> bool:
+    """Point in polygon (even-odd), ring [x0, z0, x1, z1, ...]."""
+    inside, n = False, len(ring) // 2
+    for i in range(n):
+        x0, z0, x1, z1 = ring[2 * i], ring[2 * i + 1], ring[2 * ((i + 1) % n)], ring[2 * ((i + 1) % n) + 1]
+        if (z0 > z) != (z1 > z) and x < x0 + (z - z0) * (x1 - x0) / (z1 - z0):
+            inside = not inside
+    return inside
+
+
+def _height_at(out: Path, x: float, z: float) -> float:
+    """The built ground height at a world point (the nearest post; landmarks only)."""
+    ix, iz = math.floor(x / TILE_SIZE_M), math.floor(z / TILE_SIZE_M)
+    posts = np.fromfile(out / heights_name(ix, iz), "<f4").reshape(HEIGHT_CELLS + 1, HEIGHT_CELLS + 1)
+    i, j = round((x - ix * TILE_SIZE_M) / POST_M), round((z - iz * TILE_SIZE_M) / POST_M)
+    return max(0.0, float(posts[j, i]))
+
+
+def _landmarks(spec: RegionSpec, marks: list[dict], captured: dict, tiles: dict, out: Path, log=print) -> None:
+    """landmarks.json: each landmark of the region file with its OSM footprint, centre, long
+    axis (world bearing of its longest side, degrees from north, clockwise) and ground
+    height; OSM buildings inside a `replace` landmark's footprint are dropped."""
+    result = []
+    for m in marks:
+        ring = captured.get(m["osm"])
+        if not ring:
+            log(f"landmark {m['name']}: {m['osm']} not found in the OSM extract")
+            continue
+        xs, zs = ring[0::2], ring[1::2]
+        cx, cz = sum(xs) / len(xs), sum(zs) / len(zs)
+        n = len(xs)
+        side = max(range(n), key=lambda k: math.hypot(xs[(k + 1) % n] - xs[k], zs[(k + 1) % n] - zs[k]))
+        dx, dz = xs[(side + 1) % n] - xs[side], zs[(side + 1) % n] - zs[side]
+        axis = math.degrees(math.atan2(dx, -dz)) % 180.0  # bearing: east = 90
+        dropped = 0
+        if m.get("replace"):
+            for t in tiles.values():
+                keep = [b for b in t["buildings"] if not _inside(sum(b[2][0::2]) / (len(b[2]) / 2), sum(b[2][1::2]) / (len(b[2]) / 2), ring)]
+                dropped += len(t["buildings"]) - len(keep)
+                t["buildings"] = keep
+        entry = {**m, "ring": [round(v, 1) for v in ring], "centre": [round(cx, 1), round(cz, 1)], "axis_deg": round(axis, 2),
+                 "ground_m": round(_height_at(out, cx, cz), 2)}  # fmt: skip
+        if m["kind"] == "grand_mosque":
+            # Qibla: the initial great-circle bearing to the Kaaba (21.4225 N, 39.8262 E), true
+            # (the map bearing differs by the grid convergence, a few hundredths of a degree here).
+            g = geo.Geodesy("wgs84", spec.origin_lat_deg, spec.origin_lon_deg)
+            lat, lon = g.to_geodetic(-cz, cx)
+            lat2, dlon = math.radians(21.4225), math.radians(39.8262) - lon
+            entry["qibla_deg"] = round(math.degrees(math.atan2(math.sin(dlon) * math.cos(lat2),
+                                       math.cos(lat) * math.sin(lat2) - math.sin(lat) * math.cos(lat2) * math.cos(dlon))) % 360.0, 2)  # fmt: skip
+        result.append(entry)
+        log(f"landmark {m['name']}: {n} corners, axis {axis:.0f} deg, {dropped} OSM buildings replaced")
+    (out / "landmarks.json").write_text(json.dumps(result, indent=1, sort_keys=True) + "\n")
+
+
 # --- Airfields --------------------------------------------------------------------------------
 
 # Runway flattening (project choices): the flat area reaches this far beyond the pavement's
@@ -648,9 +704,12 @@ def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_h
     g = geo.Geodesy("wgs84", spec.origin_lat_deg, spec.origin_lon_deg)
     lo, hi = spec.ix_range
     half = max(abs(lo), hi + 1) * TILE_SIZE_M
-    tiles = extract_features(pbf, g, region_bounds_deg(spec, 0.0), half, TILE_SIZE_M)
+    marks = spec.sources.get("landmarks") or []
+    tiles = extract_features(pbf, g, region_bounds_deg(spec, 0.0), half, TILE_SIZE_M, capture={m["osm"] for m in marks})
+    captured = tiles.pop("captured", {})
     if building_height is not None:
         _measured_heights(spec, g, tiles, building_height, log)
+    _landmarks(spec, marks, captured, tiles, out, log)
     empty = {"roads": {}, "rail": [], "taxiway": [], "apron": [], "buildings": []}
     counts = {"buildings": 0, "roads": 0}
     for iz in range(lo, hi + 1):

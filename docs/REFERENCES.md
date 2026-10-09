@@ -137,6 +137,16 @@ Wikipedia, "Universal Transverse Mercator coordinate system", section "Simplifie
 - **Prevailing summer wind:** the north-westerly shamal, "Summer winds and seas seldom vary from a NW direction" (sea-seek.com, UAE - Persian Gulf, a sailing pilot guide; mechanism: Frontiers in Environmental Science 2022, doi 10.3389/fenvs.2022.972380). The 290-340 deg range is a project choice.
 - **JSBSim (1.3.1) standard atmosphere, verified 2026-10-09:** `atmosphere/delta-T` (Rankine) shifts the temperature at every altitude and the pressure profile follows the shifted temperature (hydrostatic, geopotential height); `atmosphere/P-sl-psf` sets the sea-level pressure; both survive run_ic.
 
+## Abu Dhabi landmarks (configs/scenery/abu_dhabi.yaml `landmarks`, viewer/landmarks.js)
+
+Retrieved 2026-10-09. Positions and footprints from OSM (the region's pinned extract).
+- **Sheikh Zayed Grand Mosque** (Wikipedia): 420 x 290 m, 82 domes, outer dome 85 m high and 32.2 m in diameter, four minarets 104 m (infobox; the text says about 107 m), white marble.
+- **Capital Gate** (Wikipedia): 160 m to the roof, 35 floors, leaning 18 deg west.
+- **Louvre Abu Dhabi**: dome 180 m in diameter on four piers 110 m apart (archeyes.com, architecturelab.net; Wikipedia gives only the 7,000 t weight). Height not published.
+- **Emirates Palace** (Wikipedia): central dome plus 114 smaller domes, desert-sand colour; no dome dimensions.
+- **Etihad Towers** (Wikipedia): T1-T5 277.6, 305.3, 260.3, 234.0, 217.5 m; OSM's height tags agree (rounded).
+- **Qasr Al Watan** (Wikipedia): main dome 37 m in diameter, 60 m overall; not modelled (not in OSM).
+
 ## Sentinel-2 imagery (world/scenery_build.py build_imagery, configs/scenery/abu_dhabi.yaml)
 
 - **Licence:** Copernicus Sentinel data legal notice (https://sentinels.copernicus.eu/documents/247904/690755/Sentinel_Data_Legal_Notice): free, full and open access, reproduction, distribution, adaptation and combination allowed; notice for modified data "Contains modified Copernicus Sentinel data [Year]".
