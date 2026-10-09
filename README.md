@@ -98,7 +98,7 @@ demonstrations in `data/demos/` and listed under **Past flights**.
 | `I` | corner map (wheel to zoom, click for north up / track up) |
 | `K` | belly camera in the view (drag to point, wheel to zoom, double-click: straight down) |
 | Numpad `4` `6` `8` `2`, `+` `−`, `5`, `0` | point and zoom the camera, straight down, follow a replay's recorded camera |
-| `P` | frame rate readout |
+| `P` | frame rate readout (Settings → Frame limit draws every second or third refresh, for a steadier, cooler picture) |
 | `M` | sound on / off |
 | Space | pause |
 

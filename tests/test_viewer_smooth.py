@@ -42,6 +42,20 @@ const st = new pf.FrameStats(10000);
 let t = 0; for (let i = 0; i < 120; i++) { t += i === 60 ? 50 : 1000 / 60; st.frame(t); }
 for (let i = 0; i < 30; i++) st.message(i * 33.3);
 out.stats = st.summary();
+// Frame-rate limit at 144 Hz with jitter: half (72 fps) and a third (48 fps); a refresh the
+// browser misses does not shift the cadence.
+const pace = (divisor, miss) => {
+  const pc = new pf.FramePacer(divisor), drawn = [];
+  let tt = 0;
+  for (let i = 0; i < 1440; i++) {
+    tt += 1000 / 144 + (i %% 3 - 1) * 0.3;
+    if (i === miss) continue; // no callback for this refresh
+    if (pc.tick(tt)) drawn.push(tt);
+  }
+  const late = drawn.filter((x) => x > 1000); // after the refresh rate is known
+  return { fps: late.length / ((late[late.length - 1] - late[0]) / 1000), gaps: late.slice(1).map((x, k) => x - late[k]), refresh: pc.refreshMs };
+};
+out.pace1 = pace(1, -1); out.pace2 = pace(2, 701); out.pace3 = pace(3, -1);
 console.log(JSON.stringify(out));
 """ % (json.dumps((VIEWER / "smooth.js").as_uri()), json.dumps((VIEWER / "perf.js").as_uri()))
 
@@ -75,3 +89,16 @@ def test_frame_statistics(out):
     assert s["refreshMs"] == pytest.approx(1000 / 60, abs=0.01)
     assert s["dropped"] == 2 and s["worstMs"] == pytest.approx(50)
     assert s["msgMedianMs"] == pytest.approx(33.3, abs=0.01)
+
+
+def test_frame_limit_draws_a_whole_fraction_of_the_refreshes(out):
+    assert out["pace1"]["refresh"] == pytest.approx(1000 / 144, abs=0.4)
+    assert out["pace1"]["fps"] == pytest.approx(144, rel=0.01)
+    for key, fps in (("pace2", 72), ("pace3", 48)):
+        p = out[key]
+        assert p["fps"] == pytest.approx(fps, rel=0.02)
+        divisor = 144 // fps
+        refreshes = [round(g / (1000 / 144)) for g in p["gaps"]]
+        # Every gap is `divisor` refreshes; the one missed refresh delays one frame by one.
+        assert all(r in (divisor, divisor + 1) for r in refreshes)
+        assert sum(r != divisor for r in refreshes) <= 1

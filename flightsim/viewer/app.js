@@ -5,7 +5,7 @@
 import { FlightScene } from "./scene.js";
 import { CLIMB_KT, InstrumentPanel, PANEL_CHANNEL, PANEL_TIMEOUT_MS, ROTATE_KT } from "./panel.js";
 import { drawHud } from "./hud.js";
-import { FrameStats } from "./perf.js";
+import { FramePacer, FrameStats } from "./perf.js";
 import { benchReport, runBench } from "./bench.js";
 import { FrameBuffer } from "./smooth.js";
 import { RANGES_NM, Track, drawMap } from "./map.js";
@@ -796,14 +796,49 @@ try {
 } catch {
   // storage unavailable: off
 }
+// Frame-rate limit (Settings), remembered in this browser: draw every refresh, every
+// second or every third (whole fractions of the display's rate keep motion even). The
+// performance test always runs without it. Pilot input is read on its own timer, so the
+// limit does not slow the controls.
+const FRAME_LIMIT_KEY = "flightsim.frameLimit";
+const pacer = new FramePacer(1);
+let frameLimit = 1;
+function setFrameLimit(divisor) {
+  frameLimit = [1, 2, 3].includes(divisor) ? divisor : 1;
+  $("frame-limit").value = String(frameLimit);
+  try {
+    localStorage.setItem(FRAME_LIMIT_KEY, String(frameLimit));
+  } catch {
+    // not remembered
+  }
+}
+try {
+  setFrameLimit(Number(localStorage.getItem(FRAME_LIMIT_KEY)) || 1);
+} catch {
+  setFrameLimit(1);
+}
+$("frame-limit").addEventListener("change", (e) => setFrameLimit(Number(e.target.value)));
+// The choices name the frame rates they give on this display.
+let frameLimitLabelsMs = 0;
+function labelFrameLimits() {
+  const r = pacer.refreshMs;
+  if (!r || Math.abs(r - frameLimitLabelsMs) < 0.2) return;
+  frameLimitLabelsMs = r;
+  const hz = 1000 / r;
+  for (const o of $("frame-limit").options) {
+    const d = Number(o.value);
+    o.textContent = `${{ 1: "Display rate", 2: "Half the display rate", 3: "A third of it" }[d]} (${Math.round(hz / d)} fps)`;
+  }
+}
+
 let perfShownAt = 0;
 function showPerf(now) {
   if ($("perf").hidden || now - perfShownAt < 500) return;
   perfShownAt = now;
   const s = frameStats.summary(), info = scene.renderer.info.render;
   $("perf").textContent =
-    `${s.fps.toFixed(0)} fps (refresh ${s.refreshMs.toFixed(1)} ms), slowest ${s.worstMs.toFixed(0)} ms\n` +
-    `missed refreshes, last 10 s: ${s.dropped}\n` +
+    `${s.fps.toFixed(0)} fps (refresh ${pacer.refreshMs.toFixed(1)} ms${pacer.divisor > 1 ? `, drawing every ${pacer.divisor === 2 ? "second" : "third"}` : ""}), slowest ${s.worstMs.toFixed(0)} ms\n` +
+    `missed ${pacer.divisor > 1 ? "frames" : "refreshes"}, last 10 s: ${s.dropped}\n` +
     (s.msgMedianMs ? `flight data every ${s.msgMedianMs.toFixed(0)} ms (95% < ${s.msgP95Ms.toFixed(0)}, max ${s.msgMaxMs.toFixed(0)})\n` : "") +
     `${info.calls} draw calls, ${(info.triangles / 1000).toFixed(0)}k triangles, tiles to build ${scene.terrain.pending}`;
 }
@@ -1143,8 +1178,13 @@ function updateCameraGround(row) {
 }
 setCameraInset(Boolean(camSettings.inset));
 
+// The HUD's layer is a full-view canvas: cleared only when something was drawn on it, so
+// it costs nothing while the HUD is out of view.
 const hudCanvas = $("hud");
+let hudDrawn = false;
 function drawHudLayer() {
+  const on = hudInView() && shown && benchHud;
+  if (!on && !hudDrawn) return;
   const dpr = window.devicePixelRatio || 1, w = hudCanvas.clientWidth, h = hudCanvas.clientHeight;
   if (hudCanvas.width !== Math.round(w * dpr) || hudCanvas.height !== Math.round(h * dpr)) {
     hudCanvas.width = Math.round(w * dpr);
@@ -1153,7 +1193,8 @@ function drawHudLayer() {
   const ctx = hudCanvas.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
-  if (!hudInView() || !shown || !benchHud) return;
+  hudDrawn = Boolean(on);
+  if (!on) return;
   drawHud(ctx, w, h, { camera: scene.camera, aircraftMatrix: scene.aircraft.matrix, row: shown, convergence: scene.convergence, ...hudTask(shown) });
 }
 
@@ -1188,6 +1229,10 @@ let benchActive = false, benchDirtyAt = 0; // during the test: redraw the panel 
 const scriptTimes = []; // per-frame script time (ms), collected during the performance test
 
 function frame(now = performance.now()) {
+  requestAnimationFrame(frame);
+  pacer.divisor = benchActive ? 1 : frameLimit;
+  if (!pacer.tick(now)) return;
+  labelFrameLimits();
   const t0 = performance.now();
   if (benchActive && now - benchDirtyAt >= 1000 / 30) {
     benchDirtyAt = now;
@@ -1216,7 +1261,6 @@ function frame(now = performance.now()) {
   marker.style.display = bx === null ? "none" : "block";
   if (bx !== null) marker.style.left = `${(bx * 100).toFixed(2)}%`;
   if (scriptTimes.length < 5000) scriptTimes.push(performance.now() - t0);
-  requestAnimationFrame(frame);
 }
 
 // Stick settings dialog: edits pilot.stick in place, applies immediately, saves per browser.

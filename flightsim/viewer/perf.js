@@ -51,3 +51,36 @@ export class FrameStats {
     };
   }
 }
+
+// Frame-rate limit: draw every `divisor`-th display refresh (1: every refresh). Only whole
+// fractions of the refresh rate keep motion even. The refresh interval is measured from
+// all animation frame callbacks (the median of the last 120); until it is known, every
+// callback draws. Time-based, so a refresh the browser missed does not shift the cadence:
+// a callback draws when at least divisor - 1/2 refreshes have passed since the last draw.
+export class FramePacer {
+  constructor(divisor = 1) {
+    this.divisor = divisor;
+    this.intervals = [];
+    this.lastCallback = null;
+    this.lastDraw = null;
+  }
+
+  get refreshMs() {
+    return this.intervals.length >= 10 ? median(this.intervals) : 0;
+  }
+
+  // True if this animation frame callback (at `now`, ms) should draw.
+  tick(now) {
+    if (this.lastCallback !== null) {
+      this.intervals.push(now - this.lastCallback);
+      if (this.intervals.length > 120) this.intervals.shift();
+    }
+    this.lastCallback = now;
+    const refresh = this.refreshMs;
+    if (this.divisor <= 1 || !refresh || this.lastDraw === null || now - this.lastDraw >= (this.divisor - 0.5) * refresh) {
+      this.lastDraw = now;
+      return true;
+    }
+    return false;
+  }
+}

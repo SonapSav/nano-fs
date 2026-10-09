@@ -656,6 +656,23 @@ owner before work can start.
     The HUD now uses the outline (`contrast` option of drawHud).
   - [x] Confirmed on the owner's machine (2026-10-07): cockpit view with the HUD 139 fps,
     script 5 ms; every case 132-144 fps on the 144 Hz screen; no drops in flight.
+  - [x] Frame limit and cheaper HUD layer and panel (2026-10-09, after the owner's run with
+    the belly camera: 108-112 fps "as set", 140-142 fps all off, script ~6-7 ms against
+    the 7 ms of a 144 Hz refresh). Profile (headless Chromium, AMD Renoir, approach
+    replay): three.js scene drawing ~75% of the viewer's script, panel ~12%, clearing
+    the full-view HUD canvas every frame ~9% even out of the cockpit view.
+    - Settings "Frame limit": the display rate, half or a third of it (whole fractions
+      keep motion even; the choices name the fps), remembered per browser
+      (`perf.js` FramePacer: the refresh measured from all callbacks, time-based so a
+      missed refresh does not shift the cadence). Pilot input has its own timer; the
+      performance test always runs unlimited.
+    - The HUD canvas is cleared only when something was drawn on it.
+    - Gauges: fixed faces (dial, scale, labels; the compass card, rotated into place)
+      drawn once per size and copied; each gauge, the GPS and every readout line
+      redrawn only when what it shows changed.
+    - Result (same profile): panel 80 -> 43 ms per second, HUD layer 56 -> 0, the
+      viewer's script in all 658 -> 566 ms per second (-14%). The 3D scene (~490 ms/s)
+      is left for the realistic-scenery work (fewer, merged objects there).
 - [x] **HUD in the cockpit view** (2026-10-07, phase 1; an option, not fitted to a real
   C172): H, the "HUD" button (cockpit view) or a controller button ("HUD on/off"; X on
   standard pads), remembered per browser. Green, fixed to the aircraft (a combiner about

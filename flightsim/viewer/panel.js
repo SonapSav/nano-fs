@@ -137,6 +137,11 @@ function approachDeviations(row, a) {
 export const ROTATE_KT = 55;
 export const CLIMB_KT = 75;
 
+// Sets a readout's text only when it changed (setting it makes the browser lay out again).
+const put = (el, text) => {
+  if (el.textContent !== text) el.textContent = text;
+};
+
 function updateReadout(p, row) {
   const $ = p.$, session = p.session, readout = p.readout;
   const a = session?.approach ?? session?.takeoff;
@@ -146,12 +151,12 @@ function updateReadout(p, row) {
       const d = approachDeviations(row, { ...tk, aim_point_m: 0, glide_path_deg: 0 });
       const kt = indicatedKt(row), height = row.alt_msl_m - tk.elevation_m;
       const airborne = height > 3;
-      readout.talt.textContent = !airborne ? `rotate at ${ROTATE_KT} kt`
-        : Math.abs(kt - CLIMB_KT) < 3 ? "on speed" : `${Math.round(Math.abs(kt - CLIMB_KT))} kt ${kt > CLIMB_KT ? "fast" : "slow"}`;
-      readout.thdg.textContent = Math.abs(d.cross) < 2 ? "on centreline" : `${Math.abs(d.cross).toFixed(0)} m ${d.cross > 0 ? "right" : "left"}`;
-      $("r-dist").textContent = airborne ? "airborne" : `${Math.max(0, Math.round(tk.length_m - d.along))} m`;
+      put(readout.talt, !airborne ? `rotate at ${ROTATE_KT} kt`
+        : Math.abs(kt - CLIMB_KT) < 3 ? "on speed" : `${Math.round(Math.abs(kt - CLIMB_KT))} kt ${kt > CLIMB_KT ? "fast" : "slow"}`);
+      put(readout.thdg, Math.abs(d.cross) < 2 ? "on centreline" : `${Math.abs(d.cross).toFixed(0)} m ${d.cross > 0 ? "right" : "left"}`);
+      put($("r-dist"), airborne ? "airborne" : `${Math.max(0, Math.round(tk.length_m - d.along))} m`);
     } else {
-      readout.talt.textContent = readout.thdg.textContent = $("r-dist").textContent = "–";
+      for (const el of [readout.talt, readout.thdg, $("r-dist")]) put(el, "–");
     }
   } else if (a) {
     if (row) {
@@ -162,40 +167,40 @@ function updateReadout(p, row) {
       if (row.alt_msl_m - a.elevation_m > 200) p.circuitClimbed = true;
       // (before the threshold also counts: a replay may jump straight to final)
       const onFinal = a.task !== "circuit" || ((p.circuitClimbed || d.along < 0) && Math.abs(d.cross) < 300 && towardRunway);
-      readout.talt.textContent = !onFinal ? "in the pattern" : Math.abs(ft) < 10 ? "on path" : `${Math.abs(ft)} ft ${ft > 0 ? "high" : "low"}`;
-      readout.thdg.textContent = Math.abs(d.cross) < 2 ? "on centreline" : `${Math.abs(d.cross).toFixed(0)} m ${d.cross > 0 ? "right" : "left"}`;
-      $("r-dist").textContent = !onFinal ? "–" : d.along < 0 ? `${(-d.along / 1852).toFixed(2)} nm` : "over the runway";
+      put(readout.talt, !onFinal ? "in the pattern" : Math.abs(ft) < 10 ? "on path" : `${Math.abs(ft)} ft ${ft > 0 ? "high" : "low"}`);
+      put(readout.thdg, Math.abs(d.cross) < 2 ? "on centreline" : `${Math.abs(d.cross).toFixed(0)} m ${d.cross > 0 ? "right" : "left"}`);
+      put($("r-dist"), !onFinal ? "–" : d.along < 0 ? `${(-d.along / 1852).toFixed(2)} nm` : "over the runway");
     } else {
-      readout.talt.textContent = readout.thdg.textContent = $("r-dist").textContent = "–";
+      for (const el of [readout.talt, readout.thdg, $("r-dist")]) put(el, "–");
     }
   }
   if (session?.route) {
     const nav = p.nav;
-    readout.thdg.textContent = nav ? `${String(Math.round(deg360(nav.dtkTrue)) % 360).padStart(3, "0")}°` : "–";
-    $("r-dist").textContent = !nav ? "–" : Math.abs(nav.xtk) < 10 ? "on track" : `${Math.round(Math.abs(nav.xtk))} m ${nav.xtk > 0 ? "right" : "left"}`;
-    $("r-wind").textContent = !nav ? "–" : nav.done ? "route complete" : `${nav.waypoint} (${nav.leg + 1} of ${nav.legs})${nav.turning ? ", turning" : ""}`;
+    put(readout.thdg, nav ? `${String(Math.round(deg360(nav.dtkTrue)) % 360).padStart(3, "0")}°` : "–");
+    put($("r-dist"), !nav ? "–" : Math.abs(nav.xtk) < 10 ? "on track" : `${Math.round(Math.abs(nav.xtk))} m ${nav.xtk > 0 ? "right" : "left"}`);
+    put($("r-wind"), !nav ? "–" : nav.done ? "route complete" : `${nav.waypoint} (${nav.leg + 1} of ${nav.legs})${nav.turning ? ", turning" : ""}`);
   }
   const t = a ? null : session?.targets;
-  readout.alt.textContent = row ? `${Math.round(row.alt_msl_m * units.M_TO_FT).toLocaleString("en-US")} ft` : "–";
-  if (!a) readout.talt.textContent = t ? `${Math.round(t.alt_msl_m * units.M_TO_FT).toLocaleString("en-US")} ft` : "–";
-  readout.hdg.textContent = row ? `${String(Math.round(deg360(row.psi_rad)) % 360).padStart(3, "0")}°` : "–";
-  if (!a && !session?.route) readout.thdg.textContent = t ? `${String(Math.round(deg360(t.heading_rad)) % 360).padStart(3, "0")}°` : "–";
-  readout.kias.textContent = row ? `${indicatedKt(row).toFixed(0)} kt` : "–";
-  readout.aoa.textContent = row ? `${(row.alpha_rad * units.DEG).toFixed(1)}°` : "–";
-  readout.g.textContent = row ? `${(-row.az_mps2 / units.G).toFixed(2)} g` : "–";
+  put(readout.alt, row ? `${Math.round(row.alt_msl_m * units.M_TO_FT).toLocaleString("en-US")} ft` : "–");
+  if (!a) put(readout.talt, t ? `${Math.round(t.alt_msl_m * units.M_TO_FT).toLocaleString("en-US")} ft` : "–");
+  put(readout.hdg, row ? `${String(Math.round(deg360(row.psi_rad)) % 360).padStart(3, "0")}°` : "–");
+  if (!a && !session?.route) put(readout.thdg, t ? `${String(Math.round(deg360(t.heading_rad)) % 360).padStart(3, "0")}°` : "–");
+  put(readout.kias, row ? `${indicatedKt(row).toFixed(0)} kt` : "–");
+  put(readout.aoa, row ? `${(row.alpha_rad * units.DEG).toFixed(1)}°` : "–");
+  put(readout.g, row ? `${(-row.az_mps2 / units.G).toFixed(2)} g` : "–");
   if (row) {
     const flapDeg = row.flap_pos_rad * units.DEG;
     // POH 1981 C172P Figure 2-1: 110 KIAS with 10 deg flaps, 85 KIAS beyond.
     const vfe = flapDeg <= 0.5 ? Infinity : flapDeg <= 10.5 ? 110 : 85;
     const over = indicatedKt(row) > vfe; // the POH limits are KIAS
-    readout.flaps.textContent = `${Math.round(flapDeg)}°${over ? ` over ${vfe} kt limit` : ""}`;
+    put(readout.flaps, `${Math.round(flapDeg)}°${over ? ` over ${vfe} kt limit` : ""}`);
     readout.flaps.classList.toggle("warn", over);
     const trim = row.cmd_pitch_trim_norm;
-    readout.trim.textContent = trim == null ? "–" : `${Math.round(Math.abs(trim) * 100)}% ${trim >= 0 ? "nose down" : "nose up"}`;
+    put(readout.trim, trim == null ? "–" : `${Math.round(Math.abs(trim) * 100)}% ${trim >= 0 ? "nose down" : "nose up"}`);
     const brake = row.cmd_brake_norm;
-    readout.brake.textContent = brake == null ? "–" : brake < 0.01 ? "off" : `${Math.round(brake * 100)}%`;
+    put(readout.brake, brake == null ? "–" : brake < 0.01 ? "off" : `${Math.round(brake * 100)}%`);
   } else {
-    readout.flaps.textContent = readout.trim.textContent = readout.brake.textContent = "–";
+    for (const el of [readout.flaps, readout.trim, readout.brake]) put(el, "–");
   }
 }
 

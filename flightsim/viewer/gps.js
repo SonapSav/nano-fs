@@ -55,10 +55,39 @@ export function gpsData(row, geodesy, target, nav = null) {
 
 const fmtEte = (s) => (s === null ? "--:--" : s >= 3600 ? `${Math.floor(s / 3600)}:${pad(Math.floor((s % 3600) / 60), 2)}h` : `${pad(Math.floor(s / 60), 2)}:${pad(Math.floor(s % 60), 2)}`);
 
-// Draw the GPS on its canvas (a tall box, the height of two gauges); `data` from gpsData, or null.
+const GREEN = "#7fe08a", DIM = "#6f8f78", MAGENTA = "#e070d8";
+
+// The screen's rows: [label, value, colour, size].
+function gpsRows(data) {
+  const rows = [
+    ["POS", formatLat(data.latDeg), GREEN, 19],
+    ["", formatLon(data.lonDeg), GREEN, 19],
+    ["GS", `${Math.round(data.gsKt)} kt`, GREEN, 24],
+    ["TRK", data.trackDeg === null ? "---°" : `${pad(Math.round(data.trackDeg) % 360, 3)}°`, GREEN, 24],
+    ["TO", data.target, MAGENTA, 20],
+    ["DIS", `${data.distNm < 10 ? data.distNm.toFixed(2) : data.distNm.toFixed(1)} nm`, MAGENTA, 24],
+    ["BRG", `${pad(Math.round(data.bearingDeg) % 360, 3)}°`, MAGENTA, 24],
+    ["ETE", fmtEte(data.eteS), MAGENTA, 24],
+  ];
+  if (data.dtkDeg !== null) {
+    const x = Math.abs(data.xtkM) / M_PER_NM;
+    rows.push(["DTK", `${pad(Math.round(data.dtkDeg) % 360, 3)}°`, MAGENTA, 24]);
+    rows.push(["XTK", `${x < 0.005 ? "0.00" : x.toFixed(2)} nm ${x < 0.005 ? "" : data.xtkM > 0 ? "R" : "L"}`.trim(), MAGENTA, 24]);
+  }
+  return rows;
+}
+
+// Draw the GPS on its canvas (a tall box, the height of two gauges); `data` from gpsData, or
+// null. Redrawn only when what it shows (or its size, or the font) changed.
+const lastShown = new WeakMap(); // canvas -> key
 export function drawGps(canvas, data) {
   const dpr = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
   if (!w || !h) return;
+  const rows = data ? gpsRows(data) : null;
+  const fontReady = !document.fonts || document.fonts.check('500 16px "Barlow Condensed"');
+  const key = `${w} ${h} ${dpr} ${fontReady} ${rows ? rows.map((r) => r[1]).join("|") : "none"}`;
+  if (lastShown.get(canvas) === key) return;
+  lastShown.set(canvas, key);
   if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
@@ -82,28 +111,12 @@ export function drawGps(canvas, data) {
     ctx.textBaseline = "middle";
     ctx.fillText(s, x, y);
   };
-  const GREEN = "#7fe08a", DIM = "#6f8f78", MAGENTA = "#e070d8";
   put("GPS", 100, 26, 17, DIM, "center", 600);
-  if (!data) {
+  if (!rows) {
     put("NO POSITION", 100, H / 2, 18, DIM, "center");
     return;
   }
   // Rows spread over the screen's height.
-  const rows = [
-    ["POS", formatLat(data.latDeg), GREEN, 19],
-    ["", formatLon(data.lonDeg), GREEN, 19],
-    ["GS", `${Math.round(data.gsKt)} kt`, GREEN, 24],
-    ["TRK", data.trackDeg === null ? "---°" : `${pad(Math.round(data.trackDeg) % 360, 3)}°`, GREEN, 24],
-    ["TO", data.target, MAGENTA, 20],
-    ["DIS", `${data.distNm < 10 ? data.distNm.toFixed(2) : data.distNm.toFixed(1)} nm`, MAGENTA, 24],
-    ["BRG", `${pad(Math.round(data.bearingDeg) % 360, 3)}°`, MAGENTA, 24],
-    ["ETE", fmtEte(data.eteS), MAGENTA, 24],
-  ];
-  if (data.dtkDeg !== null) {
-    const x = Math.abs(data.xtkM) / M_PER_NM;
-    rows.push(["DTK", `${pad(Math.round(data.dtkDeg) % 360, 3)}°`, MAGENTA, 24]);
-    rows.push(["XTK", `${x < 0.005 ? "0.00" : x.toFixed(2)} nm ${x < 0.005 ? "" : data.xtkM > 0 ? "R" : "L"}`.trim(), MAGENTA, 24]);
-  }
   const top = 50, step = (H - top - 22) / rows.length;
   rows.forEach(([label, value, color, size], i) => {
     const y = top + step * (i + 0.5);

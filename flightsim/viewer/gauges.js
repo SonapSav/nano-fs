@@ -65,6 +65,28 @@ function setup(canvas) {
   return ctx;
 }
 
+// Fixed parts of a gauge (face, scale, labels) are drawn once per canvas size into an
+// offscreen canvas and copied in on every redraw. Drawn again once the panel font has
+// loaded (until then the labels use a fallback font).
+const layers = new WeakMap(); // canvas -> {name: {key, img}}
+let fontReady = false;
+function layer(canvas, name, draw) {
+  const key = `${canvas.width} ${fontReady}`;
+  let byName = layers.get(canvas);
+  if (!byName) layers.set(canvas, (byName = {}));
+  let l = byName[name];
+  if (!l || l.key !== key) {
+    const img = document.createElement("canvas");
+    img.width = img.height = canvas.width;
+    const ctx = img.getContext("2d");
+    ctx.setTransform(canvas.width / 200, 0, 0, canvas.width / 200, 0, 0);
+    draw(ctx);
+    l = byName[name] = { key, img };
+  }
+  return l.img;
+}
+const copyLayer = (ctx, canvas, name, draw) => ctx.drawImage(layer(canvas, name, draw), 0, 0, 200, 200);
+
 function face(ctx) {
   ctx.beginPath();
   ctx.arc(100, 100, 98, 0, 2 * Math.PI);
@@ -151,11 +173,10 @@ function bug(ctx, a, r = 90) {
   ctx.restore();
 }
 
-export function drawAirspeed(canvas, row) {
-  const ctx = setup(canvas);
+const asiAngle = (v) => dialAngle(v, ASI.min, ASI.max, (-150 * Math.PI) / 180, (150 * Math.PI) / 180);
+function airspeedDial(ctx) {
+  const A = asiAngle;
   face(ctx);
-  const a0 = (-150 * Math.PI) / 180, a1 = (150 * Math.PI) / 180;
-  const A = (v) => dialAngle(v, ASI.min, ASI.max, a0, a1);
   arcBand(ctx, 84, 6, A(ASI.white[0]), A(ASI.white[1]), C.marking);
   arcBand(ctx, 78, 6, A(ASI.green[0]), A(ASI.green[1]), C.green);
   arcBand(ctx, 78, 6, A(ASI.yellow[0]), A(ASI.yellow[1]), C.yellow);
@@ -166,8 +187,13 @@ export function drawAirspeed(canvas, row) {
   }
   text(ctx, "Airspeed", 100, 132, 13, C.dim);
   text(ctx, "knots", 100, 146, 13, C.dim);
+}
+
+export function drawAirspeed(canvas, row) {
+  const ctx = setup(canvas);
+  copyLayer(ctx, canvas, "dial", airspeedDial);
   if (!row) return;
-  needle(ctx, A(indicatedKt(row)), 80);
+  needle(ctx, asiAngle(indicatedKt(row)), 80);
 }
 
 export function drawAttitude(canvas, row) {
@@ -236,8 +262,7 @@ export function drawAttitude(canvas, row) {
   ctx.fill();
 }
 
-export function drawAltimeter(canvas, row, targets) {
-  const ctx = setup(canvas);
+function altimeterDial(ctx) {
   face(ctx);
   for (let i = 0; i < 50; i++) {
     const a = (i / 50) * 2 * Math.PI;
@@ -245,6 +270,11 @@ export function drawAltimeter(canvas, row, targets) {
     if (i % 5 === 0) text(ctx, String(i / 5), ...polar(60, a), 18);
   }
   text(ctx, "Altitude, feet", 100, 72, 13, C.dim);
+}
+
+export function drawAltimeter(canvas, row, targets) {
+  const ctx = setup(canvas);
+  copyLayer(ctx, canvas, "dial", altimeterDial);
   if (targets) {
     const tft = targets.alt_msl_m * M_TO_FT;
     bug(ctx, ((tft % 1000) / 1000) * 2 * Math.PI);
@@ -259,8 +289,7 @@ export function drawAltimeter(canvas, row, targets) {
   text(ctx, Math.round(ft).toLocaleString("en-US"), 100, 127.5, 15, C.marking, 600);
 }
 
-export function drawTurnCoordinator(canvas, row) {
-  const ctx = setup(canvas);
+function turnDial(ctx) {
   face(ctx);
   // Standard-rate (3 deg/s) marks at +/-15 degrees of wing tilt.
   for (const s of [-1, 1]) {
@@ -280,10 +309,17 @@ export function drawTurnCoordinator(canvas, row) {
   ctx.beginPath();
   ctx.moveTo(91, 130); ctx.lineTo(91, 150); ctx.moveTo(109, 130); ctx.lineTo(109, 150);
   ctx.stroke();
-  // Heading rate (deg/s): psi_dot = (q sin(phi) + r cos(phi)) / cos(theta).
-  const turnRate = row
-    ? ((row.q_radps * Math.sin(row.phi_rad) + row.r_radps * Math.cos(row.phi_rad)) / Math.cos(row.theta_rad)) * DEG
-    : 0;
+}
+
+// Heading rate (deg/s): psi_dot = (q sin(phi) + r cos(phi)) / cos(theta).
+const turnRateDeg = (row) => ((row.q_radps * Math.sin(row.phi_rad) + row.r_radps * Math.cos(row.phi_rad)) / Math.cos(row.theta_rad)) * DEG;
+// Ball: opposite to the lateral specific force (skid pushes it outward), -1 to 1.
+const slipBall = (row) => Math.max(-1, Math.min(1, row.ay_mps2 / (0.25 * G)));
+
+export function drawTurnCoordinator(canvas, row) {
+  const ctx = setup(canvas);
+  copyLayer(ctx, canvas, "dial", turnDial);
+  const turnRate = row ? turnRateDeg(row) : 0;
   const tilt = Math.max(-30, Math.min(30, (turnRate / 3) * 15)) * Math.PI / 180;
   ctx.save();
   ctx.translate(100, 100);
@@ -295,8 +331,7 @@ export function drawTurnCoordinator(canvas, row) {
   ctx.fill();
   ctx.fillRect(-2, -16, 4, 12);
   ctx.restore();
-  // Ball moves opposite to the lateral specific force (skid pushes it outward).
-  const slip = row ? Math.max(-1, Math.min(1, row.ay_mps2 / (0.25 * G))) : 0;
+  const slip = row ? slipBall(row) : 0;
   ctx.beginPath();
   ctx.arc(100 - slip * 32, 140, 7, 0, 2 * Math.PI);
   ctx.fillStyle = "#0a0a0a";
@@ -306,13 +341,9 @@ export function drawTurnCoordinator(canvas, row) {
   ctx.stroke();
 }
 
-export function drawHeading(canvas, row, targets) {
-  const ctx = setup(canvas);
-  face(ctx);
-  const psi = row ? row.psi_rad : 0;
-  ctx.save();
+// The compass card, drawn once (rotated into place on each redraw).
+function headingCard(ctx) {
   ctx.translate(100, 100);
-  ctx.rotate(-psi);
   for (let d = 0; d < 360; d += 5) {
     const a = (d * Math.PI) / 180;
     ctx.save();
@@ -329,6 +360,16 @@ export function drawHeading(canvas, row, targets) {
     }
     ctx.restore();
   }
+}
+
+export function drawHeading(canvas, row, targets) {
+  const ctx = setup(canvas);
+  copyLayer(ctx, canvas, "face", face);
+  const psi = row ? row.psi_rad : 0;
+  ctx.save();
+  ctx.translate(100, 100);
+  ctx.rotate(-psi);
+  ctx.drawImage(layer(canvas, "card", headingCard), -100, -100, 200, 200);
   if (targets) {
     ctx.save();
     ctx.rotate(targets.heading_rad);
@@ -355,11 +396,11 @@ export function drawHeading(canvas, row, targets) {
   ctx.stroke();
 }
 
-export function drawVerticalSpeed(canvas, row) {
-  const ctx = setup(canvas);
+// +/-2000 ft/min over +/-170 degrees, zero at 9 o'clock as on the C172 VSI.
+const vsiAngle = (fpm) => -Math.PI / 2 + (Math.max(-2000, Math.min(2000, fpm)) / 2000) * (170 * Math.PI / 180);
+function verticalSpeedDial(ctx) {
+  const A = vsiAngle;
   face(ctx);
-  // +/-2000 ft/min over +/-170 degrees, zero at 9 o'clock as on the C172 VSI.
-  const A = (fpm) => -Math.PI / 2 + (Math.max(-2000, Math.min(2000, fpm)) / 2000) * (170 * Math.PI / 180);
   for (let v = -2000; v <= 2000; v += 100) {
     const major = v % 500 === 0;
     tick(ctx, A(v), major ? 70 : 77, 86, major ? 2.5 : 1.2);
@@ -370,15 +411,19 @@ export function drawVerticalSpeed(canvas, row) {
   text(ctx, "Up", 118, 74, 13, C.dim);
   text(ctx, "Down", 118, 126, 13, C.dim);
   text(ctx, "100 ft/min", 136, 100, 12, C.dim);
-  if (!row) return;
-  needle(ctx, A(-row.v_down_mps * M_TO_FT * 60), 80);
 }
 
-export function drawTachometer(canvas, row) {
+export function drawVerticalSpeed(canvas, row) {
   const ctx = setup(canvas);
+  copyLayer(ctx, canvas, "dial", verticalSpeedDial);
+  if (!row) return;
+  needle(ctx, vsiAngle(-row.v_down_mps * M_TO_FT * 60), 80);
+}
+
+const tachAngle = (rpm) => dialAngle(rpm, 0, TACH.max, (-135 * Math.PI) / 180, (135 * Math.PI) / 180);
+function tachometerDial(ctx) {
+  const A = tachAngle;
   face(ctx);
-  const a0 = (-135 * Math.PI) / 180, a1 = (135 * Math.PI) / 180;
-  const A = (rpm) => dialAngle(rpm, 0, TACH.max, a0, a1);
   arcBand(ctx, 80, 7, A(TACH.green[0]), A(TACH.green[1]), C.green);
   tick(ctx, A(TACH.red), 72, 88, 4, C.red);
   for (let v = 0; v <= TACH.max; v += 100) {
@@ -388,8 +433,13 @@ export function drawTachometer(canvas, row) {
   }
   text(ctx, "RPM", 100, 132, 13, C.dim);
   text(ctx, "×100", 100, 146, 13, C.dim);
+}
+
+export function drawTachometer(canvas, row) {
+  const ctx = setup(canvas);
+  copyLayer(ctx, canvas, "dial", tachometerDial);
   if (!row) return;
-  needle(ctx, A(row.engine_rpm), 78);
+  needle(ctx, tachAngle(row.engine_rpm), 78);
 }
 
 export function drawControls(canvas, row) {
@@ -442,15 +492,37 @@ export function drawControls(canvas, row) {
   }
 }
 
+// What each gauge shows, to the precision it can be seen: a gauge is redrawn only when
+// this (or its size, or the font) changed.
+const f1 = (x) => (x == null ? "-" : x.toFixed(1));
+const f3 = (x) => (x == null ? "-" : x.toFixed(3));
+const SHOWN = {
+  asi: (r) => f1(indicatedKt(r)),
+  ai: (r) => `${f1(r.phi_rad * DEG)} ${f1(r.theta_rad * DEG)}`,
+  alt: (r, t) => `${Math.round(r.alt_msl_m * M_TO_FT)} ${t ? f1(t.alt_msl_m * M_TO_FT) : "-"}`,
+  tc: (r) => `${f1(turnRateDeg(r))} ${f3(slipBall(r))}`,
+  hi: (r, t) => `${f1(r.psi_rad * DEG)} ${t ? f1(t.heading_rad * DEG) : "-"}`,
+  vsi: (r) => String(Math.round(-r.v_down_mps * M_TO_FT * 60)),
+  tach: (r) => String(Math.round(r.engine_rpm)),
+  controls: (r) => ["cmd_aileron_norm", "cmd_elevator_norm", "cmd_rudder_norm", "cmd_throttle_norm", "cmd_pitch_trim_norm"].map((k) => f3(r[k])).join(" "),
+};
+const DRAW = {
+  asi: drawAirspeed, ai: drawAttitude, alt: drawAltimeter, tc: drawTurnCoordinator,
+  hi: drawHeading, vsi: drawVerticalSpeed, tach: drawTachometer, controls: drawControls,
+};
+const lastShown = new WeakMap(); // canvas -> key
+
 export function drawAll(els, row, targets) {
-  drawAirspeed(els.asi, row);
-  drawAttitude(els.ai, row);
-  drawAltimeter(els.alt, row, targets);
-  drawTurnCoordinator(els.tc, row);
-  drawHeading(els.hi, row, targets);
-  drawVerticalSpeed(els.vsi, row);
-  drawTachometer(els.tach, row);
-  drawControls(els.controls, row);
+  fontReady = !document.fonts || document.fonts.check('500 16px "Barlow Condensed"');
+  const common = `${window.devicePixelRatio || 1} ${fontReady}`;
+  for (const [name, draw] of Object.entries(DRAW)) {
+    const canvas = els[name];
+    if (!canvas.clientWidth) continue; // hidden (the instruments window is open)
+    const key = `${canvas.clientWidth} ${common} ${row ? SHOWN[name](row, targets) : `none ${JSON.stringify(targets ?? null)}`}`;
+    if (lastShown.get(canvas) === key) continue;
+    lastShown.set(canvas, key);
+    draw(canvas, row, targets);
+  }
 }
 
 export const units = { MPS_TO_KT, M_TO_FT, DEG, G };
