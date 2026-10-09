@@ -8,6 +8,7 @@ name: abu_dhabi
 # the map; published 3202 x 45 m (Wikipedia "Al Bateen Executive Airport", SkyVector OMAD,
 # retrieved 2026-10-09). OSM's 13/31 way (2200 m) is the runway between the displaced
 # thresholds.
+origin_airport: OMAD   # named by the GPS at the origin
 origin_lat_deg: 24.4284648
 origin_lon_deg: 54.4580337
 

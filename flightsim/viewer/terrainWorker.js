@@ -37,7 +37,7 @@ async function demBuild(r) {
     fetchTile(region.landcover, landcoverName, Uint8Array, r.tx, r.tz).then((t) => lc.set(`${r.tx},${r.tz}`, t)),
   ]);
   const tiles = { heights: (ix, iz) => h.get(`${ix},${iz}`) ?? null, landcover: (ix, iz) => lc.get(`${ix},${iz}`) ?? null };
-  const geometry = demTileGeometryData(r.tx, r.tz, r.segments, tiles);
+  const geometry = demTileGeometryData(r.tx, r.tz, r.segments, tiles, r.textureSize);
   const objects = geometry && r.objects ? demTileObjectsData(r.tx, r.tz, r.maxTrees, r.far, tiles) : null;
   return { geometry, objects };
 }
@@ -46,7 +46,7 @@ self.onmessage = async ({ data: r }) => {
   const { geometry, objects } = r.scenery
     ? await demBuild(r)
     : { geometry: tileGeometryData(r.tx, r.tz, r.segments), objects: r.objects ? tileObjectsData(r.tx, r.tz, r.maxTrees, r.far) : null };
-  const buffers = geometry ? [geometry.position, geometry.color, geometry.fieldness, geometry.normal, geometry.index].map((a) => a.buffer) : [];
+  const buffers = geometry ? [geometry.position, geometry.color, geometry.fieldness, geometry.normal, geometry.index, geometry.uv, geometry.texture].filter(Boolean).map((a) => a.buffer) : [];
   if (objects) buffers.push(objects.trees.buffer, objects.houses.buffer, objects.landmarks.buffer);
   self.postMessage({ key: r.key, spec: r.spec, geometry, objects }, buffers);
 };

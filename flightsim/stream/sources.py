@@ -57,6 +57,7 @@ def _world(env) -> dict:
     world = env.cfg.geodesy.as_dict()
     if env.ground.scenery is not None:
         world["scenery"] = dict(env.ground.scenery)
+        world["airport"] = env.ground.dem.region.manifest.get("origin_airport")
     return world
 
 
@@ -104,7 +105,7 @@ class ReplaySource(Source):
         self.approach = _logged_approach(meta, self._rows[0]["seed"] if self._rows else None, env)
         self.takeoff = env.runway_info() if env is not None and hasattr(env, "runway_info") else None
         if env is not None:
-            self.world = env.cfg.geodesy.as_dict()
+            self.world = _world(env)
             self.route = env.route_info() if hasattr(env, "route_info") else None
             self.visual = env.visual_conditions()
             t = env.targets

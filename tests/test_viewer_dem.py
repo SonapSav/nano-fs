@@ -1,7 +1,7 @@
 """Real-world terrain tiles in the viewer (flightsim/viewer/demTiles.js), run with Node: at
-full detail the vertices are the physics' height posts; water cells sink below the sea
-surface and the tile says it has water; colours follow the land cover; trees grow only
-where WorldCover has trees (or shrubs); no tile outside the region. The server serves a
+full detail the vertices are the physics' height posts (the sea too: the ground at 0 m);
+the land cover texture has one texel per WorldCover cell with the sea painted in; trees
+grow only where WorldCover has trees (or shrubs); no tile outside the region. The server serves a
 built region's files (not its sources, nothing outside data/scenery)."""
 
 import json
@@ -36,19 +36,21 @@ def test_dem_tile_data():
     const objects = t.demTileObjectsData(0, 0, 500, false, tiles);
     const trees = [];
     for (let k = 0; k < objects.trees.length; k += 4) trees.push([objects.trees[k], objects.trees[k + 2]]);
+    const texel = (r, c) => [...g.texture.slice(4 * (r * g.textureSize + c), 4 * (r * g.textureSize + c) + 3)];
     console.log(JSON.stringify({{
-      hasWater: g.hasWater, landPost: at(10, 100), physics: d.heightAt(tiles, at(10, 100)[0], at(10, 100)[2]),
-      waterPost: at(10, 5), colourDesert: [...g.color.slice(3 * (100 * n + 60), 3 * (100 * n + 60) + 3)],
-      colourTree: [...g.color.slice(3 * (10 * n + 100), 3 * (10 * n + 100) + 3)],
+      landPost: at(10, 100), physics: d.heightAt(tiles, at(10, 100)[0], at(10, 100)[2]),
+      waterPost: at(10, 5), size: g.textureSize, uvLast: [...g.uv.slice(2 * (n * n - 1), 2 * n * n)],
+      texWater: texel(5, 5), texDesert: texel(200, 100), texTree: texel(10, 200),
       trees: trees.length, treesOk: trees.every(([x, z]) => d.landcoverAt(tiles, x, z) === 10),
       outside: t.demTileGeometryData(3, 3, 32, tiles),
     }}));
     """
     out = json.loads(subprocess.run([NODE, "--input-type=module"], input=script, capture_output=True, text=True, check=True).stdout)
-    assert out["hasWater"]
     assert out["landPost"][1] == out["physics"] == pytest.approx(102.0)  # the post's height, as the physics
-    assert out["waterPost"][1] <= -3.0  # sunk under the sea surface
-    assert out["colourDesert"] != out["colourTree"]
+    assert out["waterPost"][1] == pytest.approx(7.0)  # water is drawn by colour, on the physics' ground
+    assert out["size"] == 256 and out["uvLast"] == [1, 1]
+    assert out["texWater"] == [0x3B, 0x7D, 0x93] and out["texTree"] == [0x4B, 0x6A, 0x3C]
+    assert out["texDesert"][0] > out["texDesert"][2] > 100  # sand (warmer on this 50 m "dune")
     assert out["trees"] > 100 and out["treesOk"]
     assert out["outside"] is None
 

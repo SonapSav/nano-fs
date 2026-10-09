@@ -101,9 +101,26 @@ function tileGeometry(data) {
   g.setAttribute("fieldness", new THREE.BufferAttribute(data.fieldness, 1));
   g.setAttribute("normal", new THREE.BufferAttribute(data.normal, 3));
   g.setIndex(new THREE.BufferAttribute(data.index, 1));
+  if (data.uv) g.setAttribute("uv", new THREE.BufferAttribute(data.uv, 2));
   g.userData.hasWater = data.hasWater;
   return g;
 }
+
+// A real-world region's tile: its land cover texture (demTiles.js) on a plain material with
+// the close-up ground detail.
+function regionMaterial(data) {
+  const tex = new THREE.DataTexture(data.texture, data.textureSize, data.textureSize, THREE.RGBAFormat);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  tex.anisotropy = 4;
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.needsUpdate = true;
+  return addGroundDetail(new THREE.MeshLambertMaterial({ map: tex }));
+}
+
+const NEAR_TEXTURE = 256, FAR_TEXTURE = 64; // land cover texels per tile side (near: one per cell)
 
 function tileObjects(data, shared, far) {
   const group = new THREE.Group();
@@ -294,7 +311,7 @@ export class Terrain {
       const wantsObjects = Boolean(w.objects || w.farTrees);
       if (this.scenery) {
         // Without a worker: from the tiles the page has (world.js loads them on demand).
-        const g = demTileGeometryData(w.tx, w.tz, w.segments, world.tiles);
+        const g = demTileGeometryData(w.tx, w.tz, w.segments, world.tiles, w.objects ? NEAR_TEXTURE : FAR_TEXTURE);
         this._add(w, g, g && wantsObjects ? demTileObjectsData(w.tx, w.tz, this.shared.maxTrees, !w.objects, world.tiles) : null);
       } else {
         this._add(w, tileGeometryData(w.tx, w.tz, w.segments), wantsObjects ? tileObjectsData(w.tx, w.tz, this.shared.maxTrees, !w.objects) : null);
@@ -313,6 +330,7 @@ export class Terrain {
       this.worker.postMessage({
         key, spec: this._spec(w), tx: w.tx, tz: w.tz, segments: w.segments, objects: Boolean(w.objects || w.farTrees), far: !w.objects,
         maxTrees: this.shared.maxTrees, scenery: this.scenery?.scenery ?? null, tiles: this.scenery?.tiles ?? null,
+        textureSize: w.objects ? NEAR_TEXTURE : FAR_TEXTURE,
       });  // fmt: skip
     }
   }
@@ -337,7 +355,7 @@ export class Terrain {
       return;
     }
     const geometry = tileGeometry(geometryData);
-    const mesh = new THREE.Mesh(geometry, this.material);
+    const mesh = new THREE.Mesh(geometry, geometryData.texture ? regionMaterial(geometryData) : this.material);
     if (geometry.userData.hasWater) {
       // Water only where this tile has lakes (or a region's sea); elsewhere the land
       // fallback shows through gaps.
@@ -360,6 +378,10 @@ export class Terrain {
     if (t.mesh) {
       this.scene.remove(t.mesh); // its water quad (a child) shares geometry and material
       t.mesh.geometry.dispose();
+      if (t.mesh.material !== this.material) {
+        t.mesh.material.map?.dispose(); // a region tile's own texture and material
+        t.mesh.material.dispose();
+      }
     }
     if (t.objects) {
       this.scene.remove(t.objects);

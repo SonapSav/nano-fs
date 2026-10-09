@@ -1051,20 +1051,23 @@ water, mangroves and irrigated green: classes the procedural generator does not 
   nose first); routes in wind 200/200 (cross-track max mean 47.5 m, worst 208.6 m).
   Viewer: Abu Dhabi scenarios in the Flights drawer (fly and watch); task messages name
   the runway from its heading. Tests: `tests/test_scenery_airfields.py`.
-- [ ] **4. Viewer terrain from the height tiles** (in progress 2026-10-09): the stream's
-  `world` carries the region (`scenery`: name and hash); the server serves its files
-  under `/scenery/<name>/` (manifest, airfields, tiles; never the sources); `viewer/
-  world.js` holds the flight's world for every part of the viewer (ground height as the
-  physics, land cover, tiles on demand); `demTiles.js` builds a region's tiles (at full
-  detail the vertices are the physics' posts; water cells sink under a sea surface at
-  -0.3 m; colours from the land cover; trees where WorldCover has trees, mangroves or
-  shrubs) in the tile worker, which fetches the tiles it needs; `realAirfields.js` draws
-  every runway (markings, displaced thresholds, lights); the PAPI and windsock go to the
-  task's runway (scenery.js runway descriptors, shared with the procedural airfield, whose
-  lights and PAPI are unchanged). The procedural airfield, roads and villages hide over a
-  region. Checked headless (AMD GPU): the approach autopilot lands on 31 over the real
-  coast and mangroves. To do: coastlines are blocky (land cover per height post: a land
-  cover texture per tile), the map windows still draw procedural terrain (milestone 5).
+- [x] **4. Viewer terrain from the height tiles** (2026-10-09): the stream's `world`
+  carries the region (`scenery`: name and hash; `airport`: the home airport's ICAO code,
+  for the GPS); the server serves its files under `/scenery/<name>/` (manifest,
+  airfields, tiles; never the sources). `viewer/world.js` holds the flight's world for
+  every part of the viewer (ground height as the physics, land cover, tiles on demand);
+  `demTiles.js` builds a region's tiles in the tile worker (which fetches the tiles it
+  needs): at full detail the vertices are the physics' posts (the sea is the ground at
+  0 m), coloured by a land cover texture per tile (one texel per WorldCover cell, 15.6 m;
+  every 4th on distant tiles), the sea and lakes painted in, sand warmer on high dunes;
+  trees where WorldCover has trees or mangroves (a few in shrubland). `realAirfields.js`
+  draws every runway (markings, displaced thresholds, lights); the PAPI and windsock go to
+  the task's runway (scenery.js runway descriptors, shared with the procedural airfield,
+  whose lights and PAPI are unchanged). The procedural airfield, roads and villages hide
+  over a region and come back after it. Checked headless (AMD GPU, 1600 x 1000): the
+  approach autopilot lands on 31 over the real coast and mangroves; free flight over the
+  island at 60 fps, no missed refreshes, 153 draw calls (procedural: 416). The map
+  windows still draw procedural terrain (milestone 5).
 - [ ] **5. Land cover and features:** WorldCover classes drive the generator (new desert,
   coastal and urban styles; mangroves, irrigated green); OSM coastline, water, roads and
   railways drawn in place; the map window and corner map draw the same features.

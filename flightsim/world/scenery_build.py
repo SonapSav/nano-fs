@@ -54,6 +54,7 @@ class RegionSpec:
     sources: dict
     pinned: dict = field(default_factory=dict)  # file name -> sha256
     airports: dict = field(default_factory=dict)  # ICAO -> published data (elevation_ft, runways)
+    origin_airport: str | None = None  # the airport at the origin (ICAO), for displays
     default_runway_width_m: float = 30.0
 
     @property
@@ -67,6 +68,7 @@ def load_spec(path: str | Path) -> RegionSpec:
         name=raw["name"], origin_lat_deg=float(raw["origin_lat_deg"]), origin_lon_deg=float(raw["origin_lon_deg"]),
         tiles_radius=int(raw["tiles_radius"]), sources=raw["sources"], pinned=raw.get("pinned", {}) or {},
         airports=raw.get("airports", {}) or {}, default_runway_width_m=float(raw.get("default_runway_width_m", 30.0)),
+        origin_airport=raw.get("origin_airport"),
     )  # fmt: skip
 
 
@@ -453,6 +455,7 @@ def write_manifest(spec: RegionSpec, sources: list[dict], out: Path) -> dict:
         "name": spec.name,
         "origin_lat_deg": spec.origin_lat_deg,
         "origin_lon_deg": spec.origin_lon_deg,
+        "origin_airport": spec.origin_airport,
         "tiles": {"ix_min": lo, "ix_max": hi, "iz_min": lo, "iz_max": hi, "size_m": TILE_SIZE_M,
                   "height_cells": HEIGHT_CELLS, "landcover_cells": LANDCOVER_CELLS},
         "sources": [{k: f[k] for k in ("kind", "name", "url", "sha256")} for f in sources],

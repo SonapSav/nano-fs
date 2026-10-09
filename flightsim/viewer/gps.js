@@ -30,7 +30,7 @@ export const runwayNumber = (headingDeg) => pad(Math.round(wrap360(headingDeg) /
 export function gpsTarget(session) {
   const rw = session?.approach ?? session?.takeoff;
   if (rw) return { name: `RWY ${runwayNumber(rw.heading_deg)}`, north_m: rw.threshold_north_m, east_m: rw.threshold_east_m };
-  return { name: "AIRFIELD", north_m: 0, east_m: 0 };
+  return { name: session?.world?.airport ?? "AIRFIELD", north_m: 0, east_m: 0 }; // the world's origin (a region's home airport)
 }
 
 // {latDeg, lonDeg, gsKt, trackDeg (null when slow), target, distNm, bearingDeg, eteS
