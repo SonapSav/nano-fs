@@ -829,8 +829,13 @@ owner before work can start.
   `flightsim.camera`, SI, visual only); replays follow the recorded pointing until it is
   moved (numpad 0 or Settings: follow again); Past flights tag "camera". Performance
   test: a "belly camera on" case. Checked headless (inset, window, map split, a flown
-  and replayed demonstration). Pending: its cost on this computer's graphics (run the
-  performance test with it).
+  and replayed demonstration). Cost on the owner's computer (2026-10-09, Firefox 153,
+  1920 x 903 view, about 144 Hz display, HUD on, instruments window open, camera 640 px
+  at 30/s): 108-111 fps with the camera against 111-112 fps without it (cockpit / chase),
+  script time unchanged at about 6 ms; within the run-to-run noise. Everything off gives
+  140-142 fps: no single feature is the limit, the viewer's ~6-7 ms script per frame is
+  close to the 7 ms of a 144 Hz refresh. On the headless AMD Renoir (60 Hz) every case
+  holds 60 fps; the camera adds 1.5-2 ms script.
 
 ### Geography and navigation (GPS)
 
