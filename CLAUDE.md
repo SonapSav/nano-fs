@@ -18,9 +18,9 @@ In scope:
 - Standard atmosphere, basic piston engine + propeller, simple ground contact
 - Wind and gust models (later, as randomized conditions)
 - Fixed-timestep integration, logging, basic instrument display
+- Real-world scenery from open data, fully offline (decided 2026-10-09; see Decisions)
 
 Out of scope (for now):
-- Real-world scenery or terrain data
 - Multiplayer
 - Detailed avionics or systems modeling
 - Failure and damage modeling
@@ -73,7 +73,7 @@ Work through these in order. Finish and validate each step before starting the n
   - No wall-clock timestamps and a deterministic `run_id` (`<config_hash[:12]>-s<seed>`), so the same seed, config and code give byte-identical files. Local and Docker runs give identical data and the same source hash. Docker has no `.git`: images built through `scripts/docker.py` record the commit they were built from (`git_source: build`); plain `docker compose build` images have null git fields.
 - **Units:** use SI internally (meters, m/s, radians, kg). JSBSim works in imperial units (ft, slug, lbf), so all conversion happens inside the JSBSim wrapper in `core/`; everything outside `core/` is SI. The logging schema is strictly SI so swapping the physics core never changes the logs. Name variables with units where ambiguous (e.g. `alt_m`, `tas_mps`; imperial names like `alt_ft` only inside `core/`).
 - **Time:** fixed timestep only. No variable dt anywhere in the physics path.
-- **Positions:** JSBSim integrates latitude/longitude on WGS84; tasks, terrain and the viewer work on a flat map in metres north/east of the world's origin plus height above the ellipsoid. Convert only through `flightsim/world/geo.py` (`Geodesy` from the env config's `world` block; `viewer/geo.js` in the browser), never with an Earth radius by hand. Configs without a `world` block (all logs before 2026-10-08) use the original 6371 km sphere, so old logs replay and re-fly exactly. Headings, wind directions and velocities are true; map bearing = true bearing - grid convergence (zero at the default origin 0, 0).
+- **Positions:** JSBSim integrates latitude/longitude on WGS84; tasks, terrain and the viewer work on a flat map in metres north/east of the world's origin plus height above mean sea level (JSBSim's altitude; real terrain elevations are MSL on the EGM2008 geoid, and the geoid-ellipsoid difference is ignored: it changes by only metres across a region). Convert only through `flightsim/world/geo.py` (`Geodesy` from the env config's `world` block; `viewer/geo.js` in the browser), never with an Earth radius by hand. Configs without a `world` block (all logs before 2026-10-08) use the original 6371 km sphere, so old logs replay and re-fly exactly. Headings, wind directions and velocities are true; map bearing = true bearing - grid convergence (zero at the default origin 0, 0).
 - **Config over code:** aircraft, initial conditions, wind, and task parameters live in config files (YAML or JSON), not hard-coded. Variants extend a base file (`base: other.yaml`); changes go through `overrides` (dotted keys allowed) so they are part of the config hash. Never `dataclasses.replace()` a loaded config to change behaviour.
 - **Controllers act through the env:** baselines and learned agents use the same action interface and decision rate (`flightsim/envs/policies.py`), so comparisons are fair. Episode logs use the same Parquet schema, one file per episode, seed = episode seed.
 - **Tests:** physics validation checks (trim, stall speed, oscillation periods) are automated tests with stated tolerances, not one-off notebooks.
@@ -149,6 +149,7 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 ## Decisions
 - **Aircraft:** JSBSim `c172p`. Validation reference values in step 2 must come from a source matching this model.
 - **Validation deviations accepted (2026-10-04):** the 4 known deviations from step 2 (stall speeds 3.4-4.7 kt fast in 3 cases, phugoid period ~21% short) are accepted for now. A tuned copy of the aircraft model is a possible later, separate step. Controllers tuned on this model should be expected to meet a slower phugoid on the real aircraft.
+- **Real-world scenery (2026-10-09):** option B, built offline from open data for one region at a time, non-commercial for now, nothing fetched while flying. First region: about 100 x 100 km around Al Bateen Executive Airport (OMAD), Abu Dhabi. Ground from FABDEM (bare-earth Copernicus GLO-30, buildings and trees removed; non-commercial licence), land cover from ESA WorldCover (CC BY 4.0), features and buildings from OpenStreetMap (ODbL, Geofabrik extracts). The same height tiles feed the physics and the viewer (bit-identical, as the procedural terrain); logs record the scenery's hash; `procedural` stays. Downloads and built tiles live in `data/scenery/` (never committed: the tiles are an ODbL derived database); the repository holds the build script and the region definitions. The build script's libraries (`rasterio`, `osmium`) are in the `scenery` dependency group only (`uv run --group scenery ...`). A commercial use would switch the ground to Copernicus GLO-30 (free with attribution) and re-check every licence.
 - **Research priority:** autopilot / control design first. The log schema should favor what control work needs: full state, control surface commands and positions, trim condition, and enough precision to fit dynamic modes. RL and pilot training come later.
 
 ## Environment (checked 2026-10-04)

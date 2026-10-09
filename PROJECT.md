@@ -977,11 +977,50 @@ Goal (owner, 2026-10-08): build up from correct coordinates to GPS navigation. S
     cross-track 10 m RMS, at most 25 m; ..." (protocol: end reason `route_complete` with
     the route summary).
 - [ ] **Real airfield placement:** the origin at a real airfield (runway true heading,
-  elevation and magnetic variation; runway numbers from magnetic heading). Ties in with
-  real-world scenery (out of scope so far: needs a decision). Before a far-from-equator
+  elevation and magnetic variation; runway numbers from magnetic heading). Now part of
+  "Realistic scenery", milestone 3 (decided 2026-10-09). Before a far-from-equator
   origin is used: the autopilots compare true heading with the runway's map heading,
   which differ by the convergence away from the origin's meridian (~0.05 deg at 5 km
   east at 38 N); handle it then.
+
+### Realistic scenery (real-world, open data)
+
+Decided 2026-10-09 (owner): option B (built offline from open data; not streamed
+photorealistic tiles: their terms forbid caching and extraction, and they change over
+time), fully offline, non-commercial for now. First region: ~100 x 100 km around Al
+Bateen Executive Airport (OMAD), Abu Dhabi. Decision and sources in CLAUDE.md
+(Decisions); dependency group `scenery` (`rasterio` 1.5.2 with GDAL 3.12.2, `osmium`
+4.3.1), approved the same day.
+
+Survey of the region (2026-10-09, Overpass API, Abu Dhabi city box 24.20-24.56 N,
+54.30-54.75 E): ~107,000 OSM building footprints, of which ~5,500 (5%) have a height or
+number of floors; ~105,000 road ways. Runways mapped at OMAD (13/31; OSM `length` tag
+2200 m against published 3202 x 45 m, elevation 16-18 ft: Wikipedia, SkyVector) and at
+Zayed International (13L/31R, 13R/31L, 60 m wide). Land cover is mostly desert, built-up,
+water, mangroves and irrigated green: classes the procedural generator does not draw.
+
+- [ ] **1. Build pipeline** (`scripts/build_scenery.py --region <name>`; region files in
+  `configs/scenery/`): download FABDEM, ESA WorldCover and the Geofabrik OSM extract
+  covering the box into `data/scenery/<region>/sources/`; resample onto the map grid
+  (through `world/geo.py`); write height, land cover and feature tiles plus a manifest
+  (sources, versions, licences and attribution, hashes). Same inputs give byte-identical
+  tiles.
+- [ ] **2. Real elevation in the physics:** `terrain: dem` with the region in the
+  `world` block; `world/dem.py` and a bit-identical JavaScript twin reading the same
+  tiles (test as for the procedural terrain); the scenery hash in the logs' provenance;
+  batch speed checked.
+- [ ] **3. Real airfield and runway tasks:** runways from OSM geometry checked against
+  published data (per-airfield overrides with their source); approach, takeoff, circuit,
+  HUD, GPS and maps on the real runway; runway numbers from magnetic heading. (Covers
+  "Real airfield placement" above.)
+- [ ] **4. Viewer terrain from the height tiles:** meshes built in the worker, coarser
+  with distance, uploads limited per frame; sea and lakes at their real level.
+- [ ] **5. Land cover and features:** WorldCover classes drive the generator (new desert,
+  coastal and urban styles; mangroves, irrigated green); OSM coastline, water, roads and
+  railways drawn in place; the map window and corner map draw the same features.
+- [ ] **6. Buildings and attribution:** OSM footprints extruded (tagged height or floors,
+  else an estimate from type and size), merged per tile; attribution in the viewer and
+  README; a real-scenery case in the performance test.
 
 ### Licence and documentation
 
