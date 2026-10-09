@@ -34,7 +34,9 @@ you can fly with a keyboard, gamepad or joystick.
   simulated world.
 - **Real-world scenery:** Abu Dhabi around Al Bateen Executive Airport (OMAD), 104 km
   square, built offline from open data: bare-earth elevation (FABDEM) under the wheels
-  and in the view, ESA WorldCover land cover, and OpenStreetMap runways, roads,
+  and in the view, Sentinel-2 satellite imagery and ESA WorldCover land cover, a sea
+  with waves, reflections and turquoise shallows, a 42 °C summer day with the
+  prevailing north-westerly wind, and OpenStreetMap runways, roads,
   taxiways, aprons and 110,000 buildings, with date palms and mangroves. The physics
   flies on the same ground the viewer draws, touching the sea ends the flight, and every
   log records the scenery it flew over. The same scenarios as the procedural world fly
@@ -84,8 +86,8 @@ uv run python scripts/docker.py up -d --build viewer   # or: docker compose up -
 
 The first start designs the LQR gain schedule (about 15 s) and caches it in `data/`.
 
-The Abu Dhabi scenery is built once from its open data sources (downloads about 350 MB
-into `data/scenery/`, then about a minute):
+The Abu Dhabi scenery is built once from its open data sources (downloads about 1 GB
+into `data/scenery/`, then about five minutes):
 
 ```sh
 uv run --group scenery python scripts/build_scenery.py configs/scenery/abu_dhabi.yaml
@@ -220,6 +222,8 @@ downloads and builds it on your machine, for non-commercial use, under these ter
   processed by ESA WorldCover consortium (CC BY 4.0).
 - © OpenStreetMap contributors. The data is available under the Open Database License
   (ODbL); extracts from Geofabrik.
+- Contains modified Copernicus Sentinel data 2025 (Sentinel-2 L2A, 24 October 2025, via
+  AWS Earth Search).
 Reference data from the Cessna 172P Pilot's Operating Handbook, FAA handbooks and
 advisory circulars, MIL-F-8785C and the AAIB, cited in `docs/REFERENCES.md`.
 

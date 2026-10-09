@@ -1142,8 +1142,25 @@ landmarks; later night lighting, shadows, haze.
   by the scene. Fixed on the way: `addGroundDetail` replaced a material's shader cache
   key instead of extending it. Headless performance test unchanged (60 fps; the Abu Dhabi
   case below the procedural one in script time).
-- [ ] **3. Sentinel-2 imagery from altitude** (researched 2026-10-09, needs the owner's
-  go-ahead and a decision on size): Copernicus Sentinel data, free and open, commercial
+- [x] **3. Sentinel-2 imagery** (2026-10-09, owner: "yes, use Sentinel-2 from AWS"): the
+  build reads each scene's window over the region from the red, green and blue bands
+  (B04/B03/B02, 16-bit reflectance; GDAL range requests) into `sources/<id>_window.tif`
+  (six scenes, 707 MB, pinned by sha256; above the 150-300 MB first estimated, which was
+  for the 8-bit TCI: that clipped 54 % of the desert at full white, the bands 0.4 %), and
+  writes a 400 x 400 JPEG per tile (10 m; 676 tiles, ~15 MB): each pixel through our map
+  to UTM 39N (one GDAL transform per tile for all scenes of a zone), bilinear, the first
+  listed scene with data wins (Sentinel-2A's pass; 2B's fills the east edge; no gap, no
+  visible seam), reflectance = value x 0.0001 - 0.1 (the items' raster:bands), colour
+  255 x (gain x reflectance)^(1/1.6) with per-band gains (2.62, 3.09, 3.44) balancing the
+  desert's median to the land cover style's sand (project choice; a single gain left it
+  dark and warm). Viewer: the imagery is the region tiles' ground colour (decoded in the
+  tile worker, 100 px on distant tiles), x1.4 as an albedo (by eye), the land cover
+  colours where a region has none; the water effects stay, with the imagery's own
+  colours near the shore and ours offshore (its deep water is near black). Credit
+  "Contains modified Copernicus Sentinel data 2025" in the view, maps and README. Fixed
+  on the way: the server refused the region's .jpg files. Build 4.3 min (was 11 before the
+  per-zone transform). Headless performance test: 60 fps, Abu Dhabi below the procedural
+  case in script time. Research notes: Copernicus Sentinel data, free and open, commercial
   use too; attribution "Contains modified Copernicus Sentinel data [year]". AWS Earth
   Search (no account; STAC `https://earth-search.aws.element84.com/v1`, collection
   `sentinel-2-l2a`, COGs on `sentinel-cogs`, anonymous HTTP range requests work): the

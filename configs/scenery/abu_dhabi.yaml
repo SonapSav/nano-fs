@@ -26,15 +26,40 @@ sources:
   osm:
     # Geofabrik's dated extract of the GCC states (OpenStreetMap, ODbL), pinned by date.
     url: https://download.geofabrik.de/asia/gcc-states-261008.osm.pbf
+  imagery:
+    # Sentinel-2 L2A surface reflectance, red/green/blue bands (B04, B03, B02; 10 m), AWS Earth
+    # Search (collection sentinel-2-l2a; reflectance = value x 0.0001 - 0.1 per the items'
+    # raster:bands). Not the ready-made TCI: it clips 54 % of the desert at full white.
+    # 24 October 2025, cloud 0.05-0.27 %: the morning pass of Sentinel-2A (relative orbit 63,
+    # 07:13Z) and, for the east edge it misses, Sentinel-2B's 10 minutes earlier (orbit 20).
+    # Copernicus Sentinel data: free and open. Only each scene's window over the region is
+    # downloaded (sources/<id>_window.tif). First listed wins where scenes overlap.
+    bands: [B04, B03, B02]
+    scale: 0.0001
+    offset: -0.1
+    # Our brightness curve: 255 x (gain x reflectance)^(1/gamma), gain per band (red, green,
+    # blue), balanced so the desert's median comes out as the land cover style's sand
+    # (216, 194, 155): project choice, by eye. A single gain of 2.2 left it dark and warm
+    # (194, 157, 117).
+    gain: [2.62, 3.09, 3.44]
+    gamma: 1.6
+    items:
+      - {id: S2A_39QYG_20251024_0_L2A, url: https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/39/Q/YG/2025/10/S2A_39QYG_20251024_0_L2A/}
+      - {id: S2A_39QZG_20251024_1_L2A, url: https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/39/Q/ZG/2025/10/S2A_39QZG_20251024_1_L2A/}
+      - {id: S2A_39RYH_20251024_0_L2A, url: https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/39/R/YH/2025/10/S2A_39RYH_20251024_0_L2A/}
+      - {id: S2A_39RZH_20251024_1_L2A, url: https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/39/R/ZH/2025/10/S2A_39RZH_20251024_1_L2A/}
+      - {id: S2B_39QZG_20251024_0_L2A, url: https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/39/Q/ZG/2025/10/S2B_39QZG_20251024_0_L2A/}
+      - {id: S2B_39RZH_20251024_0_L2A, url: https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/39/R/ZH/2025/10/S2B_39RZH_20251024_0_L2A/}
   # Credits shown with the scenery (the viewer's corners; full text as their tooltip and in
   # the README). Wording checked 2026-10-09: FABDEM's required Copernicus statement (Earth
   # Engine community catalogue, FABDEM); WorldCover's attribution (Planet public data
   # docs); OpenStreetMap's notice and licence (openstreetmap.org/copyright).
-  credit_short: "© OpenStreetMap contributors (ODbL) · ESA WorldCover 2021 · FABDEM (Copernicus WorldDEM-30)"
+  credit_short: "© OpenStreetMap contributors (ODbL) · ESA WorldCover 2021 · FABDEM (Copernicus WorldDEM-30) · Contains modified Copernicus Sentinel data 2025"
   credits:
     - "FABDEM V1-2 (Hawker et al. 2022, A 30m global map of elevation with forests and buildings removed, Environmental Research Letters; University of Bristol), CC BY-NC-SA 4.0. FABDEM is produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved. The organizations in charge of the Copernicus program by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30."
     - "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium (CC BY 4.0)."
     - "© OpenStreetMap contributors. The data is available under the Open Database License (ODbL)."
+    - "Contains modified Copernicus Sentinel data 2025 (Sentinel-2 L2A, 24 October 2025)."
 
 # Published airfield data where OSM lacks or disagrees (OSM gives positions and numbers).
 # Runways without a width here or in OSM get default_runway_width_m.
@@ -58,4 +83,10 @@ pinned:
   N23E054_FABDEM_V1-2.tif: d26130aacd148d3e030928d182021d15ffe317dfdf4a5ca74e5636f52914aaa2
   N24E053_FABDEM_V1-2.tif: a5c0fc649cc2d1bc04a773015273c9ba929b789fa9590d5be57524a55df3227c
   N24E054_FABDEM_V1-2.tif: 9b2ae202f8dc424579fa1bf5411845fb69a5d08903ad6adc3f92a33d9a955ed1
+  S2A_39QYG_20251024_0_L2A_window.tif: fe1b64131e7a0449821a224995333327a6a2d249f737c2aa961c792d1c1c6a04
+  S2A_39QZG_20251024_1_L2A_window.tif: 23dad3e75195891952e80807326c892073e506ecc544cce07dea91f639964326
+  S2A_39RYH_20251024_0_L2A_window.tif: b8c10fff80ac13d8af5fd7af43a4a1ee98f31cbf43abd90a7010025cf97543b7
+  S2A_39RZH_20251024_1_L2A_window.tif: 12018509a91a7953ba0b515e4e48d268cc05a1aefbe4dcb9c0400f2aa0cf4b36
+  S2B_39QZG_20251024_0_L2A_window.tif: 3bc9a497fec953019f00d27f20e542a2680dab5716f98dfd2bd451c366387a5e
+  S2B_39RZH_20251024_0_L2A_window.tif: 54e077bf716c4e94e557866caba3bdef53f889ef656e265ef48ef2684ca5feed
   gcc-states-261008.osm.pbf: 37ddf4a1c62bf695297173744a9ff7524ae51cd4c421a75cfa5de110b80166eb

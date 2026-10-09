@@ -73,6 +73,9 @@ def test_server_serves_scenery_files_only(tmp_path, monkeypatch):
     assert server._scenery_response("/scenery/r/manifest.json?h=abc").status_code == 200
     assert server._scenery_response("/scenery/r/tiles/h_0_0.f32").body == b"\0" * 8
     assert server._scenery_response("/scenery/r/sources/x.osm.pbf").status_code == 404
+    (region / "tiles" / "i_0_0.jpg").write_bytes(b"\xff\xd8")
+    jpg = server._scenery_response("/scenery/r/tiles/i_0_0.jpg")
+    assert jpg.status_code == 200 and jpg.headers["Content-Type"] == "image/jpeg"
     assert server._scenery_response("/scenery/r/../../etc/passwd").status_code == 404
 
 

@@ -26,6 +26,7 @@ import json
 import math
 import struct
 import urllib.request
+import warnings
 import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -35,8 +36,8 @@ import yaml
 
 from flightsim.world import geo
 from flightsim.world.scenery import (
-    FORMAT, HEIGHT_CELLS, LANDCOVER_CELLS, POST_M, SCENERY_DIR, SHORE_STEP_M, TILE_SIZE_M, features_name, heights_name,
-    landcover_name, shore_name,
+    FORMAT, HEIGHT_CELLS, IMAGERY_PX, LANDCOVER_CELLS, POST_M, SCENERY_DIR, SHORE_STEP_M, TILE_SIZE_M, features_name,
+    heights_name, imagery_name, landcover_name, shore_name,
 )  # fmt: skip
 
 USER_AGENT = "nano-fs-scenery-build/1"
@@ -191,6 +192,33 @@ def _zip_member(url: str, name: str, dest: Path) -> None:
     raise FileNotFoundError(f"{name} not in {url}")
 
 
+def _imagery_window(urls: list[str], bounds_deg, dest: Path) -> None:
+    """The part of remote single-band Cloud-Optimized GeoTIFFs (one scene's bands, same
+    grid) covering a lat/lon box (GDAL range requests), saved as one local multi-band
+    GeoTIFF with its georeferencing."""
+    import rasterio
+    from rasterio.warp import transform
+    from rasterio.windows import from_bounds
+
+    s, w, n, e = bounds_deg
+    bands = []
+    with rasterio.Env(GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR", CPL_VSIL_CURL_ALLOWED_EXTENSIONS=".tif", GDAL_HTTP_USERAGENT=USER_AGENT):
+        for url in urls:
+            with rasterio.open(f"/vsicurl/{url}") as ds:
+                xs, ys = transform("EPSG:4326", ds.crs, [w, e, w, e], [s, s, n, n])
+                win = from_bounds(min(xs), min(ys), max(xs), max(ys), ds.transform).round_offsets().round_lengths()
+                win = win.intersection(rasterio.windows.Window(0, 0, ds.width, ds.height))
+                bands.append(ds.read(1, window=win))
+                profile = {"driver": "GTiff", "width": win.width, "height": win.height, "count": len(urls), "dtype": bands[0].dtype,
+                           "crs": ds.crs, "transform": ds.window_transform(win), "nodata": ds.nodata, "compress": "deflate",
+                           "predictor": 2, "tiled": True}  # fmt: skip
+    data = np.stack(bands)
+    part = dest.with_suffix(dest.suffix + ".part")
+    with rasterio.open(part, "w", **profile) as out:
+        out.write(data)
+    part.rename(dest)
+
+
 def _deg_tiles(south: float, west: float, north: float, east: float, step: int) -> list[tuple[int, int]]:
     """South-west corners (lat, lon) of the step-degree tiles covering a box."""
     lats = range(math.floor(south / step) * step, math.floor(north / step) * step + 1, step)
@@ -216,6 +244,9 @@ def source_files(spec: RegionSpec) -> list[dict]:
         out.append({"kind": "landcover", "name": Path(lc["url"].format(tile=tile)).name, "url": lc["url"].format(tile=tile), "lat": la, "lon": lo})
     osm = spec.sources["osm"]
     out.append({"kind": "osm", "name": Path(osm["url"]).name, "url": osm["url"]})
+    # Imagery: the window of each scene that covers the region (in priority order).
+    for item in (spec.sources.get("imagery") or {}).get("items", []):
+        out.append({"kind": "imagery", "name": f"{item['id']}_window.tif", "url": item["url"]})
     return out
 
 
@@ -230,6 +261,9 @@ def download(spec: RegionSpec, root: Path = SCENERY_DIR, log=print) -> list[dict
             log(f"downloading {f['name']}")
             if "member" in f:
                 _zip_member(f["url"], f["member"], dest)
+            elif f["kind"] == "imagery":
+                bands = spec.sources["imagery"]["bands"]
+                _imagery_window([f["url"] + f"{b}.tif" for b in bands], region_bounds_deg(spec), dest)
             else:
                 _download(f["url"], dest)
         f["sha256"] = sha256_file(dest)
@@ -357,6 +391,68 @@ def build_shore(spec: RegionSpec, out: Path, log=print) -> None:
             r0, c0 = (iz - lo) * LANDCOVER_CELLS, (ix - lo) * LANDCOVER_CELLS
             (out / shore_name(ix, iz)).write_bytes(code[r0 : r0 + LANDCOVER_CELLS, c0 : c0 + LANDCOVER_CELLS].tobytes())
     log(f"shore distance: {water.mean():.1%} water, at most {dist_m.max():.0f} m from land")
+
+
+def build_imagery(spec: RegionSpec, paths: list[Path], out: Path, log=print) -> None:
+    """Natural-colour imagery per tile from the scenes' red, green and blue reflectance:
+    each pixel's centre through our map to the scenes' UTM grid (GDAL's transform),
+    bilinear within a scene (the first scene in the region file's order with data there
+    wins), then 255 x (gain x reflectance)^(1/gamma), the gain per band (a colour balance).
+    JPEG, quality 88."""
+    im = spec.sources["imagery"]
+    scale, offset, gamma = (float(im[k]) for k in ("scale", "offset", "gamma"))
+    gain = np.asarray(im["gain"] if isinstance(im["gain"], list) else [im["gain"]] * 3, np.float32)[:, None]  # per band
+    import rasterio
+    import rasterio.errors
+    import rasterio.shutil
+    from rasterio.io import MemoryFile
+    from rasterio.warp import transform
+
+    scenes = []
+    for p in paths:
+        with rasterio.open(p) as ds:
+            scenes.append((ds.read().astype(np.float32), ~ds.transform, ds.crs))
+    g = geo.Geodesy("wgs84", spec.origin_lat_deg, spec.origin_lon_deg)
+    lo, hi = spec.ix_range
+    k = (np.arange(IMAGERY_PX, dtype=np.float64) + 0.5) * (TILE_SIZE_M / IMAGERY_PX)
+    missing = 0
+    for iz in range(lo, hi + 1):
+        for ix in range(lo, hi + 1):
+            x = np.broadcast_to(ix * TILE_SIZE_M + k[None, :], (k.size, k.size)).ravel()
+            z = np.broadcast_to(iz * TILE_SIZE_M + k[:, None], (k.size, k.size)).ravel()
+            lat, lon = to_geodetic_arrays(g, -z, x)
+            rgb = np.zeros((3, lat.size), np.float32)
+            done = np.zeros(lat.size, bool)
+            projected = {}  # by CRS: the scenes of one UTM zone share it
+            for data, inv, crs in scenes:
+                if crs not in projected:
+                    projected[crs] = tuple(np.asarray(v) for v in transform("EPSG:4326", crs, lon.tolist(), lat.tolist()))
+                col, row = inv * projected[crs]
+                col, row = col - 0.5, row - 0.5  # pixel centres
+                c0, r0 = np.floor(col).astype(int), np.floor(row).astype(int)
+                ok = ~done & (c0 >= 0) & (r0 >= 0) & (c0 + 1 < data.shape[2]) & (r0 + 1 < data.shape[1])
+                if not ok.any():
+                    continue
+                c, r, fc, fr = c0[ok], r0[ok], (col - c0)[ok], (row - r0)[ok]
+                q = [data[:, r, c], data[:, r, c + 1], data[:, r + 1, c], data[:, r + 1, c + 1]]
+                valid = np.all([v.min(axis=0) > 0 for v in q], axis=0)  # nodata 0 in any corner: not here
+                v = q[0] * (1 - fc) * (1 - fr) + q[1] * fc * (1 - fr) + q[2] * (1 - fc) * fr + q[3] * fc * fr
+                idx = np.nonzero(ok)[0][valid]
+                rgb[:, idx] = v[:, valid]
+                done[idx] = True
+            missing += int((~done).sum())
+            refl = np.clip(rgb * scale + offset, 0.0, None)
+            tone = 255.0 * np.clip(gain * refl, 0.0, 1.0) ** (1.0 / gamma)
+            img = np.where(done, np.round(tone), 0).clip(0, 255).astype(np.uint8).reshape(3, IMAGERY_PX, IMAGERY_PX)
+            with MemoryFile() as mem, warnings.catch_warnings():
+                warnings.simplefilter("ignore", rasterio.errors.NotGeoreferencedWarning)  # a plain picture, by design
+                with mem.open(driver="GTiff", width=IMAGERY_PX, height=IMAGERY_PX, count=3, dtype="uint8") as m:
+                    m.write(img)
+                    with MemoryFile() as jpg:
+                        rasterio.shutil.copy(m, jpg.name, driver="JPEG", QUALITY=88)
+                        (out / imagery_name(ix, iz)).write_bytes(jpg.read())
+        log(f"imagery: row {iz - lo + 1} of {hi - lo + 1}")
+    log(f"imagery: {missing / ((hi - lo + 1) ** 2 * IMAGERY_PX**2):.2%} of the pixels without data (black)")
 
 
 # --- Airfields --------------------------------------------------------------------------------
@@ -500,6 +596,9 @@ def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print) -> dict:
     build_heights(spec, [src / f["name"] for f in sources if f["kind"] == "dem"], out, log)
     build_landcover(spec, [src / f["name"] for f in sources if f["kind"] == "landcover"], out, log)
     build_shore(spec, out, log)
+    imagery = [src / f["name"] for f in sources if f["kind"] == "imagery"]
+    if imagery:
+        build_imagery(spec, imagery, out, log)
     pbf = src / next(f["name"] for f in sources if f["kind"] == "osm")
     build_airfields(spec, pbf, out, log)
     build_features(spec, pbf, out, log)

@@ -11,6 +11,19 @@ import { heightsName, landcoverName, shoreName } from "./demCore.js";
 import { buildingData, featureGroundData } from "./featureGeometry.js";
 
 const featuresName = (ix, iz) => `tiles/f_${ix}_${iz}.json`;
+const imageryName = (ix, iz) => `tiles/i_${ix}_${iz}.jpg`;
+
+// A tile's imagery (a JPEG, decoded here; distant tiles smaller), or null (none built).
+async function fetchImagery(tx, tz, px) {
+  if (!inside(tx, tz)) return null;
+  try {
+    const r = await fetch(url(imageryName(tx, tz)));
+    if (!r.ok) return null;
+    return await createImageBitmap(await r.blob(), px ? { resizeWidth: px, resizeHeight: px, resizeQuality: "medium" } : {});
+  } catch {
+    return null;
+  }
+}
 
 let region = null; // {scenery, tiles: {ix_min, ...}, heights: Map, landcover: Map}
 
@@ -46,6 +59,7 @@ async function demBuild(r) {
     shore: (ix, iz) => (ix === r.tx && iz === r.tz ? shore : null),
   };  // fmt: skip
   const geometry = demTileGeometryData(r.tx, r.tz, r.segments, tiles, r.textureSize);
+  if (geometry) geometry.imagery = await fetchImagery(r.tx, r.tz, r.objects ? 0 : 100);
   const objects = geometry && r.objects ? demTileObjectsData(r.tx, r.tz, r.maxTrees, r.far, tiles) : null;
   // OpenStreetMap features: roads and paving on near tiles, buildings (all near, only the
   // taller ones farther out).
@@ -64,6 +78,7 @@ self.onmessage = async ({ data: r }) => {
     ? await demBuild(r)
     : { geometry: tileGeometryData(r.tx, r.tz, r.segments), objects: r.objects ? tileObjectsData(r.tx, r.tz, r.maxTrees, r.far) : null };
   const buffers = geometry ? [geometry.position, geometry.color, geometry.fieldness, geometry.normal, geometry.index, geometry.uv, geometry.texture, geometry.shore].filter(Boolean).map((a) => a.buffer) : [];
+  if (geometry?.imagery) buffers.push(geometry.imagery); // an ImageBitmap
   if (objects) buffers.push(...[objects.trees, objects.houses, objects.landmarks, objects.palms, objects.bushes].filter(Boolean).map((a) => a.buffer));
   buffers.push(...featureBuffers(features));
   self.postMessage({ key: r.key, spec: r.spec, geometry, objects, features }, [...new Set(buffers)]); // (arrays may share a buffer)

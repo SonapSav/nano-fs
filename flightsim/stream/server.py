@@ -385,10 +385,11 @@ def _scenery_response(path: str) -> Response:
     rel = path.split("?", 1)[0].removeprefix("/scenery/")
     file = (SCENERY_DIR / rel).resolve()
     ok = file.is_relative_to(SCENERY_DIR) and file.is_file() and "sources" not in file.relative_to(SCENERY_DIR).parts
-    if not ok or file.suffix not in (".json", ".f32", ".u8"):
+    types = {".json": "application/json", ".f32": "application/octet-stream", ".u8": "application/octet-stream", ".jpg": "image/jpeg"}
+    if not ok or file.suffix not in types:
         return Response(404, "Not Found", Headers([("Content-Type", "text/plain")]), b"not found\n")
     body = file.read_bytes()
-    ctype = "application/json" if file.suffix == ".json" else "application/octet-stream"
+    ctype = types[file.suffix]
     headers = Headers([("Content-Type", ctype), ("Content-Length", str(len(body))), ("Cache-Control", "no-cache")])
     return Response(200, "OK", headers, body)
 

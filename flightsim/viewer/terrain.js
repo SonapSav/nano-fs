@@ -122,6 +122,8 @@ const NO_SHORE = new THREE.DataTexture(new Uint8Array([0]), 1, 1, THREE.RedForma
 NO_SHORE.needsUpdate = true;
 const WATER_GLSL = `
 uniform sampler2D shoreMap;
+uniform float waterTint;
+uniform float imageryGain;
 uniform float waterTime;
 uniform vec3 waterSun;
 uniform vec3 waterSky;
@@ -151,12 +153,25 @@ function regionMaterial(data) {
     t.needsUpdate = true;
     return t;
   };
-  const tex = texture(data.texture, THREE.RGBAFormat, true);
+  // The ground colour: the region's imagery when built (an ImageBitmap from the worker;
+  // rows go south as the land cover, so no flip), else the land cover colours.
+  let tex;
+  if (data.imagery) {
+    tex = new THREE.Texture(data.imagery);
+    tex.flipY = false;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.anisotropy = 4;
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.needsUpdate = true;
+  } else {
+    tex = texture(data.texture, THREE.RGBAFormat, true);
+  }
   const shore = data.shore ? texture(data.shore, THREE.RedFormat, false) : NO_SHORE;
   const material = new THREE.MeshLambertMaterial({ map: tex });
   material.userData.shore = shore;
   material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, waterUniforms, { shoreMap: { value: shore } });
+    Object.assign(shader.uniforms, waterUniforms, { shoreMap: { value: shore }, waterTint: { value: data.imagery ? 0.3 : 1.0 }, imageryGain: { value: data.imagery ? 1.4 : 1.0 } });
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nvarying vec3 vWaterPos;")
       .replace("#include <begin_vertex>", "#include <begin_vertex>\nvWaterPos = (modelMatrix * vec4(position, 1.0)).xyz;");
@@ -165,11 +180,15 @@ function regionMaterial(data) {
       .replace(
         "#include <color_fragment>",
         `#include <color_fragment>
+diffuseColor.rgb *= imageryGain; // imagery as an albedo reads dark under the scene's light (project choice, by eye)
 float shoreCode = texture2D(shoreMap, vMapUv).r * 255.0;
 float water = smoothstep(0.3, 0.9, shoreCode);
 float waterDistM = max(0.0, shoreCode - 1.0) * 8.0;
 vec3 waterColour = mix(vec3(0.075, 0.36, 0.33), vec3(0.012, 0.10, 0.17), smoothstep(15.0, 1200.0, waterDistM));
-diffuseColor.rgb = mix(diffuseColor.rgb, waterColour, water);
+// Over imagery: its own colours near the shore (the real shallows), ours offshore, where the
+// imagery's deep water is near black.
+float tint = waterTint < 0.99 ? mix(0.1, 0.85, smoothstep(60.0, 1500.0, waterDistM)) : 1.0;
+diffuseColor.rgb = mix(diffuseColor.rgb, waterColour, water * tint);
 vec2 wslope = water * (1.0 - smoothstep(300.0, 2000.0, length(vViewPosition))) * waterSlope(vWaterPos.xz, waterTime);`,
       )
       .replace(
@@ -515,6 +534,7 @@ export class Terrain {
       this.scene.remove(t.mesh); // its water quad (a child) shares geometry and material
       t.mesh.geometry.dispose();
       if (t.mesh.material !== this.material) {
+        t.mesh.material.map?.image?.close?.(); // an imagery ImageBitmap
         t.mesh.material.map?.dispose(); // a region tile's own textures and material
         if (t.mesh.material.userData.shore !== NO_SHORE) t.mesh.material.userData.shore?.dispose();
         t.mesh.material.dispose();

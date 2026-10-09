@@ -127,3 +127,37 @@ def test_shore_distance(tmp_path):
     # Across the tile edge: tile (0, 0)'s first column is 129 cells from the land (no seam).
     assert w[5, 0] == 1 + min(253, round((LANDCOVER_CELLS // 2 + 1) * cell / SHORE_STEP_M))
     assert w[5, -1] == 254  # capped (about 2 km)
+
+
+def test_imagery_mosaic_and_tone(tmp_path):
+    rasterio = pytest.importorskip("rasterio")
+    from rasterio.transform import from_origin
+    from rasterio.warp import transform
+
+    from flightsim.world.scenery import IMAGERY_PX, imagery_name
+    from flightsim.world.scenery_build import build_imagery
+
+    # Two scenes in UTM 39N around the origin: the first covers only the west half of the
+    # region (red-ish), the second all of it (blue-ish); reflectance = value x 1e-4 - 0.1.
+    (ox,), (oy,) = transform("EPSG:4326", "EPSG:32639", [SPEC.origin_lon_deg], [SPEC.origin_lat_deg])
+    west, north, n = ox - 5000, oy + 5000, 1000  # 10 km square, 10 m pixels
+
+    def scene(path, rgb, cols):
+        a = np.zeros((3, n, n), np.uint16)
+        for b, v in enumerate(rgb):
+            a[b, :, :cols] = v
+        with rasterio.open(path, "w", driver="GTiff", width=n, height=n, count=3, dtype="uint16", crs="EPSG:32639",
+                           transform=from_origin(west, north, 10, 10), nodata=0) as ds:  # fmt: skip
+            ds.write(a)
+
+    scene(tmp_path / "a.tif", (1000 + 3000, 1000 + 1000, 1000 + 500), n // 2)  # reflectance 0.3, 0.1, 0.05
+    scene(tmp_path / "b.tif", (1000 + 500, 1000 + 1000, 1000 + 3000), n)
+    (tmp_path / "tiles").mkdir()
+    spec = RegionSpec(**{**SPEC.__dict__, "sources": {"imagery": {"scale": 1e-4, "offset": -0.1, "gain": [2.0, 2.0, 2.0], "gamma": 1.0}}})
+    build_imagery(spec, [tmp_path / "a.tif", tmp_path / "b.tif"], tmp_path, log=lambda *_: None)
+    with rasterio.open(tmp_path / imagery_name(-1, 0)) as ds:  # west of the origin: scene a
+        west_px = ds.read()[:, IMAGERY_PX // 2, IMAGERY_PX // 2]
+    with rasterio.open(tmp_path / imagery_name(0, 0)) as ds:  # east: only scene b
+        east_px = ds.read()[:, IMAGERY_PX // 2, IMAGERY_PX // 2]
+    assert west_px == pytest.approx([153, 51, 26], abs=4)  # 255 x 2 x reflectance (JPEG: a few levels)
+    assert east_px == pytest.approx([26, 51, 153], abs=4)

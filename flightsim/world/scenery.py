@@ -16,6 +16,8 @@ viewer's world frame). Per tile:
 - shore distance: LANDCOVER_CELLS^2 uint8, per land cover cell: 0 on land, else 1 + the
   distance to the nearest land in SHORE_STEP_M steps (at most 254: ~2 km), over the whole
   region (the viewer's shallow water colour). Visual only.
+- imagery (optional): IMAGERY_PX^2 JPEG, natural colour from Sentinel-2 at ~10 m, rows
+  going south as the other files. Visual only.
 - features (JSON, OpenStreetMap; world/scenery_osm.extract_features): roads by class,
   railways and taxiways (polylines cut at the tile's edges), aprons and buildings
   (footprints, with a height and its source) whose centroid is in the tile; world x
@@ -36,6 +38,7 @@ POST_M = TILE_SIZE_M / HEIGHT_CELLS  # 31.25 m, about FABDEM's 1 arc-second
 LANDCOVER_CELLS = 256  # land cover cells per tile side (15.625 m, WorldCover is 10 m)
 FORMAT = 1  # bump when the files change meaning
 SHORE_STEP_M = 8.0  # shore distance file resolution
+IMAGERY_PX = 400  # imagery pixels per tile side (10 m, Sentinel-2's resolution)
 
 SCENERY_DIR = Path(__file__).resolve().parents[2] / "data" / "scenery"
 
@@ -58,6 +61,10 @@ def landcover_name(ix: int, iz: int) -> str:
 
 def shore_name(ix: int, iz: int) -> str:
     return f"tiles/w_{ix}_{iz}.u8"
+
+
+def imagery_name(ix: int, iz: int) -> str:
+    return f"tiles/i_{ix}_{iz}.jpg"
 
 
 def features_name(ix: int, iz: int) -> str:
