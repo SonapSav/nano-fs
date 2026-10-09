@@ -114,5 +114,18 @@ export const world = {
 
   // For the tile builders and tests: the region's tiles (loading on demand).
   tiles,
+  // Whether a region tile and its neighbours are here (or outside the region): asks for them.
+  tileReady(ix, iz) {
+    let ready = true;
+    for (let k = iz - 1; k <= iz + 1; k++) {
+      for (let i = ix - 1; i <= ix + 1; i++) {
+        tiles.heights(i, k);
+        if (state.heights.get(`${i},${k}`) === "loading" || !state.heights.has(`${i},${k}`)) ready = false;
+      }
+    }
+    tiles.landcover(ix, iz);
+    if (state.landcover.get(`${ix},${iz}`) === "loading") ready = false;
+    return ready;
+  },
   tileKey: (x, z) => `${Math.floor(x / TILE_SIZE_M)},${Math.floor(z / TILE_SIZE_M)}`,
 };

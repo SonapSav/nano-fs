@@ -41,10 +41,12 @@ export class Track {
 }
 
 // The runway to draw: the task's (approach or takeoff geometry), else the airfield's own
-// runway 09/27 (terrainCore AIRFIELD: along x = east, centred on the origin).
+// runway 09/27 (terrainCore AIRFIELD: along x = east, centred on the origin); none over a
+// real-world region (its background draws all its runways).
 export function mapRunway(hello) {
   const rw = hello?.approach ?? hello?.takeoff;
   if (rw) return { thresholdN: rw.threshold_north_m, thresholdE: rw.threshold_east_m, headingDeg: rw.heading_deg, lengthM: rw.length_m, widthM: rw.width_m, task: true };
+  if (hello?.world?.scenery) return null;
   return { thresholdN: -AIRFIELD.z, thresholdE: AIRFIELD.x - AIRFIELD.lengthM / 2, headingDeg: 90, lengthM: AIRFIELD.lengthM, widthM: AIRFIELD.widthM, task: false };
 }
 
@@ -124,6 +126,7 @@ export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northU
   const trackMapDeg = gs > 2 ? Math.atan2(row.v_east_mps, row.v_north_mps) * DEG - conv * DEG : row.psi_rad * DEG - conv * DEG;
   const upDeg = northUp ? -conv * DEG : trackMapDeg; // north up: true north at the top
   const v = makeView(w, h, north, east, upDeg, rangeNm);
+  background?.setScenery?.(hello?.world?.scenery ?? null);
   background?.draw(ctx, { w, h, cx: v.cx, cy: v.cy, x: east, z: -north, angle: upDeg / DEG, mPerPx: v.mPerPx });
   const line = (pts, color, width, dash = []) => {
     if (pts.length < 2) return;
@@ -153,20 +156,22 @@ export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northU
 
   // Runway, extended centreline (runway tasks) and the traffic pattern (circuits).
   const rw = mapRunway(hello);
-  if (rw.task) line([runwayToMap(rw, -3 * M_PER_NM, 0), runwayToMap(rw, 0, 0)], C.centreline, 1, [6, 6]);
+  if (rw?.task) line([runwayToMap(rw, -3 * M_PER_NM, 0), runwayToMap(rw, 0, 0)], C.centreline, 1, [6, 6]);
   const pat = hello?.pattern && hello?.approach ? patternPath(hello.approach, hello.pattern).points : null;
   if (pat) line(pat.map(([al, cr]) => runwayToMap(rw, al, cr)), C.pattern, 2, [8, 5]);
-  const hw = Math.max(rw.widthM / 2, 1.5 * v.mPerPx);
-  const corners = [[0, -hw], [rw.lengthM, -hw], [rw.lengthM, hw], [0, hw]].map(([al, cr]) => v.toScreen(...runwayToMap(rw, al, cr)));
-  ctx.fillStyle = C.runway;
-  ctx.beginPath();
-  corners.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-  ctx.closePath();
-  ctx.fill();
-  const labelOff = Math.max(14 * v.mPerPx, 60);
-  for (const [al, hdg] of [[-labelOff, rw.headingDeg], [rw.lengthM + labelOff, rw.headingDeg + 180]]) {
-    const [x, y] = v.toScreen(...runwayToMap(rw, al, 0));
-    text(runwayNumber(hdg), x, y, 15, C.runway, "center", 600);
+  if (rw) {
+    const hw = Math.max(rw.widthM / 2, 1.5 * v.mPerPx);
+    const corners = [[0, -hw], [rw.lengthM, -hw], [rw.lengthM, hw], [0, hw]].map(([al, cr]) => v.toScreen(...runwayToMap(rw, al, cr)));
+    ctx.fillStyle = C.runway;
+    ctx.beginPath();
+    corners.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.closePath();
+    ctx.fill();
+    const labelOff = Math.max(14 * v.mPerPx, 60);
+    for (const [al, hdg] of [[-labelOff, rw.headingDeg], [rw.lengthM + labelOff, rw.headingDeg + 180]]) {
+      const [x, y] = v.toScreen(...runwayToMap(rw, al, 0));
+      text(runwayNumber(hdg), x, y, 15, C.runway, "center", 600);
+    }
   }
 
   // Route (navigation task): legs flown dim, the active leg bright, waypoints with names.

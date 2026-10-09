@@ -13,6 +13,10 @@ viewer's world frame). Per tile:
   neighbour's. Metres above mean sea level (EGM2008), bare earth.
 - land cover: LANDCOVER_CELLS^2 cells, uint8 ESA WorldCover classes (WORLDCOVER), the
   class at each cell's centre, same row order.
+- features (JSON, OpenStreetMap; world/scenery_osm.extract_features): roads by class,
+  railways and taxiways (polylines cut at the tile's edges), aprons and buildings
+  (footprints, with a height and its source) whose centroid is in the tile; world x
+  (east), z (south) metres.
 
 `manifest.json` lists the region, its sources (with licences and attribution) and every
 file's sha256; `scenery_hash` is the hash of the manifest, which logs record.
@@ -46,6 +50,10 @@ def heights_name(ix: int, iz: int) -> str:
 
 def landcover_name(ix: int, iz: int) -> str:
     return f"tiles/lc_{ix}_{iz}.u8"
+
+
+def features_name(ix: int, iz: int) -> str:
+    return f"tiles/f_{ix}_{iz}.json"
 
 
 @dataclass(frozen=True)

@@ -35,7 +35,7 @@ def test_dem_tile_data():
     const at = (i, j) => [g.position[3 * (i * n + j)], g.position[3 * (i * n + j) + 1], g.position[3 * (i * n + j) + 2]];
     const objects = t.demTileObjectsData(0, 0, 500, false, tiles);
     const trees = [];
-    for (let k = 0; k < objects.trees.length; k += 4) trees.push([objects.trees[k], objects.trees[k + 2]]);
+    for (let k = 0; k < objects.palms.length; k += 4) trees.push([objects.palms[k], objects.palms[k + 2]]);
     const texel = (r, c) => [...g.texture.slice(4 * (r * g.textureSize + c), 4 * (r * g.textureSize + c) + 3)];
     console.log(JSON.stringify({{
       landPost: at(10, 100), physics: d.heightAt(tiles, at(10, 100)[0], at(10, 100)[2]),
@@ -70,3 +70,23 @@ def test_server_serves_scenery_files_only(tmp_path, monkeypatch):
     assert server._scenery_response("/scenery/r/tiles/h_0_0.f32").body == b"\0" * 8
     assert server._scenery_response("/scenery/r/sources/x.osm.pbf").status_code == 404
     assert server._scenery_response("/scenery/r/../../etc/passwd").status_code == 404
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_region_map_tiles():
+    script = f"""
+    const m = await import({json.dumps((VIEWER / "mapRegion.js").as_uri())});
+    const d = await import({json.dumps((VIEWER / "demCore.js").as_uri())});
+    const n = d.HEIGHT_CELLS + 1, L = d.LANDCOVER_CELLS;
+    const h = new Float32Array(n * n).fill(5), lc = new Uint8Array(L * L).fill(60);
+    for (let r = 0; r < L; r++) for (let c = 0; c < L / 2; c++) lc[r * L + c] = 80;  // west half sea
+    const tiles = {{ heights: (i, k) => (i === 0 && k === 0 ? h : null), landcover: (i, k) => (i === 0 && k === 0 ? lc : null) }};
+    const px = m.regionTilePixels(16, 0, 0, tiles);  // 256 x 16 m = 4096 m: the tile and a little beyond
+    const at = (i, j) => [...px.slice(4 * (j * 256 + i), 4 * (j * 256 + i) + 3)];
+    console.log(JSON.stringify({{ sea: at(10, 10), land: at(200, 10), outside: at(255, 255), need: m.regionTilesFor(16, 0, 0).length }}));
+    """
+    out = json.loads(subprocess.run([NODE, "--input-type=module"], input=script, capture_output=True, text=True, check=True).stdout)
+    assert out["sea"] == [108, 150, 182]
+    assert out["land"][0] > out["land"][2] and out["land"] != out["sea"]
+    assert out["outside"] == [200, 196, 184]
+    assert out["need"] == 9  # the tile and its neighbours (the map tile spills over its edges)

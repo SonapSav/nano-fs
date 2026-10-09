@@ -122,11 +122,53 @@ function regionMaterial(data) {
 
 const NEAR_TEXTURE = 256, FAR_TEXTURE = 64; // land cover texels per tile side (near: one per cell)
 
+// A region's OpenStreetMap features by ring (project choices): roads, paving and every
+// building on the near tiles; buildings of 30 m and up on the next ring, 60 m (the
+// skyline) beyond.
+const buildingsMinM = (w) => (w.objects ? 0 : w.farTrees ? 30 : 60);
+
+// Meshes of a tile's features (featureGeometry.js arrays) with the shared materials.
+function featureMeshes(f, mats) {
+  const group = new THREE.Group();
+  for (const [kind, data] of Object.entries(f)) {
+    if (!data) continue;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(data.position, 3));
+    g.setAttribute("normal", new THREE.BufferAttribute(data.normal, 3));
+    if (data.color) g.setAttribute("color", new THREE.BufferAttribute(data.color, 3));
+    g.setIndex(new THREE.BufferAttribute(data.index, 1));
+    group.add(new THREE.Mesh(g, mats[kind]));
+  }
+  return group;
+}
+
 function tileObjects(data, shared, far) {
   const group = new THREE.Group();
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
   const up = new THREE.Vector3(0, 1, 0);
-  const { trees, houses, landmarks } = data;
+  const { trees, houses, landmarks, palms, bushes } = data;
+  // A region's palms (trunk and crown) and bushes.
+  if (palms?.length) {
+    const n = palms.length / 4;
+    const trunks = new THREE.InstancedMesh(shared.palmTrunk, shared.trunkMat, n);
+    const crowns = new THREE.InstancedMesh(shared.palmCrown, shared.palmMat, n);
+    for (let i = 0; i < n; i++) {
+      const [x, h, z, k] = palms.subarray(4 * i, 4 * i + 4);
+      q.setFromAxisAngle(up, (x * 13 + z * 7) % 6.283);
+      trunks.setMatrixAt(i, m.compose(p.set(x, h + 4.5 * k, z), q, s.set(k, k, k)));
+      crowns.setMatrixAt(i, m.compose(p.set(x, h + 9 * k, z), q, s.set(k, k, k)));
+    }
+    group.add(trunks, crowns);
+  }
+  if (bushes?.length) {
+    const n = bushes.length / 4;
+    const mesh = new THREE.InstancedMesh(shared.bush, shared.bushMat, n);
+    for (let i = 0; i < n; i++) {
+      const [x, h, z, k] = bushes.subarray(4 * i, 4 * i + 4);
+      mesh.setMatrixAt(i, m.compose(p.set(x, h + 1.2 * k, z), q.identity(), s.set(k, k, k)));
+    }
+    group.add(mesh);
+  }
   if (trees.length) {
     const crowns = new THREE.InstancedMesh(far ? shared.farCrown : shared.crown, shared.crownMat, trees.length / 4);
     for (let i = 0; i < trees.length / 4; i++) {
@@ -223,6 +265,13 @@ export class Terrain {
     this.rivers = { value: 1.0 };
     this.material = fieldMaterial(this.rivers);
     this.scenery = null; // a real-world region (world.js), or null: procedural
+    const pulled = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 };
+    this.featureMats = {
+      roads: addGroundDetail(new THREE.MeshLambertMaterial({ color: 0x5a5c5e, side: THREE.DoubleSide, ...pulled }), { strength: 0.25, tint: 0, fadeEndM: 250 }),
+      rail: new THREE.MeshLambertMaterial({ color: 0x5b4a3e, side: THREE.DoubleSide, ...pulled }),
+      paved: addGroundDetail(new THREE.MeshLambertMaterial({ color: 0x7d7f80, side: THREE.DoubleSide, ...pulled }), { strength: 0.25, tint: 0, fadeEndM: 250 }),
+      buildings: new THREE.MeshLambertMaterial({ vertexColors: true }),
+    };
     this.shared = {
       crown: new THREE.ConeGeometry(4, 14, 6),
       farCrown: new THREE.ConeGeometry(4.5, 14, 4), // far ring: fewer faces
@@ -231,6 +280,13 @@ export class Terrain {
       tank: new THREE.CylinderGeometry(6, 5, 7, 12),
       towerMat: new THREE.MeshLambertMaterial({ color: 0xbfc4c7 }),
       crownMat: new THREE.MeshLambertMaterial({ color: 0x2f4a2a }),
+      // Real-world regions: date palms (9 m: trunk and a flat crown of fronds) and low bushes.
+      palmTrunk: new THREE.CylinderGeometry(0.22, 0.32, 9, 5),
+      palmCrown: new THREE.ConeGeometry(3.6, 1.6, 7).rotateX(Math.PI), // fronds drooping from the top
+      bush: new THREE.IcosahedronGeometry(2.2, 0).scale(1, 0.55, 1),
+      trunkMat: new THREE.MeshLambertMaterial({ color: 0x7a6248 }),
+      palmMat: new THREE.MeshLambertMaterial({ color: 0x4d6b35 }),
+      bushMat: new THREE.MeshLambertMaterial({ color: 0x3c5532 }),
       box: new THREE.BoxGeometry(1, 1, 1),
       wallMat: new THREE.MeshLambertMaterial({ color: 0xd9d4c5 }),
       roof: (() => {
@@ -310,7 +366,12 @@ export class Terrain {
       const w = this.queue.shift();
       const wantsObjects = Boolean(w.objects || w.farTrees);
       if (this.scenery) {
-        // Without a worker: from the tiles the page has (world.js loads them on demand).
+        // Without a worker: from the tiles the page has (world.js loads them on demand;
+        // a tile still loading waits at the back of the queue).
+        if (!world.tileReady(w.tx, w.tz)) {
+          this.queue.push(w);
+          break;
+        }
         const g = demTileGeometryData(w.tx, w.tz, w.segments, world.tiles, w.objects ? NEAR_TEXTURE : FAR_TEXTURE);
         this._add(w, g, g && wantsObjects ? demTileObjectsData(w.tx, w.tz, this.shared.maxTrees, !w.objects, world.tiles) : null);
       } else {
@@ -330,16 +391,16 @@ export class Terrain {
       this.worker.postMessage({
         key, spec: this._spec(w), tx: w.tx, tz: w.tz, segments: w.segments, objects: Boolean(w.objects || w.farTrees), far: !w.objects,
         maxTrees: this.shared.maxTrees, scenery: this.scenery?.scenery ?? null, tiles: this.scenery?.tiles ?? null,
-        textureSize: w.objects ? NEAR_TEXTURE : FAR_TEXTURE,
+        textureSize: w.objects ? NEAR_TEXTURE : FAR_TEXTURE, buildingsMinM: this.scenery ? buildingsMinM(w) : null, ground: Boolean(w.objects),
       });  // fmt: skip
     }
   }
 
   // A tile from the worker: kept only if it is still wanted with the same detail.
-  _built({ key, spec, geometry, objects }) {
+  _built({ key, spec, geometry, objects, features }) {
     if (this.inFlight.get(key) === spec) this.inFlight.delete(key);
     const w = this.wanted.get(key);
-    if (w && this._spec(w) === spec && !this.tiles.has(key)) this._add(w, geometry, objects);
+    if (w && this._spec(w) === spec && !this.tiles.has(key)) this._add(w, geometry, objects, features);
     this._pump();
   }
 
@@ -348,7 +409,7 @@ export class Terrain {
     return `${specKey(w)}|${this.scenery?.scenery.hash ?? "procedural"}`;
   }
 
-  _add(w, geometryData, objectsData) {
+  _add(w, geometryData, objectsData, featuresData = null) {
     if (!geometryData) {
       // No terrain here (outside a real-world region): the ground fallback shows.
       this.tiles.set(`${w.tx},${w.tz}`, { mesh: null, objects: null, segments: w.segments, near: Boolean(w.objects), far: Boolean(w.farTrees) });
@@ -366,6 +427,7 @@ export class Terrain {
     this.scene.add(mesh);
     const objects = objectsData ? tileObjects(objectsData, this.shared, !w.objects) : null;
     if (objects) this.scene.add(objects);
+    if (featuresData) mesh.add(featureMeshes(featuresData, this.featureMats)); // the tile's own geometries (disposed with it)
     this.tiles.set(`${w.tx},${w.tz}`, { mesh, objects, segments: w.segments, near: Boolean(w.objects), far: Boolean(w.farTrees) });
   }
 
@@ -387,6 +449,7 @@ export class Terrain {
       this.scene.remove(t.objects);
       t.objects.traverse((o) => o.isInstancedMesh && o.dispose());
     }
+    t.mesh?.traverse((o) => o !== t.mesh && o.isMesh && o.geometry !== WATER_QUAD && o.geometry.dispose());
     this.tiles.delete(key);
   }
 }

@@ -14,7 +14,8 @@ and the viewer read the built files through scenery.py. Steps, each repeatable:
 4. airfields (OpenStreetMap, scenery_osm.py, with the region file's published data):
    every runway's ends, width and elevation; the ground along each runway is flattened
    onto a straight slope fitted to the terrain under its centreline (`airfields.json`).
-5. manifest.json: the region, its sources, every file's sha256.
+5. features (OpenStreetMap): roads, railways, taxiways, aprons and buildings per tile.
+6. manifest.json: the region, its sources, every file's sha256.
 
 The same sources and code give byte-identical files.
 """
@@ -33,7 +34,7 @@ import yaml
 
 from flightsim.world import geo
 from flightsim.world.scenery import (
-    FORMAT, HEIGHT_CELLS, LANDCOVER_CELLS, POST_M, SCENERY_DIR, TILE_SIZE_M, heights_name, landcover_name,
+    FORMAT, HEIGHT_CELLS, LANDCOVER_CELLS, POST_M, SCENERY_DIR, TILE_SIZE_M, features_name, heights_name, landcover_name,
 )  # fmt: skip
 
 USER_AGENT = "nano-fs-scenery-build/1"
@@ -473,5 +474,26 @@ def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print) -> dict:
     src = out / "sources"
     build_heights(spec, [src / f["name"] for f in sources if f["kind"] == "dem"], out, log)
     build_landcover(spec, [src / f["name"] for f in sources if f["kind"] == "landcover"], out, log)
-    build_airfields(spec, src / next(f["name"] for f in sources if f["kind"] == "osm"), out, log)
+    pbf = src / next(f["name"] for f in sources if f["kind"] == "osm")
+    build_airfields(spec, pbf, out, log)
+    build_features(spec, pbf, out, log)
     return write_manifest(spec, sources, out)
+
+
+def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print) -> None:
+    from flightsim.world.scenery_osm import extract_features
+
+    g = geo.Geodesy("wgs84", spec.origin_lat_deg, spec.origin_lon_deg)
+    lo, hi = spec.ix_range
+    half = max(abs(lo), hi + 1) * TILE_SIZE_M
+    tiles = extract_features(pbf, g, region_bounds_deg(spec, 0.0), half, TILE_SIZE_M)
+    empty = {"roads": {}, "rail": [], "taxiway": [], "apron": [], "buildings": []}
+    counts = {"buildings": 0, "roads": 0}
+    for iz in range(lo, hi + 1):
+        for ix in range(lo, hi + 1):
+            t = tiles.get((ix, iz), empty)
+            t = {**t, "roads": dict(sorted(t["roads"].items()))}
+            counts["buildings"] += len(t["buildings"])
+            counts["roads"] += sum(len(v) for v in t["roads"].values())
+            (out / features_name(ix, iz)).write_text(json.dumps(t, separators=(",", ":"), sort_keys=True))
+    log(f"features: {counts['buildings']} buildings, {counts['roads']} road pieces")

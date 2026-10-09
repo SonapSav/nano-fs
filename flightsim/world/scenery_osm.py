@@ -134,3 +134,155 @@ def _runways(ways: list[dict], aerodromes: list[dict]) -> list[dict]:
             "ends": [{"ident": idents[0], **ends[first]}, {"ident": idents[1], **ends[second]}],
         })  # fmt: skip
     return out
+
+
+# --- Features: roads, railways, taxiways, aprons, buildings -------------------------------------
+
+# Road classes drawn, OSM highway=* (links as their road); widths in metres (project
+# choices, typical carriageways: dual motorways 2 x 3 lanes and verge, urban streets).
+ROAD_WIDTH_M = {
+    "motorway": 24.0, "trunk": 20.0, "primary": 14.0, "secondary": 11.0, "tertiary": 9.0,
+    "unclassified": 7.0, "residential": 7.0,
+}  # fmt: skip
+TAXIWAY_WIDTH_M = 23.0  # ICAO code C taxiway (project choice where OSM has no width)
+LEVEL_M = 3.3  # storey height for building:levels (project choice)
+
+
+def _metres(value) -> float | None:
+    """'12', '12 m', '12.5m' -> metres; feet or anything else -> None."""
+    m = re.fullmatch(r"\s*([\d.]+)\s*(m)?\s*", value or "")
+    try:
+        return float(m.group(1)) if m else None
+    except ValueError:
+        return None
+
+
+def building_height(tags: dict, area_m2: float) -> tuple[float, str]:
+    """(height m, source): OSM height, else floors x LEVEL_M (+ a roof metre), else an
+    estimate from type and footprint (project choices: houses and villas 7 m, big footprints
+    of offices, malls and warehouses 12-15 m, others 9 m)."""
+    h = _metres(tags.get("height"))
+    if h and 2.0 <= h <= 900.0:
+        return h, "height"
+    levels = _metres(tags.get("building:levels"))
+    if levels and 1 <= levels <= 200:
+        return levels * LEVEL_M + 1.0, "levels"
+    kind = tags.get("building", "yes")
+    if kind in ("house", "villa", "detached", "residential", "terrace", "hut", "shed", "garage", "garages") or area_m2 < 250:
+        return 7.0, "estimate"
+    if area_m2 > 4000:
+        return 15.0 if kind not in ("warehouse", "industrial", "hangar") else 12.0, "estimate"
+    return 9.0, "estimate"
+
+
+def _clip(x0, z0, x1, z1, bx0, bz0, bx1, bz1):
+    """Liang-Barsky: the part of segment (x0, z0)-(x1, z1) inside the box, or None."""
+    dx, dz = x1 - x0, z1 - z0
+    t0, t1 = 0.0, 1.0
+    for p, q in ((-dx, x0 - bx0), (dx, bx1 - x0), (-dz, z0 - bz0), (dz, bz1 - z0)):
+        if p == 0:
+            if q < 0:
+                return None
+        else:
+            t = q / p
+            if p < 0:
+                t0 = max(t0, t)
+            else:
+                t1 = min(t1, t)
+            if t0 > t1:
+                return None
+    return x0 + dx * t0, z0 + dz * t0, x0 + dx * t1, z0 + dz * t1
+
+
+def _polylines_by_tile(pts: list[tuple[float, float]], tile_m: float) -> dict[tuple[int, int], list[list[float]]]:
+    """A polyline (x, z) cut at tile edges: {(ix, iz): [[x0, z0, x1, z1, ...], ...]}."""
+    out: dict[tuple[int, int], list[list[float]]] = {}
+    for (x0, z0), (x1, z1) in zip(pts, pts[1:]):
+        for ix in range(math.floor(min(x0, x1) / tile_m), math.floor(max(x0, x1) / tile_m) + 1):
+            for iz in range(math.floor(min(z0, z1) / tile_m), math.floor(max(z0, z1) / tile_m) + 1):
+                c = _clip(x0, z0, x1, z1, ix * tile_m, iz * tile_m, (ix + 1) * tile_m, (iz + 1) * tile_m)
+                if c is None or (c[0] == c[2] and c[1] == c[3]):
+                    continue
+                lines = out.setdefault((ix, iz), [])
+                a, b = [round(c[0], 1), round(c[1], 1)], [round(c[2], 1), round(c[3], 1)]
+                if lines and lines[-1][-2:] == a:
+                    lines[-1] += b  # continues the previous piece
+                else:
+                    lines.append(a + b)
+    return out
+
+
+def _ring_area(ring: list[tuple[float, float]]) -> float:
+    return 0.5 * abs(sum(x0 * z1 - x1 * z0 for (x0, z0), (x1, z1) in zip(ring, ring[1:] + ring[:1])))
+
+
+def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: float, tile_m: float) -> dict:
+    """{(ix, iz): {"roads": {class: [polyline, ...]}, "rail": [...], "taxiway": [...],
+    "apron": [ring, ...], "buildings": [[height_m, source, ring], ...]}} in world x (east),
+    z (south) metres rounded to 0.1, for the tiles of the region. Lines are cut at tile
+    edges; areas go to the tile of their centroid (outer rings only)."""
+    import osmium
+
+    s, w, n, e = bounds_deg
+    inside_deg = lambda lat, lon: s <= lat <= n and w <= lon <= e  # noqa: E731
+    tiles: dict[tuple[int, int], dict] = {}
+
+    def tile(key):
+        return tiles.setdefault(key, {"roads": {}, "rail": [], "taxiway": [], "apron": [], "buildings": []})
+
+    def xz(lat, lon):
+        north, east = geodesy.to_map(math.radians(lat), math.radians(lon))
+        return round(east, 1), round(-north, 1)
+
+    def add_lines(kind, pts, cls=None):
+        for key, lines in _polylines_by_tile(pts, tile_m).items():
+            t = tile(key)
+            (t["roads"].setdefault(cls, []) if kind == "roads" else t[kind]).extend(lines)
+
+    def add_area(kind, ring, extra=None):
+        if len(ring) < 3:
+            return
+        cx, cz = sum(p[0] for p in ring) / len(ring), sum(p[1] for p in ring) / len(ring)
+        if abs(cx) > half_size_m or abs(cz) > half_size_m:
+            return
+        flat = [c for p in ring for c in p]
+        tile((math.floor(cx / tile_m), math.floor(cz / tile_m)))[kind].append(flat if extra is None else [*extra, flat])
+
+    fp = (osmium.FileProcessor(str(pbf_path)).with_areas(osmium.filter.KeyFilter("building", "aeroway")).with_locations()
+          .with_filter(osmium.filter.KeyFilter("highway", "railway", "aeroway", "building")))  # fmt: skip
+    for o in fp:
+        tags = o.tags
+        if o.is_area():
+            kind = "building" if "building" in tags else "apron" if tags.get("aeroway") == "apron" else None
+            if kind is None:
+                continue
+            for outer in o.outer_rings():
+                try:
+                    lat0, lon0 = outer[0].lat, outer[0].lon
+                    if not inside_deg(lat0, lon0):
+                        break
+                    ring = [xz(nd.lat, nd.lon) for nd in outer][:-1]  # closed: drop the repeat
+                except osmium.InvalidLocationError:
+                    break
+                if kind == "apron":
+                    add_area("apron", ring)
+                else:
+                    h, src = building_height(dict(tags), _ring_area(ring))
+                    add_area("buildings", ring, (round(h, 1), src))
+            continue
+        if not o.is_way():
+            continue
+        hw, rw, aw = tags.get("highway"), tags.get("railway"), tags.get("aeroway")
+        cls = (hw or "").removesuffix("_link") if hw else None
+        kind = "roads" if cls in ROAD_WIDTH_M else "rail" if rw == "rail" else "taxiway" if aw == "taxiway" else None
+        if kind is None:
+            continue
+        try:
+            first = o.nodes[0]
+            if not inside_deg(first.lat, first.lon) and not inside_deg(o.nodes[-1].lat, o.nodes[-1].lon):
+                continue
+            pts = [xz(nd.lat, nd.lon) for nd in o.nodes]
+        except osmium.InvalidLocationError:
+            continue
+        add_lines(kind, pts, cls)
+    return tiles

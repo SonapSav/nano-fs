@@ -101,23 +101,26 @@ function seededRandom(seed) {
   return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
 }
 
-// Trees where WorldCover has tree cover or mangroves (fewer in shrubland), seeded per tile.
-const TREE_CHANCE = { 10: 1, 95: 1, 20: 0.03 };
+// Trees, seeded per tile: palms where WorldCover has tree cover (in this region, mostly
+// date palms in gardens, parks and along roads), low bushes in mangroves and a few in
+// shrubland. [x, h, z, size] each.
+const TREE_CHANCE = { 10: [1, "palms"], 95: [1, "bushes"], 20: [0.03, "bushes"] };
 export function demTileObjectsData(tx, tz, maxTreesNear, far, tiles) {
   const rnd = seededRandom(((tx * 73856093) ^ (tz * 19349663) ^ 0x5eed) >>> 0);
   const x0 = tx * TILE_SIZE_M, z0 = tz * TILE_SIZE_M;
-  const trees = [];
+  const out = { palms: [], bushes: [] };
   const maxTrees = far ? Math.round(maxTreesNear / 3) : maxTreesNear;
   let count = 0;
   for (let k = 0; k < 4000 && count < maxTrees; k++) {
     const x = x0 + rnd() * TILE_SIZE_M, z = z0 + rnd() * TILE_SIZE_M;
-    const chance = TREE_CHANCE[landcoverAt(tiles, x, z)] ?? 0;
+    const [chance, kind] = TREE_CHANCE[landcoverAt(tiles, x, z)] ?? [0];
     if (chance > 0 && rnd() < chance) {
-      trees.push(x, heightAt(tiles, x, z), z, 0.5 + rnd() * 0.5); // palms, ghaf and mangroves: smaller than European forest
+      out[kind].push(x, heightAt(tiles, x, z), z, 0.7 + rnd() * 0.6);
       count++;
     }
   }
-  return { trees: new Float64Array(trees), houses: new Float64Array(0), landmarks: new Float64Array(0) };
+  const empty = new Float64Array(0);
+  return { trees: empty, houses: empty, landmarks: empty, palms: new Float64Array(out.palms), bushes: new Float64Array(out.bushes) };
 }
 
 // Tiles a build needs: the tile itself and its 8 neighbours (heights for the edge normals).

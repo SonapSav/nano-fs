@@ -1068,9 +1068,21 @@ water, mangroves and irrigated green: classes the procedural generator does not 
   approach autopilot lands on 31 over the real coast and mangroves; free flight over the
   island at 60 fps, no missed refreshes, 153 draw calls (procedural: 416). The map
   windows still draw procedural terrain (milestone 5).
-- [ ] **5. Land cover and features:** WorldCover classes drive the generator (new desert,
-  coastal and urban styles; mangroves, irrigated green); OSM coastline, water, roads and
-  railways drawn in place; the map window and corner map draw the same features.
+- [x] **5. Land cover and features** (2026-10-09): the build extracts OpenStreetMap roads
+  (motorway to residential, links as their road), railways, taxiways, aprons and buildings
+  in one pass over the extract (`scenery_osm.extract_features`, 46 s) into a features
+  file per tile (`tiles/f_<ix>_<iz>.json`: lines cut at the tile edges, areas by
+  centroid; 49,683 road pieces, 100 aprons, 109,989 buildings; 2029 files, 107 MB).
+  Viewer (`featureGeometry.js`, in the tile worker): roads, railways and taxiways as
+  ribbons draped on the physics' ground, aprons triangulated (ear clipping), on the near
+  tiles; date palms (trunk and crown) where WorldCover has tree cover, low bushes in
+  mangroves and a few in shrubland, instead of the procedural world's conifers. Maps
+  (window and corner): over a region the tiles show its land cover with relief shading
+  (`mapRegion.js`, in the map tile worker), its roads by class and scale and all its
+  runways; the procedural runway is not drawn there. Fixed on the way: the worker sent a
+  shared empty buffer twice (DataCloneError, tiles fell back to the main thread, which
+  then marked unloaded tiles empty: it now waits for them). Tests:
+  `tests/test_scenery_features.py`, `tests/test_viewer_dem.py`.
 - [ ] **6. Buildings and attribution:** OSM footprints extruded (tagged height or floors,
   else an estimate from type and size), merged per tile; attribution in the viewer and
   README; a real-scenery case in the performance test.
