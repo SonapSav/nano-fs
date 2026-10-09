@@ -27,11 +27,14 @@ from flightsim.control.heading_hold import wrap_angle_rad
 from flightsim.core import Controls, InitialConditions, JSBSimCore, State
 from flightsim.envs.config import BASE_ACTIONS, EnvConfig
 from flightsim.runner import RunResult
-from flightsim.world import ground_elevation_m
+from flightsim.world.ground import ground_of
 
 ACTION_NAMES = BASE_ACTIONS  # default controls
 G0 = 9.80665
 _UNIT_RANGE = ("throttle", "flaps", "brake")  # commands in [0, 1], actions in [-1, 1]
+# Over water (real-world scenery), the wheels reach the surface when the centre of gravity
+# is this low (it sits ~1.4 m above the ground on its wheels, JSBSimCore.reset_on_ground).
+WATER_CONTACT_AGL_M = 1.5
 
 # Observation name -> scale it is divided by (keeps typical values within about +/-1).
 OBS_SCALES = {
@@ -85,6 +88,7 @@ class AltitudeHeadingHoldEnv(gym.Env):
         self.action_space = gym.spaces.Box(-1.0, 1.0, shape=(len(self.action_names),), dtype=np.float32)
         self.observation_space = gym.spaces.Box(-np.inf, np.inf, shape=(len(self.obs_names),), dtype=np.float32)
         self._scales = np.array([OBS_SCALES.get(n, 1.0) for n in self.obs_names])
+        self.ground = ground_of(cfg)  # the terrain under the aircraft (world/ground.py)
 
     # --- Gymnasium API ---------------------------------------------------------
 
@@ -163,7 +167,9 @@ class AltitudeHeadingHoldEnv(gym.Env):
                 self._states.append(self._state)
         self._decisions += 1
 
-        reason = self._termination_reason()
+        reason = "water" if self._in_water() else self._termination_reason()
+        if reason == "water" and hasattr(self, "_fail"):
+            self._fail("water")  # runway tasks report it as their failure
         reward = self._reward(action)
         if reason:
             reward -= self.cfg.reward.termination_penalty
@@ -178,11 +184,16 @@ class AltitudeHeadingHoldEnv(gym.Env):
         return self._observation(), reward, bool(reason), truncated, info
 
     def _ground_m(self, lat_rad: float, lon_rad: float) -> float:
-        return ground_elevation_m(lat_rad, lon_rad, self.cfg.geodesy) if self.cfg.terrain == "procedural" else 0.0
+        return self.ground.elevation_m(lat_rad, lon_rad)
+
+    def _in_water(self) -> bool:
+        """Touching the sea or a lake (real-world scenery): the flight ends there."""
+        s = self._state
+        return self.ground.dem is not None and s.alt_agl_m < WATER_CONTACT_AGL_M and self.ground.water(s.lat_rad, s.lon_rad)
 
     def _sim_step(self, u: Controls) -> State:
-        if self.cfg.terrain == "procedural":
-            self._core.set_ground_elevation_m(ground_elevation_m(self._state.lat_rad, self._state.lon_rad, self.cfg.geodesy))
+        if self.cfg.terrain != "flat":
+            self._core.set_ground_elevation_m(self.ground.elevation_m(self._state.lat_rad, self._state.lon_rad))
         if self._turbulence is not None:
             self._core.set_gust_ned_mps(*to_ned(*self._turbulence.step(), self._state.psi_rad))
         self._state = self._core.step(u)
@@ -356,7 +367,8 @@ class AltitudeHeadingHoldEnv(gym.Env):
         if self.episode_seed is None:
             raise RuntimeError("reset(seed=...) with an explicit seed to log a reproducible episode")
         return Provenance(
-            self.cfg.aircraft, self.episode_seed, self.cfg.config_hash, self.cfg.config_json, run_id=run_id, pilot=pilot
+            self.cfg.aircraft, self.episode_seed, self.cfg.config_hash, self.cfg.config_json, run_id=run_id, pilot=pilot,
+            scenery=self.ground.scenery,
         )
 
     @property

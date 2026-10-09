@@ -31,7 +31,7 @@ from flightsim.core import Controls, InitialConditions, State
 from flightsim.envs.altitude_heading import AltitudeHeadingHoldEnv, load_factor
 from flightsim.envs.config import EnvConfig
 from flightsim.envs.runway import STRIKES, WHEELS, LowAltitudeGusts, Runway, draw_low_altitude_wind, wind_report
-from flightsim.world import ground_elevation_m
+from flightsim.world.ground import ground_of
 
 # Observation name -> scale it is divided by.
 TAKEOFF_OBS_SCALES = {
@@ -62,7 +62,7 @@ def takeoff_geometry(cfg: EnvConfig) -> dict | None:
     if t is None:
         return None
     elevation = (
-        ground_elevation_m(*cfg.geodesy.to_geodetic(t.threshold_north_m, t.threshold_east_m), cfg.geodesy) if cfg.terrain == "procedural" else 0.0
+        ground_of(cfg).elevation_m(*cfg.geodesy.to_geodetic(t.threshold_north_m, t.threshold_east_m))
     )
     return {
         "task": "takeoff",

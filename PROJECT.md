@@ -1015,10 +1015,23 @@ water, mangroves and irrigated green: classes the procedural generator does not 
   The sea is at or a little below 0 m in FABDEM (to -11.7 m near the coast): handled in
   milestone 2. OSM features are extracted in the milestones that use them (3, 5, 6).
   Tests: `tests/test_scenery_build.py`.
-- [ ] **2. Real elevation in the physics:** `terrain: dem` with the region in the
-  `world` block; `world/dem.py` and a bit-identical JavaScript twin reading the same
-  tiles (test as for the procedural terrain); the scenery hash in the logs' provenance;
-  batch speed checked.
+- [x] **2. Real elevation in the physics** (2026-10-09): `terrain: dem` with `world.scenery`
+  (the world origin must be the region's); `world/ground.py` gives every task one ground
+  (flat, procedural, dem) and the runway elevation; `world/dem.py` reads a region's tiles
+  (checked against the manifest's sha256 once per process): bilinear height between the
+  posts, never below sea level (0 m; FABDEM's sea is at or a little below), sea level and
+  dry outside the region; water = WorldCover class 80 under the point.
+  `viewer/demCore.js` is the bit-identical port (3000+ points compared exactly with Node).
+  Owner's decisions (2026-10-09): touching the sea or a lake ends the flight ("water": the
+  centre of gravity below 1.5 m over water; runway tasks report it as their failure);
+  Abu Dhabi scenarios are added alongside the procedural ones (research configs stay
+  procedural); headings stay true and runways keep their published numbers. Logs record
+  the region (`flightsim.scenery`: name and manifest hash); batch manifests and ids
+  include it. `configs/envs/abu_dhabi.yaml`: altitude/heading hold at 2000 ft from the
+  airfield. Speed: 24 PID episodes 511x real time over Abu Dhabi against 361x over the
+  procedural terrain (6 workers). Procedural results unchanged (12 crosswind approaches
+  identical before and after). Tests: `tests/test_world_dem.py` (synthetic region; with
+  the Abu Dhabi region built, an episode records its scenery and touching the sea ends it).
 - [ ] **3. Real airfield and runway tasks:** runways from OSM geometry checked against
   published data (per-airfield overrides with their source); approach, takeoff, circuit,
   HUD, GPS and maps on the real runway; runway numbers from magnetic heading. (Covers

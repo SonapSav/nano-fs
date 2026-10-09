@@ -28,6 +28,7 @@ from flightsim.control.autopilot import autopilot_gains_from_raw
 from flightsim.core import aircraft_hash
 from flightsim.datalog import SCHEMA_VERSION, make_run_id, write_log
 from flightsim.provenance import code_version
+from flightsim.world.ground import ground_of
 from flightsim.envs import make_env
 from flightsim.envs.config import env_config_from_raw
 from flightsim.envs.evaluate import run_episode
@@ -58,6 +59,9 @@ def make_manifest(env_raw: dict, policy: str, policy_raw: dict | None, seeds: li
         "episode_logs": logs,
         "code_version": code_version(),
     }
+    scenery = ground_of(env_cfg).scenery  # a real-world region's content (world/scenery.py)
+    if scenery is not None:
+        manifest["scenery"] = scenery
     # The id covers everything that determines the results, including the exact source
     # (source_sha256), but not the git fields: the same code committed or not is the same batch.
     identity = {**manifest, "code_version": {"source_sha256": manifest["code_version"]["source_sha256"]}}

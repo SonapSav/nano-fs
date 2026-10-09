@@ -44,6 +44,8 @@ def to_table(result: RunResult, cfg: Provenance) -> pa.Table:
         metadata[S.META_PILOT_AIDS] = json.dumps(cfg.pilot_aids, sort_keys=True)
     if cfg.camera is not None:
         metadata[S.META_CAMERA] = json.dumps(cfg.camera, sort_keys=True)
+    if cfg.scenery is not None:
+        metadata[S.META_SCENERY] = json.dumps(cfg.scenery, sort_keys=True)
     return pa.Table.from_pydict(columns, schema=S.SCHEMA.with_metadata(metadata))
 
 

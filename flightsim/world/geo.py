@@ -125,7 +125,7 @@ class Geodesy:
         """From an env config's `world` block; none (logs before 2026-10-08): the sphere."""
         if not world:
             return cls()
-        unknown = set(world) - {"geodesy", "origin_lat_deg", "origin_lon_deg"}
+        unknown = set(world) - {"geodesy", "origin_lat_deg", "origin_lon_deg", "scenery"}  # scenery: envs/config.py
         if unknown:
             raise ValueError(f"unknown world keys {sorted(unknown)}")
         return cls(str(world.get("geodesy", "wgs84")), float(world.get("origin_lat_deg", 0.0)), float(world.get("origin_lon_deg", 0.0)))

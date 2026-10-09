@@ -1,0 +1,14 @@
+# Altitude and heading hold over Abu Dhabi: the base of the real-world scenery tasks
+# (configs/scenery/abu_dhabi.yaml, built with scripts/build_scenery.py into
+# data/scenery/abu_dhabi/). The world's origin is the region's: Al Bateen (OMAD) runway
+# 13/31's midpoint. Touching the sea ends the flight ("water").
+base: altitude_heading_hold.yaml
+world:
+  geodesy: wgs84
+  origin_lat_deg: 24.4284648
+  origin_lon_deg: 54.4580337
+  scenery: abu_dhabi
+terrain: dem
+
+initial_conditions:
+  alt_msl_m: 610             # 2000 ft: with the randomized start (+/-300 m) and target (+/-150 m), never below 160 m

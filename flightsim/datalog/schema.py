@@ -74,6 +74,10 @@ META_PILOT_AIDS = "flightsim.pilot_aids"
 # on = its picture in view; pan from the nose, clockwise; tilt from the horizon, negative
 # down; horizontal field of view). Visual only: never part of the physics.
 META_CAMERA = "flightsim.camera"
+# optional, real-world terrain (2026-10-09 on): JSON {"name", "hash"}, the scenery region
+# flown over (world/scenery.py; hash = its manifest's), so a replay can check it has the
+# same ground. Logs without it flew flat or procedural terrain.
+META_SCENERY = "flightsim.scenery"
 META_CODE_VERSION = "flightsim.code_version"  # JSON: source hash and git commit (flightsim.provenance)
 
 

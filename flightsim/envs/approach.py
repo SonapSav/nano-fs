@@ -37,7 +37,7 @@ from flightsim.core import Controls, InitialConditions, State
 from flightsim.envs.altitude_heading import AltitudeHeadingHoldEnv, load_factor
 from flightsim.envs.config import FPM_TO_MPS, KT_TO_MPS, EnvConfig
 from flightsim.envs.runway import STRIKES, WHEELS, LowAltitudeGusts, Runway, draw_low_altitude_wind, wind_report
-from flightsim.world import ground_elevation_m
+from flightsim.world.ground import ground_of
 
 # Observation name -> scale it is divided by.
 APPROACH_OBS_SCALES = {
@@ -68,7 +68,7 @@ def approach_geometry(cfg: EnvConfig) -> dict | None:
     if a is None:
         return None
     elevation = (
-        ground_elevation_m(*cfg.geodesy.to_geodetic(a.threshold_north_m, a.threshold_east_m), cfg.geodesy) if cfg.terrain == "procedural" else 0.0
+        ground_of(cfg).elevation_m(*cfg.geodesy.to_geodetic(a.threshold_north_m, a.threshold_east_m))
     )
     return {
         "threshold_north_m": a.threshold_north_m, "threshold_east_m": a.threshold_east_m,

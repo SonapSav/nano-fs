@@ -136,7 +136,7 @@ class EnvConfig:
     actions: tuple[str, ...]
     config_hash: str
     config_json: str
-    terrain: str = "flat"  # "flat" (ground at 0 m everywhere) or "procedural" (the viewer's terrain)
+    terrain: str = "flat"  # "flat" (0 m everywhere), "procedural" (the viewer's terrain) or "dem" (world.scenery)
     approach: ApproachConfig | None = None  # set: the approach and landing task
     takeoff: "TakeoffConfig | None" = None  # set: the takeoff and climb-out task
     circuit: "CircuitConfig | None" = None  # set (with `approach`): takeoff, traffic pattern, landing
@@ -147,6 +147,8 @@ class EnvConfig:
     # Where the world sits on the Earth and how positions map to metres (world/geo.py);
     # configs without a `world` block (logs before 2026-10-08) use the original sphere.
     geodesy: Geodesy = Geodesy()
+    # A built real-world region (world/scenery.py) for terrain "dem": the config's world.scenery.
+    scenery: str | None = None
 
     @property
     def sim_steps_per_action(self) -> int:
@@ -164,13 +166,22 @@ def load_env_config(path: str | Path, overrides: dict | None = None) -> EnvConfi
     return env_config_from_raw(load_raw(path, overrides))
 
 
-TERRAIN_MODELS = ("flat", "procedural")
+TERRAIN_MODELS = ("flat", "procedural", "dem")
 
 
 def _parse_terrain(name) -> str:
     if name not in TERRAIN_MODELS:
         raise ValueError(f"terrain must be one of {TERRAIN_MODELS}, got {name!r}")
     return name
+
+
+def _parse_scenery(raw: dict) -> str | None:
+    name = (raw.get("world") or {}).get("scenery")
+    if raw.get("terrain") == "dem" and not name:
+        raise ValueError("terrain: dem needs world.scenery (a built real-world region)")
+    if name and raw.get("terrain") != "dem":
+        raise ValueError("world.scenery is used with terrain: dem")
+    return str(name) if name else None
 
 
 def env_config_from_raw(raw: dict) -> EnvConfig:
@@ -221,6 +232,7 @@ def env_config_from_raw(raw: dict) -> EnvConfig:
         actions=_parse_actions(raw.get("actions")),
         terrain=_parse_terrain(raw.get("terrain", "flat")),
         geodesy=geodesy,
+        scenery=_parse_scenery(raw),
         approach=_parse_approach(raw.get("approach")),
         takeoff=_parse_takeoff(raw.get("takeoff")),
         circuit=_parse_circuit(raw.get("circuit")),

@@ -66,6 +66,7 @@ class Provenance:
     pilot: str | None = None  # who flew it, e.g. "human" or "pid"
     pilot_aids: dict | None = None  # demonstrations: viewer aids in use, e.g. {"hud": [[t_on, t_off]]}
     camera: dict | None = None  # demonstrations: the belly camera's pointing (datalog/schema.py META_CAMERA)
+    scenery: dict | None = None  # real-world terrain: {"name", "hash"} of the region flown over (META_SCENERY)
 
 
 def _deep_merge(base: dict, extra: dict) -> dict:
