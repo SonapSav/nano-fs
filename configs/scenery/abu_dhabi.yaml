@@ -1,0 +1,45 @@
+# Abu Dhabi around Al Bateen Executive Airport (OMAD), the first real-world region
+# (decided 2026-10-09, CLAUDE.md Decisions). Build: uv run --group scenery python
+# scripts/build_scenery.py configs/scenery/abu_dhabi.yaml (into data/scenery/abu_dhabi/).
+name: abu_dhabi
+
+# Map origin: the midpoint of runway 13/31's full length (pavement ends, OSM ways
+# 515697943 and 515697946 in the Geofabrik extract below). Those ends are 3202.1 m apart on
+# the map; published 3202 x 45 m (Wikipedia "Al Bateen Executive Airport", SkyVector OMAD,
+# retrieved 2026-10-09). OSM's 13/31 way (2200 m) is the runway between the displaced
+# thresholds.
+origin_lat_deg: 24.4284648
+origin_lon_deg: 54.4580337
+
+# 4 km tiles from -13 to 12 east and south of the origin: 104 x 104 km.
+tiles_radius: 13
+
+sources:
+  dem:
+    # FABDEM V1-2 (Hawker et al. 2022, University of Bristol, doi 10.5523/bris.s5hqmjcdj8yo2ibzi9b4ew3sn):
+    # Copernicus GLO-30 with buildings and trees removed; non-commercial licence.
+    zip_url: https://data.bris.ac.uk/datasets/s5hqmjcdj8yo2ibzi9b4ew3sn/N20E050-N30E060_FABDEM_V1-2.zip
+  landcover:
+    # ESA WorldCover 10 m 2021 v200 (CC BY 4.0), AWS open data.
+    url: https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/ESA_WorldCover_10m_2021_v200_{tile}_Map.tif
+  osm:
+    # Geofabrik's dated extract of the GCC states (OpenStreetMap, ODbL), pinned by date.
+    url: https://download.geofabrik.de/asia/gcc-states-261008.osm.pbf
+  # Credits shown with the scenery (wording to check against each licence in milestone 6).
+  credits:
+    - "FABDEM V1-2, University of Bristol; produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the European Union and ESA"
+    - "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium"
+    - "© OpenStreetMap contributors (ODbL)"
+
+# sha256 of each source file, filled in after the first download (scripts/build_scenery.py
+# --pin): a changed file stops the build.
+pinned:
+  ESA_WorldCover_10m_2021_v200_N21E051_Map.tif: ac6c6d6715859285d5c7cffadcd98f66ab3df6f8616ce38d1519b91438e8d1a9
+  ESA_WorldCover_10m_2021_v200_N21E054_Map.tif: 4f98f9880a81c91dae336d0960f8ad947a6523ed2510ab523c2edca27e5181a6
+  ESA_WorldCover_10m_2021_v200_N24E051_Map.tif: d9754790597f1cb221693196a19218cec3d5e64c71a7ba2de8a4d56a48d05406
+  ESA_WorldCover_10m_2021_v200_N24E054_Map.tif: 0bf16fdd0eeb8edbe93bd0baf59986e81e15cde8d5448e1f969405aa6ea513f3
+  N23E053_FABDEM_V1-2.tif: c6177da0a9ddb42cd19bcfe06e87b3ad6b6db00cf1027055aca012f0dfad5645
+  N23E054_FABDEM_V1-2.tif: d26130aacd148d3e030928d182021d15ffe317dfdf4a5ca74e5636f52914aaa2
+  N24E053_FABDEM_V1-2.tif: a5c0fc649cc2d1bc04a773015273c9ba929b789fa9590d5be57524a55df3227c
+  N24E054_FABDEM_V1-2.tif: 9b2ae202f8dc424579fa1bf5411845fb69a5d08903ad6adc3f92a33d9a955ed1
+  gcc-states-261008.osm.pbf: 37ddf4a1c62bf695297173744a9ff7524ae51cd4c421a75cfa5de110b80166eb

@@ -109,10 +109,11 @@ flightsim/          # installable package (uv_build backend)
   atmosphere/       # Dryden turbulence (MIL-F-8785C)
   world/            # terrain height shared with the viewer (bit-identical port of viewer/terrainCore.js);
                     #   geo.py: WGS84 latitude/longitude <-> map metres around the world's origin (viewer/geo.js the same)
+                    #   scenery.py: built real-world regions (tile grid, files, manifest); scenery_build.py: the build
   batch.py          # parallel seeded episode batches
   config.py         # YAML loading (base: inheritance, overrides) + config hash
   runner.py         # headless run loop
-configs/            # YAML run configs; configs/validation/ holds reference data + tolerances
+configs/            # YAML run configs; configs/validation/ holds reference data + tolerances; configs/scenery/ real-world regions
 docs/               # REFERENCES.md (sources), VALIDATION.md (generated)
 tests/
 scripts/            # run_headless.py, replay.py, batch_run.py
@@ -170,6 +171,7 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - Seeds: tune controllers on 1000-1999. Report on 0-999 and 2000-2999 (both were used while debugging the LQR retune, 2026-10-04) and on 3000-3999 (untouched; use only for final numbers). RL training draws its episodes from its own seeded streams, never these ranges. LQR gain schedules are cached in `data/cache/lqr/` (keyed by aircraft, JSBSim version, loading, LQR config, rate and flightsim source hash).
 - RL: `uv run python scripts/train_rl.py configs/rl/ppo_comfort.yaml [--set wall_clock_limit_min=5]` writes `data/rl/<run_id>/`; evaluate with `scripts/batch_run.py --policy rl --rl-model data/rl/<run_id>/best`. Long runs: start them in the background and write the console log to a file, so an interrupted session leaves the saved models and log behind.
 - Batch ids hash everything that determines results, including the flightsim source hash, but not the git fields (the same code committed or not is the same batch). Manifests record the full code version.
+- Real-world scenery: `uv run --group scenery python scripts/build_scenery.py configs/scenery/abu_dhabi.yaml` (downloads into and builds `data/scenery/abu_dhabi/`; `--pin` records the sources' sha256 in the region file)
 - Logs go to `data/` (gitignored; `data/.gitkeep` is committed so Docker never creates it as root).
 - Viewer: `uv run python -m flightsim.stream` then open http://localhost:8686/ ; in Docker `docker compose up -d viewer` (published on all host interfaces)
 - Docker: `uv run python scripts/docker.py build` (passes the git commit into the image; any `docker compose` arguments work, e.g. `up -d --build viewer`), `docker compose run --rm sim pytest`, `docker compose run --rm sim python scripts/<script>.py`

@@ -999,12 +999,22 @@ number of floors; ~105,000 road ways. Runways mapped at OMAD (13/31; OSM `length
 Zayed International (13L/31R, 13R/31L, 60 m wide). Land cover is mostly desert, built-up,
 water, mangroves and irrigated green: classes the procedural generator does not draw.
 
-- [ ] **1. Build pipeline** (`scripts/build_scenery.py --region <name>`; region files in
-  `configs/scenery/`): download FABDEM, ESA WorldCover and the Geofabrik OSM extract
-  covering the box into `data/scenery/<region>/sources/`; resample onto the map grid
-  (through `world/geo.py`); write height, land cover and feature tiles plus a manifest
-  (sources, versions, licences and attribution, hashes). Same inputs give byte-identical
-  tiles.
+- [x] **1. Build pipeline** (2026-10-09): `uv run --group scenery python
+  scripts/build_scenery.py configs/scenery/abu_dhabi.yaml [--pin]` (`world/scenery_build.py`;
+  reading built regions: `world/scenery.py`, numpy only). Downloads what is missing into
+  `data/scenery/<region>/sources/` (FABDEM's four 1-degree tiles, ~60 MB, out of the
+  1.6 GB zip by HTTP range requests and checked against the zip's CRC; four WorldCover
+  3-degree tiles; Geofabrik `gcc-states-261008.osm.pbf`), all nine pinned by sha256 in the
+  region file. Map origin: the midpoint of OMAD runway 13/31's pavement (OSM). Tiles: the
+  viewer's 4 km grid, 26 x 26 (104 km square); heights 129 x 129 posts (31.25 m, float32,
+  FABDEM bilinear at each post through geo.py's projection on arrays); land cover
+  256 x 256 cells (15.625 m, WorldCover class at each centre; the open sea, which
+  WorldCover leaves without data, 1.9 % of the cells, becomes water). 1352 files, 88 MB,
+  17 s; a second build is byte-identical (scenery hash 6b0be5d58b04dba5). Region: heights
+  -11.4 to 153.5 m; 52 % bare / sparse, 42 % water, 3.9 % built-up, 0.6 % mangroves.
+  The sea is at or a little below 0 m in FABDEM (to -11.7 m near the coast): handled in
+  milestone 2. OSM features are extracted in the milestones that use them (3, 5, 6).
+  Tests: `tests/test_scenery_build.py`.
 - [ ] **2. Real elevation in the physics:** `terrain: dem` with the region in the
   `world` block; `world/dem.py` and a bit-identical JavaScript twin reading the same
   tiles (test as for the procedural terrain); the scenery hash in the logs' provenance;

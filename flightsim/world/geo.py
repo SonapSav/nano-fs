@@ -18,8 +18,9 @@ Two models (the env config's `world.geodesy`):
   before then) use it, so they replay and re-fly exactly.
 
 The viewer has an identical port in flightsim/viewer/geo.js (tests compare them).
-Altitude is not projected: map height = height above the ellipsoid (JSBSim's terrain
-is a level surface at a height, as is the viewer's ground).
+Altitude is not projected: map height = JSBSim's altitude, taken as height above mean
+sea level (real terrain is MSL on the EGM2008 geoid; the geoid-ellipsoid difference is
+ignored, CLAUDE.md "Positions").
 """
 
 import math
