@@ -50,6 +50,13 @@ sources:
       - {id: S2A_39RZH_20251024_1_L2A, url: https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/39/R/ZH/2025/10/S2A_39RZH_20251024_1_L2A/}
       - {id: S2B_39QZG_20251024_0_L2A, url: https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/39/Q/ZG/2025/10/S2B_39QZG_20251024_0_L2A/}
       - {id: S2B_39RZH_20251024_0_L2A, url: https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/39/R/ZH/2025/10/S2B_39RZH_20251024_0_L2A/}
+  building_height:
+    # GHS-BUILT-H R2023A, average net building height 2018, 100 m (Pesaresi & Politis 2023,
+    # European Commission JRC, doi 10.2905/85005901-3A49-48DD-9D19-6261354F56FE; CC BY 4.0;
+    # AWS Open Data jrc-ghsl): only the region's window is read. Replaces the type guess for
+    # buildings OpenStreetMap gives no height or floors (houses and villas at most 12 m).
+    url: https://jrc-ghsl.s3.eu-central-1.amazonaws.com/ghs-built-h-anbh/r2023a/54009/100m/2018/GHS_BUILT_H_ANBH_E2018_GLOBE_R2023A_54009_100_V1_0.tif
+    small_kinds_max_m: 12
   # Credits shown with the scenery (the viewer's corners; full text as their tooltip and in
   # the README). Wording checked 2026-10-09: FABDEM's required Copernicus statement (Earth
   # Engine community catalogue, FABDEM); WorldCover's attribution (Planet public data
@@ -60,6 +67,7 @@ sources:
     - "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium (CC BY 4.0)."
     - "© OpenStreetMap contributors. The data is available under the Open Database License (ODbL)."
     - "Contains modified Copernicus Sentinel data 2025 (Sentinel-2 L2A, 24 October 2025)."
+    - "GHS-BUILT-H R2023A (building heights), European Commission, Joint Research Centre (CC BY 4.0)."
 
 # Published airfield data where OSM lacks or disagrees (OSM gives positions and numbers).
 # Runways without a width here or in OSM get default_runway_width_m.
@@ -89,4 +97,5 @@ pinned:
   S2A_39RZH_20251024_1_L2A_window.tif: 12018509a91a7953ba0b515e4e48d268cc05a1aefbe4dcb9c0400f2aa0cf4b36
   S2B_39QZG_20251024_0_L2A_window.tif: 3bc9a497fec953019f00d27f20e542a2680dab5716f98dfd2bd451c366387a5e
   S2B_39RZH_20251024_0_L2A_window.tif: 54e077bf716c4e94e557866caba3bdef53f889ef656e265ef48ef2684ca5feed
+  building_height_window.tif: b4f1426d4df42c9b562e50a9d7a908b85120ca565d5e6281fe337540ee1de6a2
   gcc-states-261008.osm.pbf: 37ddf4a1c62bf695297173744a9ff7524ae51cd4c421a75cfa5de110b80166eb

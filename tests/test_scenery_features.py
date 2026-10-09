@@ -22,8 +22,8 @@ NODE = shutil.which("node")
 def test_building_heights():
     assert building_height({"height": "120 m"}, 900) == (120.0, "height")
     assert building_height({"building:levels": "10"}, 900) == (10 * 3.3 + 1.0, "levels")
-    assert building_height({"building": "villa"}, 400)[1] == "estimate"
-    assert building_height({"building": "yes", "height": "65 ft"}, 100) == (7.0, "estimate")  # feet: not understood, estimated
+    assert building_height({"building": "villa"}, 400)[1] == "estimate_small"  # capped when a measured height replaces it
+    assert building_height({"building": "yes", "height": "65 ft"}, 100) == (7.0, "estimate_small")  # feet: not understood, estimated
     assert building_height({"building": "commercial"}, 6000) == (15.0, "estimate")
 
 

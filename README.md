@@ -224,6 +224,8 @@ downloads and builds it on your machine, for non-commercial use, under these ter
   (ODbL); extracts from Geofabrik.
 - Contains modified Copernicus Sentinel data 2025 (Sentinel-2 L2A, 24 October 2025, via
   AWS Earth Search).
+- GHS-BUILT-H R2023A building heights (Pesaresi and Politis 2023), European Commission,
+  Joint Research Centre (CC BY 4.0).
 Reference data from the Cessna 172P Pilot's Operating Handbook, FAA handbooks and
 advisory circulars, MIL-F-8785C and the AAIB, cited in `docs/REFERENCES.md`.
 

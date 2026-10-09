@@ -187,7 +187,7 @@ float waterDistM = max(0.0, shoreCode - 1.0) * 8.0;
 vec3 waterColour = mix(vec3(0.075, 0.36, 0.33), vec3(0.012, 0.10, 0.17), smoothstep(15.0, 1200.0, waterDistM));
 // Over imagery: its own colours near the shore (the real shallows), ours offshore, where the
 // imagery's deep water is near black.
-float tint = waterTint < 0.99 ? mix(0.1, 0.85, smoothstep(60.0, 1500.0, waterDistM)) : 1.0;
+float tint = waterTint < 0.99 ? mix(0.45, 0.9, smoothstep(60.0, 1500.0, waterDistM)) : 1.0;
 diffuseColor.rgb = mix(diffuseColor.rgb, waterColour, water * tint);
 vec2 wslope = water * (1.0 - smoothstep(300.0, 2000.0, length(vViewPosition))) * waterSlope(vWaterPos.xz, waterTime);`,
       )
@@ -213,6 +213,52 @@ if (water > 0.01) normal = normalize(mix(normal, normalize((viewMatrix * vec4(-w
   return addGroundDetail(material);
 }
 
+// Building facades (featureGeometry.js `facade`: metres along the wall, up from the base,
+// the building's height): window bays every 3.3 m floor and 3.2 m across on ordinary
+// buildings; from 40 m up, glass towers: continuous glass bands with thin floor slabs,
+// reflecting the haze (Schlick's Fresnel) and the sun. The pattern fades out with
+// distance (it would shimmer). Sizes and colours project choices, by eye.
+function facadeMaterial() {
+  const material = new THREE.MeshLambertMaterial({ vertexColors: true });
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, waterUniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nattribute vec3 facade;\nvarying vec3 vFacade;\nvarying vec3 vFacadePos;\nvarying vec3 vFacadeNormal;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvFacade = facade;\nvFacadePos = (modelMatrix * vec4(position, 1.0)).xyz;\nvFacadeNormal = normalize(mat3(modelMatrix) * normal);");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vFacade;\nvarying vec3 vFacadePos;\nvarying vec3 vFacadeNormal;\nuniform vec3 waterSun;\nuniform vec3 waterSky;\n" +
+        "float band(float x, float a, float b, float w) { return smoothstep(a - w, a + w, x) * (1.0 - smoothstep(b - w, b + w, x)); }")
+      .replace(
+        "#include <color_fragment>",
+        `#include <color_fragment>
+float glassAmount = 0.0;
+if (vFacade.x >= 0.0) {
+  float fade = 1.0 - smoothstep(500.0, 2500.0, length(vViewPosition));
+  float tower = step(40.0, vFacade.z);
+  float fy = fract(vFacade.y / 3.3), fx = fract(vFacade.x / 3.2);
+  float aa = clamp(fwidth(vFacade.y / 3.3) * 1.5, 0.002, 0.2);
+  float window = band(fy, 0.32, 0.80, aa) * band(fx, 0.15, 0.85, aa) * step(0.8, vFacade.y) * step(vFacade.y, vFacade.z - 1.0);
+  float glassBand = (1.0 - band(fy, 0.0, 0.12, aa)) * step(vFacade.y, vFacade.z - 0.5);
+  glassAmount = mix(window * 0.55, glassBand, tower) * fade;
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.07, 0.09), glassAmount * 0.8);
+}`,
+      )
+      .replace(
+        "#include <opaque_fragment>",
+        `if (glassAmount > 0.0) {
+  vec3 v = normalize(cameraPosition - vFacadePos);
+  float fresnel = 0.04 + 0.96 * pow(1.0 - max(dot(vFacadeNormal, v), 0.0), 5.0);
+  outgoingLight = mix(outgoingLight, waterSky * 0.85, min(1.0, fresnel + 0.25) * glassAmount);
+  float glint = pow(max(dot(reflect(-v, vFacadeNormal), normalize(waterSun)), 0.0), 120.0) * step(0.02, waterSun.y);
+  outgoingLight += vec3(1.0, 0.93, 0.8) * glint * 3.0 * glassAmount;
+}
+#include <opaque_fragment>`,
+      );
+  };
+  material.customProgramCacheKey = () => "facade";
+  return material;
+}
+
 const NEAR_TEXTURE = 256, FAR_TEXTURE = 64; // land cover texels per tile side (near: one per cell)
 
 // A region's OpenStreetMap features by ring (project choices): roads, paving and every
@@ -229,6 +275,7 @@ function featureMeshes(f, mats) {
     g.setAttribute("position", new THREE.BufferAttribute(data.position, 3));
     g.setAttribute("normal", new THREE.BufferAttribute(data.normal, 3));
     if (data.color) g.setAttribute("color", new THREE.BufferAttribute(data.color, 3));
+    if (data.facade) g.setAttribute("facade", new THREE.BufferAttribute(data.facade, 3));
     g.setIndex(new THREE.BufferAttribute(data.index, 1));
     group.add(new THREE.Mesh(g, mats[kind]));
   }
@@ -363,7 +410,7 @@ export class Terrain {
       roads: addGroundDetail(new THREE.MeshLambertMaterial({ color: 0x5a5c5e, side: THREE.DoubleSide, ...pulled }), { strength: 0.25, tint: 0, fadeEndM: 250 }),
       rail: new THREE.MeshLambertMaterial({ color: 0x5b4a3e, side: THREE.DoubleSide, ...pulled }),
       paved: addGroundDetail(new THREE.MeshLambertMaterial({ color: 0x7d7f80, side: THREE.DoubleSide, ...pulled }), { strength: 0.25, tint: 0, fadeEndM: 250 }),
-      buildings: new THREE.MeshLambertMaterial({ vertexColors: true }),
+      buildings: facadeMaterial(),
     };
     this.shared = {
       crown: new THREE.ConeGeometry(4, 14, 6),

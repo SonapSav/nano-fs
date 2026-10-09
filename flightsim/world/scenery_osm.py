@@ -159,8 +159,10 @@ def _metres(value) -> float | None:
 
 def building_height(tags: dict, area_m2: float) -> tuple[float, str]:
     """(height m, source): OSM height, else floors x LEVEL_M (+ a roof metre), else an
-    estimate from type and footprint (project choices: houses and villas 7 m, big footprints
-    of offices, malls and warehouses 12-15 m, others 9 m)."""
+    estimate from type and footprint (project choices: houses, villas and small footprints
+    7 m, "estimate_small"; big footprints of offices, malls and warehouses 12-15 m, others
+    9 m, "estimate"). The build replaces estimates with measured cell averages where it has
+    them (scenery_build._measured_heights)."""
     h = _metres(tags.get("height"))
     if h and 2.0 <= h <= 900.0:
         return h, "height"
@@ -169,7 +171,7 @@ def building_height(tags: dict, area_m2: float) -> tuple[float, str]:
         return levels * LEVEL_M + 1.0, "levels"
     kind = tags.get("building", "yes")
     if kind in ("house", "villa", "detached", "residential", "terrace", "hut", "shed", "garage", "garages") or area_m2 < 250:
-        return 7.0, "estimate"
+        return 7.0, "estimate_small"
     if area_m2 > 4000:
         return 15.0 if kind not in ("warehouse", "industrial", "hangar") else 12.0, "estimate"
     return 9.0, "estimate"

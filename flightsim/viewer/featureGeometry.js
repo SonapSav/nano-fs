@@ -18,22 +18,25 @@ const RAIL_WIDTH_M = 4;
 const TAXIWAY_WIDTH_M = 23;
 
 class Mesh {
-  constructor(colours = false) {
+  constructor(colours = false, uvs = false) {
     this.pos = [];
     this.nrm = [];
     this.idx = [];
     this.col = colours ? [] : null;
+    this.uv = uvs ? [] : null; // three numbers per vertex (the facade attribute)
   }
-  vertex(x, y, z, nx, ny, nz, c) {
+  vertex(x, y, z, nx, ny, nz, c, u = 0, v = 0, w = 0) {
     this.pos.push(x, y, z);
     this.nrm.push(nx, ny, nz);
     if (this.col) this.col.push(c[0], c[1], c[2]);
+    if (this.uv) this.uv.push(u, v, w);
     return this.pos.length / 3 - 1;
   }
   arrays() {
     if (!this.idx.length) return null;
     const out = { position: new Float32Array(this.pos), normal: new Float32Array(this.nrm), index: new Uint32Array(this.idx) };
     if (this.col) out.color = new Float32Array(this.col);
+    if (this.uv) out.facade = new Float32Array(this.uv);
     return out;
   }
 }
@@ -120,9 +123,11 @@ const GLASS = [0x7d93a6, 0x8aa1ae, 0x6f8494].map(linear); // towers
 const ROOF_SHADE = 0.85;
 
 // Buildings with at least `minHeightM` (e.g. only towers on distant tiles), one mesh with
-// vertex colours; null where none.
+// vertex colours and, for the facade shader (terrain.js), a "facade" attribute in metres:
+// along the wall, up from the building's base, the building's height (walls); along = -1
+// marks a roof. Null where none.
 export function buildingData(f, tiles, minHeightM = 0) {
-  const mesh = new Mesh(true);
+  const mesh = new Mesh(true, true);
   let i = 0;
   for (const [height, , ring] of f.buildings ?? []) {
     i++;
@@ -146,6 +151,7 @@ export function buildingData(f, tiles, minHeightM = 0) {
       area += ring[2 * k] * ring[2 * j + 1] - ring[2 * j] * ring[2 * k + 1];
     }
     const ccw = area > 0; // in (x, z)
+    let along = 0;
     for (let k = 0; k < n; k++) {
       const j = (k + 1) % n;
       const [ax, az, bx, bz] = ccw ? [ring[2 * k], ring[2 * k + 1], ring[2 * j], ring[2 * j + 1]] : [ring[2 * j], ring[2 * j + 1], ring[2 * k], ring[2 * k + 1]];
@@ -153,15 +159,16 @@ export function buildingData(f, tiles, minHeightM = 0) {
       if (len < 0.01) continue;
       // Outward normal of an edge of a counter-clockwise (x, z) ring: (dz, -dx) / len.
       const nx = (bz - az) / len, nz = -(bx - ax) / len;
-      const v0 = mesh.vertex(ax, y0, az, nx, 0, nz, wall);
-      mesh.vertex(bx, y0, bz, nx, 0, nz, wall);
-      mesh.vertex(ax, y1, az, nx, 0, nz, wall);
-      mesh.vertex(bx, y1, bz, nx, 0, nz, wall);
+      const v0 = mesh.vertex(ax, y0, az, nx, 0, nz, wall, along, -0.5, height);
+      mesh.vertex(bx, y0, bz, nx, 0, nz, wall, along + len, -0.5, height);
+      mesh.vertex(ax, y1, az, nx, 0, nz, wall, along, height, height);
+      mesh.vertex(bx, y1, bz, nx, 0, nz, wall, along + len, height, height);
+      along += len;
       mesh.idx.push(v0, v0 + 2, v0 + 1, v0 + 1, v0 + 2, v0 + 3);
     }
     const tris = triangulate(ring);
     const base = mesh.pos.length / 3;
-    for (let k = 0; k < ring.length; k += 2) mesh.vertex(ring[k], y1, ring[k + 1], 0, 1, 0, roof);
+    for (let k = 0; k < ring.length; k += 2) mesh.vertex(ring[k], y1, ring[k + 1], 0, 1, 0, roof, -1, 0, height);
     for (let k = 0; k < tris.length; k += 3) mesh.idx.push(base + tris[k], base + tris[k + 2], base + tris[k + 1]);
   }
   return mesh.arrays();

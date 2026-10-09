@@ -244,6 +244,9 @@ def source_files(spec: RegionSpec) -> list[dict]:
         out.append({"kind": "landcover", "name": Path(lc["url"].format(tile=tile)).name, "url": lc["url"].format(tile=tile), "lat": la, "lon": lo})
     osm = spec.sources["osm"]
     out.append({"kind": "osm", "name": Path(osm["url"]).name, "url": osm["url"]})
+    bh = spec.sources.get("building_height")
+    if bh:
+        out.append({"kind": "building_height", "name": "building_height_window.tif", "url": bh["url"]})
     # Imagery: the window of each scene that covers the region (in priority order).
     for item in (spec.sources.get("imagery") or {}).get("items", []):
         out.append({"kind": "imagery", "name": f"{item['id']}_window.tif", "url": item["url"]})
@@ -261,6 +264,8 @@ def download(spec: RegionSpec, root: Path = SCENERY_DIR, log=print) -> list[dict
             log(f"downloading {f['name']}")
             if "member" in f:
                 _zip_member(f["url"], f["member"], dest)
+            elif f["kind"] == "building_height":
+                _imagery_window([f["url"]], region_bounds_deg(spec), dest)
             elif f["kind"] == "imagery":
                 bands = spec.sources["imagery"]["bands"]
                 _imagery_window([f["url"] + f"{b}.tif" for b in bands], region_bounds_deg(spec), dest)
@@ -455,6 +460,37 @@ def build_imagery(spec: RegionSpec, paths: list[Path], out: Path, log=print) -> 
     log(f"imagery: {missing / ((hi - lo + 1) ** 2 * IMAGERY_PX**2):.2%} of the pixels without data (black)")
 
 
+def _measured_heights(spec: RegionSpec, g: geo.Geodesy, tiles: dict, raster: Path, log=print) -> None:
+    """Buildings whose height was estimated from their type (no OSM height or floors) take
+    the measured average building height of their 100 m cell (GHS-BUILT-H) instead, where
+    the cell has buildings; houses, villas and the like at most `small_kinds_max_m`."""
+    import rasterio
+    from rasterio.warp import transform
+
+    small_max = float(spec.sources["building_height"].get("small_kinds_max_m", 12))
+    with rasterio.open(raster) as ds:
+        grid, inv, crs = ds.read(1), ~ds.transform, ds.crs
+    todo = [(t, k) for t in tiles.values() for k, b in enumerate(t["buildings"]) if b[1] in ("estimate", "estimate_small")]
+    if not todo:
+        return
+    cx = np.array([np.mean(t["buildings"][k][2][0::2]) for t, k in todo])
+    cz = np.array([np.mean(t["buildings"][k][2][1::2]) for t, k in todo])
+    lat, lon = to_geodetic_arrays(g, -cz, cx)
+    mx, my = transform("EPSG:4326", crs, lon.tolist(), lat.tolist())
+    col, row = inv * (np.asarray(mx), np.asarray(my))
+    col, row = np.floor(col).astype(int), np.floor(row).astype(int)
+    inside = (row >= 0) & (row < grid.shape[0]) & (col >= 0) & (col < grid.shape[1])
+    h = np.where(inside, grid[np.clip(row, 0, grid.shape[0] - 1), np.clip(col, 0, grid.shape[1] - 1)], -1.0)
+    used = 0
+    for (t, k), hm in zip(todo, h):
+        if hm >= 2.5:  # a cell with buildings
+            b = t["buildings"][k]
+            measured = min(float(hm), small_max) if b[1] == "estimate_small" else float(hm)
+            t["buildings"][k] = [round(measured, 1), "measured", b[2]]
+            used += 1
+    log(f"building heights: {used} of {len(todo)} estimated buildings take the measured cell average")
+
+
 # --- Airfields --------------------------------------------------------------------------------
 
 # Runway flattening (project choices): the flat area reaches this far beyond the pavement's
@@ -601,17 +637,20 @@ def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print) -> dict:
         build_imagery(spec, imagery, out, log)
     pbf = src / next(f["name"] for f in sources if f["kind"] == "osm")
     build_airfields(spec, pbf, out, log)
-    build_features(spec, pbf, out, log)
+    bh = next((src / f["name"] for f in sources if f["kind"] == "building_height"), None)
+    build_features(spec, pbf, out, log, building_height=bh)
     return write_manifest(spec, sources, out)
 
 
-def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print) -> None:
+def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_height: Path | None = None) -> None:
     from flightsim.world.scenery_osm import extract_features
 
     g = geo.Geodesy("wgs84", spec.origin_lat_deg, spec.origin_lon_deg)
     lo, hi = spec.ix_range
     half = max(abs(lo), hi + 1) * TILE_SIZE_M
     tiles = extract_features(pbf, g, region_bounds_deg(spec, 0.0), half, TILE_SIZE_M)
+    if building_height is not None:
+        _measured_heights(spec, g, tiles, building_height, log)
     empty = {"roads": {}, "rail": [], "taxiway": [], "apron": [], "buildings": []}
     counts = {"buildings": 0, "roads": 0}
     for iz in range(lo, hi + 1):

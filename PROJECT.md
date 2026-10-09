@@ -1172,8 +1172,21 @@ landmarks; later night lighting, shadows, haze.
   the passes and some desert haze. EOX cloudless: 2016 CC BY 4.0, later years
   CC BY-NC-SA 4.0 with share-alike on the derived scenery; offline harvesting not
   confirmed: not chosen.
-- [ ] **4. City and airport:** shader facades and better heights; Al Bateen's terminal,
-  hangars, apron markings and parked aircraft; about six landmarks.
+- [ ] **4. City and airport** (in progress, owner: "go ahead with step 4").
+  - [x] 4a Facades (2026-10-09): buildings carry a `facade` attribute (metres along the
+    wall, up from the base, the building's height); `terrain.js facadeMaterial` draws
+    window bays every 3.3 m floor and 3.2 m across, and from 40 m up glass towers
+    (continuous glass bands, thin slabs) reflecting the haze (Schlick's Fresnel) and the
+    sun, fading out by 2.5 km; sizes and colours by eye. The imagery's dark near-shore
+    water now gets at least 45 % of our water colour (it showed as black holes in the
+    mangroves).
+  - [x] 4b Measured building heights (2026-10-09): GHS-BUILT-H R2023A average net building
+    height 2018 at 100 m (European Commission JRC, CC BY 4.0, AWS Open Data; the
+    region's window of the global Mollweide file, 1.6 s, pinned): buildings OSM gives no
+    height or floors take their cell's average (100,128 of 104,121; median 7.1 m, p90
+    11.9 m, max 67 m; houses and villas at most 12 m); tagged heights (1,539, up to 342 m)
+    and floors (4,329) stay. Averages over 100 m cells understate single towers; the
+    tagged ones carry the skyline.
 
 ### Licence and documentation
 

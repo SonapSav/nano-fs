@@ -161,3 +161,27 @@ def test_imagery_mosaic_and_tone(tmp_path):
         east_px = ds.read()[:, IMAGERY_PX // 2, IMAGERY_PX // 2]
     assert west_px == pytest.approx([153, 51, 26], abs=4)  # 255 x 2 x reflectance (JPEG: a few levels)
     assert east_px == pytest.approx([26, 51, 153], abs=4)
+
+
+def test_measured_building_heights(tmp_path):
+    rasterio = pytest.importorskip("rasterio")
+    from rasterio.transform import from_origin
+
+    from flightsim.world.scenery_build import _measured_heights
+
+    # A height grid in lat/lon: 30 m everywhere east of the origin, no buildings (0) west.
+    a = np.zeros((200, 200), np.float32)
+    a[:, 100:] = 30.0
+    with rasterio.open(tmp_path / "h.tif", "w", driver="GTiff", width=200, height=200, count=1, dtype="float32", crs="EPSG:4326",
+                       transform=from_origin(SPEC.origin_lon_deg - 0.1, SPEC.origin_lat_deg + 0.1, 0.001, 0.001), nodata=-1) as ds:  # fmt: skip
+        ds.write(a, 1)
+    ring = lambda x, z: [x, z, x + 20, z, x + 20, z + 20, x, z + 20]  # noqa: E731
+    tiles = {(0, 0): {"buildings": [[9.0, "estimate", ring(500, 500)], [7.0, "estimate_small", ring(600, 600)], [80.0, "height", ring(700, 700)]]},
+             (-1, 0): {"buildings": [[9.0, "estimate", ring(-500, 500)]]}}  # fmt: skip
+    spec = RegionSpec(**{**SPEC.__dict__, "sources": {"building_height": {"small_kinds_max_m": 12}}})
+    _measured_heights(spec, geo.Geodesy("wgs84", SPEC.origin_lat_deg, SPEC.origin_lon_deg), tiles, tmp_path / "h.tif", log=lambda *_: None)
+    east = tiles[(0, 0)]["buildings"]
+    assert east[0][:2] == [30.0, "measured"]
+    assert east[1][:2] == [12.0, "measured"]  # a house: capped
+    assert east[2][:2] == [80.0, "height"]  # tagged heights stay
+    assert tiles[(-1, 0)]["buildings"][0][:2] == [9.0, "estimate"]  # no buildings measured there: the estimate stays
