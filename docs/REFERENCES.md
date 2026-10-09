@@ -145,8 +145,12 @@ Retrieved 2026-10-09. Positions and footprints from OSM (the region's pinned ext
 - **Capital Gate** (Wikipedia): 160 m to the roof, 35 floors, leaning 18 deg west.
 - **Louvre Abu Dhabi**: dome 180 m in diameter on four piers 110 m apart (archeyes.com, architecturelab.net; Wikipedia gives only the 7,000 t weight). Height not published.
 - **Emirates Palace** (Wikipedia): central dome plus 114 smaller domes, desert-sand colour; no dome dimensions.
+- **Capital Gate, construction** (Building, https://building.co.uk/focus/twist-and-shout-rmjms-abu-dhabi-capital-gate-tower/3157416.article; ME Construction News, https://meconstructionnews.com/1014/the-leaning-tower-of-abu-dhabi/amp; retrieved 2026-10-10): 18 deg is the average inclination from the ground floor to the top; floors stacked vertically up to the 12th storey, then staggered; a pre-cambered core; a diagrid with about 700 diamond-shaped glass panels; a stainless steel element runs down the facade over the existing grandstand into the hotel entrance canopy.
+- **Louvre Abu Dhabi, dome** (https://www.louvreabudhabi.ae/en/about-us/architecture, retrieved 2026-10-10): 7,850 stars in eight layers (four stainless steel outer, four aluminium inner) on a 5 m steel frame; about 7,500 t; 55 buildings (23 galleries), a museum city. OSM's dome part (way 403276371): min_height 10, roof:height 20.
+- **Emirates Palace, domes** (Visit Abu Dhabi, https://visitabudhabi.ae/en/things-to-do/itineraries/luxe-architecture-and-inspiration; contractor accounts; retrieved 2026-10-10): 114 domes, the central dome 72.6 m above the ground and 42 m wide, silver and gold coloured glass mosaic; smaller domes 7 to 12 m. OSM's parts: 10 domes, the central 45 m (the published figures are used).
+- **Qasr Al Watan** (Gulf News, https://gulfnews.com/travel/inside-qasr-al-watan-a-peek-into-the-uaes-presidential-palace-1.2303404, retrieved 2026-10-10): the dome (37 m, 60 m high) over the Great Hall, 100 x 100 m, at the centre of the building. OSM: relation 7232861 "Al-Watan Palace".
 - **Etihad Towers** (Wikipedia): T1-T5 277.6, 305.3, 260.3, 234.0, 217.5 m; OSM's height tags agree (rounded).
-- **Qasr Al Watan** (Wikipedia): main dome 37 m in diameter, 60 m overall; not modelled (not in OSM).
+- **Qasr Al Watan** (Wikipedia): main dome 37 m in diameter, 60 m overall; white granite and limestone.
 
 ## Sentinel-2 imagery (world/scenery_build.py build_imagery, configs/scenery/abu_dhabi.yaml)
 

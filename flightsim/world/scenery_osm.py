@@ -267,21 +267,24 @@ def _ring_area(ring: list[tuple[float, float]]) -> float:
 
 def extract_parts(pbf_path, geodesy: geo.Geodesy, sites: dict[str, tuple[float, float, float]]) -> dict:
     """OSM's 3D parts near landmarks (sites: {key: (x, z, radius_m)} in world metres):
-    {key: {"domes": [[x, z, diameter_m, top_m], ...], "pools": [ring, ...]}}. Domes are
-    `building:part=dome` areas with a height (Simple 3D Buildings: the top above the
-    ground), their diameter the mean of the footprint's extents; pools are
-    `natural=water` areas. Sorted by position so builds are reproducible."""
+    {key: {"domes": [...], "building_parts": [...], "pools": [ring, ...]}}. Domes are
+    `building:part=dome` or parts with `roof:shape=dome`: {"x", "z", "d" (mean of the
+    footprint's extents), "top", "min", "roof_h", "levels", "colour"} (Simple 3D Buildings
+    tags: height, min_height, roof:height, building:levels, roof:colour or
+    building:colour; None where untagged). Other building parts: {"ring", "top", "min",
+    "levels", "colour"}. Pools are `natural=water` areas. Sorted by position so builds
+    are reproducible."""
     import osmium
 
-    out = {k: {"domes": [], "pools": []} for k in sites}
+    out = {k: {"domes": [], "building_parts": [], "pools": []} for k in sites}
     fp = osmium.FileProcessor(str(pbf_path)).with_areas(osmium.filter.KeyFilter("building:part", "natural")).with_locations()
     fp = fp.with_filter(osmium.filter.KeyFilter("building:part", "natural"))
     for o in fp:
         if not o.is_area():
             continue
         tags = o.tags
-        dome, pool = tags.get("building:part") == "dome", tags.get("natural") == "water"
-        if not (dome or pool):
+        part, pool = "building:part" in tags, tags.get("natural") == "water"
+        if not (part or pool):
             continue
         for outer in o.outer_rings():
             try:
@@ -293,16 +296,21 @@ def extract_parts(pbf_path, geodesy: geo.Geodesy, sites: dict[str, tuple[float, 
             for key, (sx, sz, r) in sites.items():
                 if math.hypot(cx - sx, cz - sz) > r:
                     continue
-                if dome:
-                    top = _metres(tags.get("height"))
-                    if top:
-                        d = ((max(xs) - min(xs)) + (max(zs) - min(zs))) / 2
-                        out[key]["domes"].append([round(cx, 1), round(cz, 1), round(d, 1), top])
-                else:
+                if pool:
                     out[key]["pools"].append([round(c, 1) for p in zip(xs, zs) for c in p])
+                    continue
+                levels = _metres(tags.get("building:levels"))
+                common = {"top": _metres(tags.get("height")), "min": _metres(tags.get("min_height")), "levels": levels,
+                          "colour": tags.get("roof:colour") or tags.get("building:colour")}  # fmt: skip
+                if tags.get("building:part") == "dome" or tags.get("roof:shape") == "dome":
+                    d = ((max(xs) - min(xs)) + (max(zs) - min(zs))) / 2
+                    out[key]["domes"].append({"x": round(cx, 1), "z": round(cz, 1), "d": round(d, 1), "roof_h": _metres(tags.get("roof:height")), **common})
+                else:
+                    out[key]["building_parts"].append({"ring": [round(c, 1) for p in zip(xs, zs) for c in p], **common})
             break
     for v in out.values():
-        v["domes"].sort()
+        v["domes"].sort(key=lambda d: (d["x"], d["z"]))
+        v["building_parts"].sort(key=lambda p: p["ring"])
         v["pools"].sort()
     return out
 

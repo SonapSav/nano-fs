@@ -71,8 +71,7 @@ sources:
 
 # Landmarks modelled in the viewer (viewer/landmarks.js) on their OSM footprints; `replace`
 # drops OSM's plain box there. Dimensions from Wikipedia (retrieved 2026-10-09) unless
-# marked "project choice" (no source gave them). Qasr Al Watan is left out: its main
-# building is not mapped in OSM.
+# marked "project choice" (no source gave them).
 landmarks:
   # Sheikh Zayed Grand Mosque. Official site (szgmc.gov.ae, retrieved 2026-10-10): 82 domes,
   # the largest about 32.6 m across and 84 m high, white marble cladding, onion-shaped
@@ -83,14 +82,36 @@ landmarks:
   # the roof at OSM's height tag on the mosque (33 m).
   - {name: Sheikh Zayed Grand Mosque, kind: grand_mosque, osm: relation/1635169, replace: true, parts: true,
      dome_top_m: 84, dome_diameter_m: 32.6, minaret_m: 107, roof_m: 33}
-  # Capital Gate: 160 m, leaning 18 degrees west.
-  - {name: Capital Gate, kind: leaning_tower, osm: way/103779658, replace: true, height_m: 160, lean_deg: 18, lean_toward_deg: 270}
-  # Louvre Abu Dhabi: a 180 m dome on four piers 110 m apart (architecture press: archeyes,
-  # architecturelab); its height is not published: top at 36 m, a project choice.
-  - {name: Louvre Abu Dhabi, kind: flat_dome, osm: way/498046180, replace: false, dome_diameter_m: 180, pier_spacing_m: 110, dome_top_m: 36}
-  # Emirates Palace: a central dome and 114 smaller ones, the colour of desert sand; the
-  # central dome's size is not published: 40 m across, top at 60 m, project choices.
-  - {name: Emirates Palace, kind: central_dome, osm: way/30394921, replace: false, dome_diameter_m: 40, dome_top_m: 60, roof_m: 27}
+  # Capital Gate: 160 m, 35 storeys, leaning 18 degrees west on average (Wikipedia); floors
+  # stacked vertically up to the 12th storey, then staggered (Building, ME Construction
+  # News); a diagrid of about 700 diamond-shaped glass panels; a stainless steel element
+  # runs down the facade over the grandstand into the entrance canopy.
+  # The splash heads for the grandstand roofs OSM maps west-north-west of the tower (ways
+  # 397954265/6).
+  - {name: Capital Gate, kind: leaning_tower, osm: way/103779658, replace: true, height_m: 160, lean_deg: 18,
+     lean_toward_deg: 270, storeys: 35, vertical_storeys: 12, diagrid_panels: 700, splash_toward_deg: 294}
+  # Louvre Abu Dhabi: a dome 180 m across on four piers 110 m apart (archeyes,
+  # architecturelab), eight layers of 7,850 stars (four stainless steel outer, four
+  # aluminium inner, on a 5 m steel frame; louvreabudhabi.ae), over 55 white buildings
+  # (museum city). The dome's rim and rise from OSM's dome part (min_height, roof:height).
+  - {name: Louvre Abu Dhabi, kind: flat_dome, osm: way/498046180, replace: true, parts: true, dome_diameter_m: 180,
+     pier_spacing_m: 110, frame_m: 5, museum_buildings: 55}
+  # Emirates Palace: a central dome 72.6 m high and 42 m across in silver and gold glass
+  # mosaic, 114 domes in all, the smaller 7 to 12 m across (Visit Abu Dhabi; contractor
+  # accounts); the colour of desert sand (Wikipedia). Other domes and their heights from
+  # OSM's parts.
+  - {name: Emirates Palace, kind: palace, osm: way/30394921, replace: true, parts: true, dome_diameter_m: 42,
+     dome_top_m: 72.6, colour: sand, mosaic: true}
+  # Qasr Al Watan (OSM "Al-Watan Palace"): a main dome 37 m across, 60 m high, over the
+  # Great Hall at the centre of the building, white granite and limestone (Wikipedia, Gulf
+  # News). Roof height: project choice (OSM's measured height, 5.3 m, is a 100 m cell's
+  # average).
+  - {name: Qasr Al Watan, kind: palace, osm: relation/7232861, replace: true, parts: true, dome_diameter_m: 37,
+     dome_top_m: 60, colour: white, roof_m: 22}
+  # Etihad Towers: five towers, 277.6, 305.3, 260.3, 234.0 and 217.5 m (Wikipedia; OSM's
+  # height tags agree); glass curtain walls.
+  - {name: Etihad Towers, kind: glass_towers, replace: true,
+     osm: [way/168401784, way/168401785, way/168401781, way/168401783, way/168401782]}
 
 # Published airfield data where OSM lacks or disagrees (OSM gives positions and numbers).
 # Runways without a width here or in OSM get default_runway_width_m.

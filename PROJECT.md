@@ -1215,8 +1215,28 @@ landmarks; later night lighting, shadows, haze.
     with the time of day). Proportions not published are project choices (in
     `landmarks.js`). All four landmarks: +15 draw calls, +50k triangles, about +0.5 ms
     a frame on the integrated GPU. `?debug` in the viewer URL exposes the scene for
-    test-browser screenshots. Pending: the owner's verdict; then the same treatment,
-    ready-made models (option D) or OSM 3D tags for the city (option C).
+    test-browser screenshots.
+  - [x] 4f Photorealistic landmarks (2026-10-10, the owner's go-ahead while away): shared
+    `viewer/landmarkKit.js` (physically based stone, gold, steel, glass and pool water lit
+    by the sky's environment map; facade patterns in shaders: pointed arcades, storeys of
+    arched windows, a diamond diagrid, curtain-wall mullions; stone veining, cladding
+    joints and contact shading at wall feet; leaning walls). Sun shadows: the landmark
+    nearest the camera casts them (2048 map fitted around it) onto itself and a
+    shadow-only ground plane. Mosque: parapets, dome cornices, calm pools. Capital Gate:
+    vertical to the 12th storey then curving to an 18 degree average lean west, diagrid
+    sized from its ~700 panels, the steel splash toward the grandstand. Louvre: two
+    perforated star shells (stainless outside, aluminium inside) whose openings also cut
+    the shadow ("rain of light"), the rim and rise from OSM's dome part, 55 white museum
+    buildings on the footprint's land (layout a project choice). Emirates Palace: sand
+    walls with arched windows at OSM's 8 levels, OSM's 10 domes (golden ones gilded), the
+    central dome at 72.6 m / 42 m in gold and silver mosaic. Qasr Al Watan (now found in
+    OSM as "Al-Watan Palace"): white, main dome 37 m / 60 m, roof 22 m (project choice).
+    Etihad Towers: OSM footprints and heights in mirror glass. The build records OSM's
+    height for each footprint, all building parts and domes with min_height,
+    roof:height and colour; a landmark may name several OSM objects. All landmarks: +35
+    draw calls, +126k triangles, about +0.9 ms a frame (shadow pass included).
+  - [ ] The owner's verdict on the landmarks; next options: the city's other buildings
+    (OSM 3D tags, shadows), night lighting, or ready-made models.
 
 ### Licence and documentation
 

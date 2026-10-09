@@ -97,6 +97,8 @@ export class FlightScene {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, QUALITY[quality].pixelRatio));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping; // the physical sky is HDR
     this.renderer.toneMappingExposure = 0.55;
+    this.renderer.shadowMap.enabled = true; // only the landmarks cast (landmarks.js)
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     container.prepend(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
@@ -215,6 +217,8 @@ export class FlightScene {
     r.setPixelRatio(old.getPixelRatio());
     r.toneMapping = old.toneMapping;
     r.toneMappingExposure = old.toneMappingExposure;
+    r.shadowMap.enabled = true;
+    r.shadowMap.type = old.shadowMap.type;
     old.domElement.replaceWith(r.domElement);
     old.dispose();
     old.forceContextLoss();
@@ -499,6 +503,7 @@ export class FlightScene {
       this.terrain.update(this.camera.position.x, this.camera.position.z);
       this.clouds.update(this.camera.position.x, this.camera.position.z);
       if (this.procedural.visible) this.roads.update(this.camera.position.x, this.camera.position.z);
+      this.landmarks.update(this.camera.position, this.skyLight.sun, this.sunDir);
       this.renderer.render(this.scene, this.camera);
       return;
     }
@@ -512,6 +517,7 @@ export class FlightScene {
     this.terrain.update(this.camera.position.x, this.camera.position.z);
     this.clouds.update(this.camera.position.x, this.camera.position.z);
     if (this.procedural.visible) this.roads.update(this.camera.position.x, this.camera.position.z);
+    this.landmarks.update(this.camera.position, this.skyLight.sun, this.sunDir);
     this.renderer.render(this.scene, this.camera);
   }
 

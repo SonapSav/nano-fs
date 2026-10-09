@@ -510,35 +510,59 @@ def _height_at(out: Path, x: float, z: float) -> float:
     return max(0.0, float(posts[j, i]))
 
 
+def _osm_ids(mark: dict) -> list[str]:
+    """A landmark's OSM objects: `osm` is one ("way/<id>") or a list."""
+    return [mark["osm"]] if isinstance(mark["osm"], str) else list(mark["osm"])
+
+
 def _landmarks(spec: RegionSpec, marks: list[dict], captured: dict, tiles: dict, out: Path, log=print, parts: dict | None = None) -> None:
-    """landmarks.json: each landmark of the region file with its OSM footprint (and its
-    inner rings, e.g. a courtyard), centre, long axis (world bearing of its longest side,
-    degrees from north, clockwise) and ground height; with `parts: true` also OSM's domes
-    and pools on it (extract_parts). OSM buildings inside a `replace` landmark's footprint
+    """landmarks.json: each landmark of the region file with its OSM footprints
+    ("footprints": outer ring, inner rings such as a courtyard, and the height OSM's box
+    had: its tag or the measured height, with the source), the first footprint's ring and
+    long axis (world bearing of its longest side, degrees from north, clockwise), the
+    centre and ground height; with `parts: true` also OSM's domes, building parts and
+    pools on it (extract_parts). OSM buildings inside a `replace` landmark's footprints
     are dropped."""
     result = []
     for m in marks:
-        shape = captured.get(m["osm"])
-        if not shape:
-            log(f"landmark {m['name']}: {m['osm']} not found in the OSM extract")
+        shapes = [(o, captured[o]) for o in _osm_ids(m) if o in captured]
+        missing = [o for o in _osm_ids(m) if o not in captured]
+        if missing:
+            log(f"landmark {m['name']}: {', '.join(missing)} not found in the OSM extract")
+        if not shapes:
             continue
-        ring = shape["outer"]
+        footprints, dropped = [], 0
+        for o, shape in shapes:
+            ring = shape["outer"]
+            fp = {"osm": o, "ring": [round(v, 1) for v in ring], "inner": [[round(v, 1) for v in r] for r in shape["inner"]], "height_m": None, "height_source": None}
+            if m.get("replace"):
+                best = 0.0
+                for t in tiles.values():
+                    keep = []
+                    for b in t["buildings"]:
+                        bx, bz = sum(b[2][0::2]) / (len(b[2]) / 2), sum(b[2][1::2]) / (len(b[2]) / 2)
+                        if not _inside(bx, bz, ring):
+                            keep.append(b)
+                            continue
+                        area = abs(sum(b[2][2 * k] * b[2][(2 * k + 3) % len(b[2])] - b[2][(2 * k + 2) % len(b[2])] * b[2][2 * k + 1] for k in range(len(b[2]) // 2))) / 2
+                        if area > best:  # the largest box inside: the landmark's own
+                            best, fp["height_m"], fp["height_source"] = area, b[0], b[1]
+                    dropped += len(t["buildings"]) - len(keep)
+                    t["buildings"] = keep
+            footprints.append(fp)
+        ring = shapes[0][1]["outer"]
         xs, zs = ring[0::2], ring[1::2]
-        cx, cz = sum(xs) / len(xs), sum(zs) / len(zs)
         n = len(xs)
         side = max(range(n), key=lambda k: math.hypot(xs[(k + 1) % n] - xs[k], zs[(k + 1) % n] - zs[k]))
         dx, dz = xs[(side + 1) % n] - xs[side], zs[(side + 1) % n] - zs[side]
         axis = math.degrees(math.atan2(dx, -dz)) % 180.0  # bearing: east = 90
-        dropped = 0
-        if m.get("replace"):
-            for t in tiles.values():
-                keep = [b for b in t["buildings"] if not _inside(sum(b[2][0::2]) / (len(b[2]) / 2), sum(b[2][1::2]) / (len(b[2]) / 2), ring)]
-                dropped += len(t["buildings"]) - len(keep)
-                t["buildings"] = keep
-        entry = {**m, "ring": [round(v, 1) for v in ring], "inner": [[round(v, 1) for v in r] for r in shape["inner"]],
+        allx = [x for _, s in shapes for x in s["outer"][0::2]]
+        allz = [z for _, s in shapes for z in s["outer"][1::2]]
+        cx, cz = sum(allx) / len(allx), sum(allz) / len(allz)
+        entry = {**m, "footprints": footprints, "ring": footprints[0]["ring"], "inner": footprints[0]["inner"],
                  "centre": [round(cx, 1), round(cz, 1)], "axis_deg": round(axis, 2), "ground_m": round(_height_at(out, cx, cz), 2)}  # fmt: skip
         if m.get("parts"):
-            entry.update((parts or {}).get(m["osm"], {"domes": [], "pools": []}))
+            entry.update((parts or {}).get(m["name"], {"domes": [], "building_parts": [], "pools": []}))
         if m["kind"] == "grand_mosque":
             # Qibla: the initial great-circle bearing to the Kaaba (21.4225 N, 39.8262 E), true
             # (the map bearing differs by the grid convergence, a few hundredths of a degree here).
@@ -548,8 +572,9 @@ def _landmarks(spec: RegionSpec, marks: list[dict], captured: dict, tiles: dict,
             entry["qibla_deg"] = round(math.degrees(math.atan2(math.sin(dlon) * math.cos(lat2),
                                        math.cos(lat) * math.sin(lat2) - math.sin(lat) * math.cos(lat2) * math.cos(dlon))) % 360.0, 2)  # fmt: skip
         result.append(entry)
-        extra = f", {len(entry['domes'])} domes, {len(entry['pools'])} pools" if m.get("parts") else ""
-        log(f"landmark {m['name']}: {n} corners, {len(shape['inner'])} inner rings, axis {axis:.0f} deg, {dropped} OSM buildings replaced{extra}")
+        extra = f", {len(entry['domes'])} domes, {len(entry['building_parts'])} parts, {len(entry['pools'])} pools" if m.get("parts") else ""
+        heights = ", ".join(f"{f['height_m']} m ({f['height_source']})" for f in footprints if f["height_m"] is not None)
+        log(f"landmark {m['name']}: {len(footprints)} footprints, {dropped} OSM buildings replaced{extra}; OSM heights: {heights or 'none'}")
     (out / "landmarks.json").write_text(json.dumps(result, indent=1, sort_keys=True) + "\n")
 
 
@@ -711,16 +736,18 @@ def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_h
     lo, hi = spec.ix_range
     half = max(abs(lo), hi + 1) * TILE_SIZE_M
     marks = spec.sources.get("landmarks") or []
-    tiles = extract_features(pbf, g, region_bounds_deg(spec, 0.0), half, TILE_SIZE_M, capture={m["osm"] for m in marks})
+    tiles = extract_features(pbf, g, region_bounds_deg(spec, 0.0), half, TILE_SIZE_M, capture={o for m in marks for o in _osm_ids(m)})
     captured = tiles.pop("captured", {})
     if building_height is not None:
         _measured_heights(spec, g, tiles, building_height, log)
     sites = {}
     for m in marks:
-        if m.get("parts") and m["osm"] in captured:
-            ring = captured[m["osm"]]["outer"]
-            cx, cz = sum(ring[0::2]) / (len(ring) / 2), sum(ring[1::2]) / (len(ring) / 2)
-            sites[m["osm"]] = (cx, cz, max(math.hypot(x - cx, z - cz) for x, z in zip(ring[0::2], ring[1::2])))
+        rings = [captured[o]["outer"] for o in _osm_ids(m) if o in captured]
+        if m.get("parts") and rings:
+            xs = [x for r in rings for x in r[0::2]]
+            zs = [z for r in rings for z in r[1::2]]
+            cx, cz = sum(xs) / len(xs), sum(zs) / len(zs)
+            sites[m["name"]] = (cx, cz, max(math.hypot(x - cx, z - cz) for x, z in zip(xs, zs)))
     parts = extract_parts(pbf, g, sites) if sites else {}
     _landmarks(spec, marks, captured, tiles, out, log, parts)
     empty = {"roads": {}, "rail": [], "taxiway": [], "apron": [], "buildings": []}

@@ -199,9 +199,12 @@ def test_landmarks(tmp_path):
     ring = [0.0, 0.0, 400.0, 0.0, 400.0, 100.0, 0.0, 100.0]  # 400 m east-west, 100 m north-south
     assert _inside(200, 50, ring) and not _inside(500, 50, ring)
     tiles = {(0, 0): {"buildings": [[33, "height", [190, 40, 210, 40, 210, 60, 190, 60]], [9, "estimate", [600, 600, 610, 600, 610, 610, 600, 610]]]}}
-    marks = [{"name": "M", "kind": "grand_mosque", "osm": "relation/1", "replace": True}, {"name": "X", "kind": "flat_dome", "osm": "way/9"}]
+    marks = [{"name": "M", "kind": "grand_mosque", "osm": "relation/1", "replace": True}, {"name": "X", "kind": "flat_dome", "osm": "way/9"},
+             {"name": "T", "kind": "glass_towers", "osm": ["way/9", "relation/1"]}]  # fmt: skip
     _landmarks(SPEC, marks, {"relation/1": {"outer": ring, "inner": []}}, tiles, tmp_path, log=lambda *_: None)
-    (m,) = json.loads((tmp_path / "landmarks.json").read_text())  # the missing one is left out
+    m, t = json.loads((tmp_path / "landmarks.json").read_text())  # the missing one is left out
+    assert [f["osm"] for f in t["footprints"]] == ["relation/1"]  # of a list, the ones found
     assert m["centre"] == [200.0, 50.0] and m["axis_deg"] == 90.0 and m["ground_m"] == 7.0
     assert 255 < m["qibla_deg"] < 265  # Mecca from Abu Dhabi: west by south
     assert [b[0] for b in tiles[(0, 0)]["buildings"]] == [9]  # the box inside the footprint replaced
+    assert (m["footprints"][0]["height_m"], m["footprints"][0]["height_source"]) == (33, "height")  # and its height kept

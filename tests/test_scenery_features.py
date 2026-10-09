@@ -128,6 +128,7 @@ def test_landmark_parts_and_courtyard(tmp_path):
     assert len(shape["outer"]) == 8 and len(shape["inner"]) == 1 and len(shape["inner"][0]) == 8
     assert max(abs(v) for v in shape["inner"][0]) == pytest.approx(40, abs=0.2)
     parts = extract_parts(tmp_path / "t.osm", g, {"m": (0.0, 0.0, 150.0)})["m"]
-    ((x, z, d, top),) = parts["domes"]
-    assert (x, z, d, top) == (pytest.approx(70, abs=0.2), pytest.approx(-70, abs=0.2), pytest.approx(10, abs=0.2), 43.0)
+    (dome,) = parts["domes"]
+    assert (dome["x"], dome["z"], dome["d"], dome["top"]) == (pytest.approx(70, abs=0.2), pytest.approx(-70, abs=0.2), pytest.approx(10, abs=0.2), 43.0)
+    assert dome["min"] is None and parts["building_parts"] == []
     assert len(parts["pools"]) == 1 and len(parts["pools"][0]) == 8

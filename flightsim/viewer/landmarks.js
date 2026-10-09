@@ -1,145 +1,55 @@
-// Landmarks of a real-world region (its landmarks.json: OSM footprint, centre, long axis,
-// ground height and the dimensions from the region file; flightsim/world/scenery_build.py),
-// modelled simply so the city is recognisable: a grand mosque (white base, minarets, a
-// main dome toward the qibla and smaller domes), a leaning tower, a flat dome on four
-// piers, a central dome on a building. World frame: x east, y up, z south. Visual only.
+// Landmarks of a real-world region (its landmarks.json: OSM footprints, OSM's 3D parts,
+// centre, long axis, ground height and the dimensions from the region file;
+// flightsim/world/scenery_build.py), modelled after published descriptions so the city is
+// recognisable from the air: a grand mosque, a leaning diagrid tower, a perforated flat
+// dome over a museum city, palaces with domes, glass towers. Materials are physically
+// based and lit by an environment map of the sky; the landmark nearest the camera casts
+// sun shadows (on itself and on a shadow-only ground plane). Shared materials, patterns
+// and geometry: landmarkKit.js. Proportions marked "project choice" were not published.
+// World frame: x east, y up, z south. Visual only.
 
 import * as THREE from "three";
+import {
+  along, at, CLASSIC, facadeGlass, facadeStone, finialParts, flat, gold, inside, merge, mesh, ngon, ONION,
+  orientedBox, patched, poolWater, ringArea, ringCentre, spireParts, steel, stone, toShape, walls,
+} from "./landmarkKit.js";  // prettier-ignore
 
-const WHITE = new THREE.MeshLambertMaterial({ color: 0xf2f0ea });
-const SAND = new THREE.MeshLambertMaterial({ color: 0xd8bb8e });
-const GOLD = new THREE.MeshLambertMaterial({ color: 0xc8a24a });
-const GLASS = new THREE.MeshLambertMaterial({ color: 0x7f97a8 });
-const STEEL = new THREE.MeshLambertMaterial({ color: 0xc4c8cc, side: THREE.DoubleSide });
+const MARBLE = 0xe4ddd0;
+const PARAPET_M = 1.6; // (project choice)
 
-// A footprint ring [x0, z0, ...] extruded from y0 to y1, the top shifted by (sx, sz).
-function prism(ring, y0, y1, material, sx = 0, sz = 0) {
-  const pts = [];
-  for (let k = 0; k < ring.length; k += 2) pts.push(new THREE.Vector2(ring[k], -ring[k + 1])); // shape in (x, -z)
-  const geo = new THREE.ExtrudeGeometry(new THREE.Shape(pts), { depth: y1 - y0, bevelEnabled: false });
-  geo.rotateX(-Math.PI / 2); // shape plane to the ground, extrusion up
-  geo.translate(0, y0, 0);
-  if (sx || sz) {
-    const p = geo.attributes.position;
-    for (let i = 0; i < p.count; i++) {
-      const k = (p.getY(i) - y0) / (y1 - y0);
-      p.setX(i, p.getX(i) + sx * k);
-      p.setZ(i, p.getZ(i) + sz * k);
-    }
-    geo.computeVertexNormals();
-  }
-  return new THREE.Mesh(geo, material);
+// Pools (OSM natural=water on a landmark): dark glossy water a little above the ground.
+function pools(m) {
+  if (!m.pools?.length) return null;
+  const geo = new THREE.ShapeGeometry(m.pools.map((r) => toShape(r))).rotateX(-Math.PI / 2).translate(0, m.ground_m + 0.3, 0);
+  return mesh(geo, poolWater(), { cast: false });
 }
-
-// A dome: a drum up to `springY`, then a half-ellipsoid to `topY`, radius r, at (x, z).
-function dome(x, z, r, springY, topY, baseY, material, finial = true) {
-  const g = new THREE.Group();
-  const drum = new THREE.Mesh(new THREE.CylinderGeometry(r, r, springY - baseY, 24), material);
-  drum.position.set(x, (springY + baseY) / 2, z);
-  const cap = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), material);
-  cap.scale.set(1, (topY - springY) / r, 1);
-  cap.position.set(x, springY, z);
-  g.add(drum, cap);
-  if (finial) {
-    const f = new THREE.Mesh(new THREE.ConeGeometry(r * 0.06, r * 0.4, 8), GOLD);
-    f.position.set(x, topY + r * 0.2, z);
-    g.add(f);
-  }
-  return g;
-}
-
-// Unit vectors of a bearing (degrees from north, clockwise) in the world frame.
-const along = (deg) => [Math.sin((deg * Math.PI) / 180), -Math.cos((deg * Math.PI) / 180)];
 
 // --- Sheikh Zayed Grand Mosque ---------------------------------------------------------------
 // Layout from OSM (footprint with the courtyard as its inner ring, the domes as
-// building:part=dome with their heights, the pools) and the official site's figures (region
-// file); forms after the official descriptions: white marble, onion-shaped domes with
-// gold-glass crescent finials, minarets of square, octagonal and circular layers with
-// balconies and a gilded lantern at the courtyard's corners. Proportions marked "project
-// choice" were not published. Marble and gold are lit by an environment map of the sky
-// (Landmarks.setEnvironment).
+// building:part=dome with their heights, the pools); the official site's figures (region
+// file): white marble, onion-shaped domes with gold-glass crescent finials, minarets of
+// square, octagonal and circular layers with balconies and a gilded lantern at the
+// courtyard's corners, a courtyard with floral marble inlays.
 
 const ARCADE_BAY_M = 7; // arch spacing on the walls (project choice)
 const BULB_RATIO = 1.25; // onion height / radius (project choice)
 
-const marble = new THREE.MeshStandardMaterial({ color: 0xe4ddd0, roughness: 0.42, metalness: 0, envMapIntensity: 0.3 });
-const gold = new THREE.MeshStandardMaterial({ color: 0xe0b85a, roughness: 0.3, metalness: 1, envMapIntensity: 1.1 });
-const pool = new THREE.MeshStandardMaterial({ color: 0x0b2630, roughness: 0.06, metalness: 0, envMapIntensity: 0.9, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-
-// Marble walls with openings: a pointed (equilateral) arch per bay, dark inside. The
-// "facade" attribute: (along the wall m, up m, wall height m (negative: windows centred in
-// the height, for drums and minarets; positive: an arcade from near the floor), bay m (0:
-// plain)). Detail fades to its average with distance.
-const arcade = marble.clone();
-arcade.onBeforeCompile = (shader) => {
-  shader.vertexShader = shader.vertexShader
-    .replace("#include <common>", "#include <common>\nattribute vec4 facade;\nvarying vec4 vFacade;")
-    .replace("#include <begin_vertex>", "#include <begin_vertex>\nvFacade = facade;");
-  shader.fragmentShader = shader.fragmentShader
-    .replace(
-      "#include <common>",
-      `#include <common>
-varying vec4 vFacade;
-float archOpening(vec4 f) {
-  float bay = f.w, H = abs(f.z);
-  if (bay <= 0.0 || H <= 0.0) return 0.0;
-  float w = 0.6 * bay;
-  float tall = min(3.2 * w, 0.66 * H);
-  float sill = f.z > 0.0 ? 0.12 * H : 0.5 * (H - tall);
-  float apex = sill + tall;
-  float hs = apex - 0.866 * w;
-  if (hs < sill) { w = (apex - sill) / 0.866; hs = sill; }
-  float u = mod(f.x, bay) - 0.5 * bay, v = f.y;
-  if (abs(u) > 0.5 * w || v < sill || v > apex) return 0.0;
-  if (v < hs) return 1.0;
-  return (length(vec2(u - 0.5 * w, v - hs)) < w && length(vec2(u + 0.5 * w, v - hs)) < w) ? 1.0 : 0.0;
-}`,
-    )
-    .replace(
-      "#include <color_fragment>",
-      `#include <color_fragment>
-float mosqueDetail = 1.0 - smoothstep(0.06, 0.2, max(fwidth(vFacade.x), fwidth(vFacade.y)) / max(vFacade.w, 0.01));
-float mosqueOpen = vFacade.w > 0.0 ? mix(0.3, archOpening(vFacade), mosqueDetail) : 0.0;
-float mosqueH = abs(vFacade.z);
-diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.15, 0.16, 0.18) + 0.1 * (1.0 - vFacade.y / max(mosqueH, 1.0)), mosqueOpen);
-diffuseColor.rgb *= 1.0 - 0.22 * mosqueDetail * step(mosqueH - 2.6, vFacade.y) * step(vFacade.y, mosqueH - 1.8) * step(0.0, vFacade.z);`,
-    )
-    .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 1.0, mosqueOpen);");
-};
-arcade.customProgramCacheKey = () => "mosque-arcade";
-
 // The courtyard: white marble with coloured floral inlays, dense at the edges and thinning
 // toward the centre (after the official description; motif sizes project choices).
 function courtyardMaterial(box) {
-  const m = marble.clone();
-  m.roughness = 0.3;
-  m.polygonOffset = true;
-  m.polygonOffsetFactor = m.polygonOffsetUnits = -2;
-  const uniforms = { uC: { value: new THREE.Vector2(box.cx, box.cz) }, uA: { value: new THREE.Vector2(box.ux, box.uz) }, uHalf: { value: new THREE.Vector2(box.ha, box.hb) } };
-  m.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms);
-    shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nvarying vec2 vXZ;")
-      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvXZ = (modelMatrix * vec4(transformed, 1.0)).xz;");
-    shader.fragmentShader = shader.fragmentShader
-      .replace(
-        "#include <common>",
-        `#include <common>
-varying vec2 vXZ;
-uniform vec2 uC, uA, uHalf;
-vec2 floralHash(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }`,
-      )
-      .replace(
-        "#include <color_fragment>",
-        `#include <color_fragment>
-{
-  vec2 d = vXZ - uC;
+  return patched(
+    { color: 0xeae5dc, roughness: 0.3, metalness: 0, envMapIntensity: 0.3, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 },
+    {
+      key: "courtyard",
+      uniforms: { uC: { value: new THREE.Vector2(box.cx, box.cz) }, uA: { value: new THREE.Vector2(box.ux, box.uz) }, uHalf: { value: new THREE.Vector2(box.ha, box.hb) } },
+      head: "uniform vec2 uC, uA, uHalf;",
+      color: `{
+  vec2 d = vLmWorld.xz - uC;
   vec2 q = vec2(dot(d, uA), dot(d, vec2(-uA.y, uA.x)));
   float edge = min(uHalf.x - abs(q.x), uHalf.y - abs(q.y));
   float detail = 1.0 - smoothstep(0.5, 1.6, fwidth(q.x));
   float cell = 9.0;
-  vec2 id = floor(q / cell), h = floralHash(id);
+  vec2 id = floor(q / cell), h = vec2(lmHash(id), lmHash(id + 17.3));
   vec2 lc = (fract(q / cell) - 0.5) * cell - (h - 0.5) * 3.0;
   float prob = mix(0.9, 0.06, smoothstep(4.0, 0.45 * min(uHalf.x, uHalf.y), edge));
   float present = step(fract(h.x * 7.13), prob);
@@ -152,156 +62,47 @@ vec2 floralHash(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.24, 0.42, 0.22), leaf * present * detail);
   diffuseColor.rgb = mix(diffuseColor.rgb, col, petal * present * detail);
   diffuseColor.rgb *= 1.0 - 0.12 * step(1.0, edge) * step(edge, 2.2);
+  diffuseColor.rgb *= 0.97 + 0.05 * lmNoise(vLmWorld.xz * 0.2);
 }`,
-      );
-  };
-  m.customProgramCacheKey = () => "mosque-courtyard";
-  return m;
+    },
+  );
 }
-
-// Signed area of a ring [x0, z0, ...] (> 0: counter-clockwise in (x, z)).
-function ringArea(r) {
-  let a = 0;
-  for (let k = 0, n = r.length / 2; k < n; k++) {
-    const j = (k + 1) % n;
-    a += r[2 * k] * r[2 * j + 1] - r[2 * j] * r[2 * k + 1];
-  }
-  return a / 2;
-}
-
-// The oriented box of a ring along its longest edge: centre, unit axes, half extents.
-function orientedBox(r) {
-  const n = r.length / 2;
-  let best = 0, ux = 1, uz = 0;
-  for (let k = 0; k < n; k++) {
-    const j = (k + 1) % n, dx = r[2 * j] - r[2 * k], dz = r[2 * j + 1] - r[2 * k + 1], len = Math.hypot(dx, dz);
-    if (len > best) [best, ux, uz] = [len, dx / len, dz / len];
-  }
-  const vx = -uz, vz = ux;
-  let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
-  for (let k = 0; k < n; k++) {
-    const a = r[2 * k] * ux + r[2 * k + 1] * uz, b = r[2 * k] * vx + r[2 * k + 1] * vz;
-    [a0, a1, b0, b1] = [Math.min(a0, a), Math.max(a1, a), Math.min(b0, b), Math.max(b1, b)];
-  }
-  const ac = (a0 + a1) / 2, bc = (b0 + b1) / 2;
-  return { cx: ux * ac + vx * bc, cz: uz * ac + vz * bc, ux, uz, vx, vz, ha: (a1 - a0) / 2, hb: (b1 - b0) / 2 };
-}
-
-// Walls along a ring from y0 to y1 as non-indexed triangles with the facade attribute;
-// `out`: normals away from the ring's inside (an outer wall), else into it (a courtyard).
-function walls(ring, y0, y1, bay, centred = false, out = true) {
-  let r = ring;
-  if (ringArea(r) > 0 !== out) {
-    r = [];
-    for (let k = ring.length - 2; k >= 0; k -= 2) r.push(ring[k], ring[k + 1]);
-  }
-  const pos = [], nrm = [], fac = [], H = (y1 - y0) * (centred ? -1 : 1);
-  let along = 0;
-  for (let k = 0, n = r.length / 2; k < n; k++) {
-    const j = (k + 1) % n, ax = r[2 * k], az = r[2 * k + 1], bx = r[2 * j], bz = r[2 * j + 1];
-    const len = Math.hypot(bx - ax, bz - az);
-    if (len < 0.01) continue;
-    const nx = (bz - az) / len, nz = -(bx - ax) / len; // outward for a counter-clockwise ring (featureGeometry.js)
-    const v = [[ax, y0, az, along, 0], [ax, y1, az, along, y1 - y0], [bx, y0, bz, along + len, 0], [bx, y0, bz, along + len, 0], [ax, y1, az, along, y1 - y0], [bx, y1, bz, along + len, y1 - y0]];
-    for (const [x, y, z, s, t] of v) {
-      pos.push(x, y, z);
-      nrm.push(nx, 0, nz);
-      fac.push(s, t, H, bay);
-    }
-    along += len;
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute("normal", new THREE.Float32BufferAttribute(nrm, 3));
-  g.setAttribute("facade", new THREE.Float32BufferAttribute(fac, 4));
-  return g;
-}
-
-// A regular n-gon ring of radius r around (x, z), rotated by `rot` radians.
-function ngon(x, z, r, n, rot = 0) {
-  const out = [];
-  for (let k = 0; k < n; k++) out.push(x + r * Math.cos(rot + (2 * Math.PI * k) / n), z + r * Math.sin(rot + (2 * Math.PI * k) / n));
-  return out;
-}
-
-// One geometry from several (position, normal and, when any has it, facade).
-function merge(geos) {
-  const parts = geos.map((g) => (g.index ? g.toNonIndexed() : g));
-  const withFacade = parts.some((g) => g.attributes.facade);
-  const count = parts.reduce((s, g) => s + g.attributes.position.count, 0);
-  const pos = new Float32Array(count * 3), nrm = new Float32Array(count * 3), fac = withFacade ? new Float32Array(count * 4) : null;
-  let o = 0;
-  for (const g of parts) {
-    const c = g.attributes.position.count;
-    pos.set(g.attributes.position.array, o * 3);
-    nrm.set(g.attributes.normal.array, o * 3);
-    if (fac && g.attributes.facade) fac.set(g.attributes.facade.array, o * 4);
-    o += c;
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  g.setAttribute("normal", new THREE.BufferAttribute(nrm, 3));
-  if (fac) g.setAttribute("facade", new THREE.BufferAttribute(fac, 4));
-  for (const p of parts) p.dispose();
-  return g;
-}
-
-// Onion dome of unit radius and height (base at 0, tip at 1); profile a project choice.
-const ONION = [[1.0, 0], [1.06, 0.1], [1.1, 0.22], [1.09, 0.33], [1.02, 0.45], [0.88, 0.57], [0.68, 0.69], [0.46, 0.8], [0.26, 0.89], [0.1, 0.96], [0.0, 1.0]].map(([r, y]) => new THREE.Vector2(r, y));
-
-// Crescent finial of unit height: spire, ball and an upright crescent opening upward.
-function finialParts() {
-  const spire = new THREE.CylinderGeometry(0.04, 0.07, 0.62, 8).translate(0, 0.31, 0);
-  const ball = new THREE.SphereGeometry(0.1, 12, 8).translate(0, 0.42, 0);
-  const crescent = new THREE.TorusGeometry(0.2, 0.045, 6, 20, 1.5 * Math.PI).rotateZ(0.75 * Math.PI).translate(0, 0.8, 0);
-  return [spire, ball, crescent];
-}
-
-const at = (g, x, y, z, sx, sy = sx, sz = sx) => g.applyMatrix4(new THREE.Matrix4().makeTranslation(x, y, z).multiply(new THREE.Matrix4().makeScale(sx, sy, sz)));
 
 function grandMosque(m) {
   const g = new THREE.Group(), y0 = m.ground_m, roof = y0 + m.roof_m;
   const court = (m.inner ?? []).reduce((a, r) => (Math.abs(ringArea(r)) > Math.abs(ringArea(a ?? [])) ? r : a), null);
-  const wallGeos = [walls(m.ring, y0 - 0.5, roof, ARCADE_BAY_M)];
-  for (const r of m.inner ?? []) wallGeos.push(walls(r, y0 - 0.5, roof, ARCADE_BAY_M, false, false));
-  // Roof with the courtyard open.
-  const toShape = (r, C) => {
-    const s = new C();
-    for (let k = 0; k < r.length; k += 2) (k ? s.lineTo(r[k], -r[k + 1]) : s.moveTo(r[k], -r[k + 1]));
-    return s;
-  };
-  const shape = toShape(m.ring, THREE.Shape);
-  for (const r of m.inner ?? []) shape.holes.push(toShape(r, THREE.Path));
-  const roofGeo = new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2).translate(0, roof, 0);
-  const plain = [roofGeo], golden = [];
-
-  // Domes: OSM's parts; the largest gets the official size. Drum from the roof to the
-  // onion's spring; finial on top.
-  const domes = (m.domes ?? []).map((d) => [...d]);
-  if (domes.length) {
-    const main = domes.reduce((a, d) => (d[2] > a[2] ? d : a));
-    main[2] = m.dome_diameter_m;
-    main[3] = m.dome_top_m;
+  const wallGeos = [walls(m.ring, y0 - 0.5, roof, ARCADE_BAY_M), walls(m.ring, roof, roof + PARAPET_M, 0), walls(m.ring, roof, roof + PARAPET_M, 0, { out: false })];
+  for (const r of m.inner ?? []) {
+    wallGeos.push(walls(r, y0 - 0.5, roof, ARCADE_BAY_M, { out: false }), walls(r, roof, roof + PARAPET_M, 0, { out: false }), walls(r, roof, roof + PARAPET_M, 0));
   }
-  for (const [x, z, d, top] of domes) {
+  const plain = [flat(m.ring, m.inner, roof)], golden = [];
+
+  // Domes: OSM's parts; the largest gets the official size. A drum from the roof to the
+  // onion's spring, with a cornice where the onion starts; the finial on top.
+  const domes = (m.domes ?? []).filter((d) => d.top).map((d) => ({ ...d }));
+  if (domes.length) Object.assign(domes.reduce((a, d) => (d.d > a.d ? d : a)), { d: m.dome_diameter_m, top: m.dome_top_m });
+  for (const { x, z, d, top } of domes) {
     const r = d / 2, f = Math.max(1.2, 0.3 * r), tip = y0 + top - f;
     const spring = Math.max(roof, tip - BULB_RATIO * r);
     plain.push(at(new THREE.LatheGeometry(ONION, 28), x, spring, z, r, tip - spring, r));
-    if (spring - roof > 0.3) wallGeos.push(walls(ngon(x, z, r, Math.max(8, Math.round((2 * Math.PI * r) / 2.6))), roof - 0.2, spring, (2 * Math.PI * r) / Math.max(8, Math.round((2 * Math.PI * r) / 2.6)), true));
+    if (spring - roof > 0.3) {
+      const n = Math.max(8, Math.round((2 * Math.PI * r) / 2.6));
+      wallGeos.push(walls(ngon(x, z, r, n), roof - 0.2, spring, (2 * Math.PI * r) / n, { centred: true }));
+      plain.push(at(new THREE.CylinderGeometry(r * 1.06, r * 1.02, Math.max(0.4, 0.07 * r), 28), x, spring, z, 1));
+    }
     for (const p of finialParts()) golden.push(at(p, x, tip - 0.05 * f, z, f));
   }
 
   // Minarets at the courtyard's corners: a square base, an octagon, a cylinder, a gilded
   // lantern and an onion with its finial; balconies between (proportions project choices).
   if (court) {
-    const b = orientedBox(court), H = m.minaret_m;
-    const rot = Math.atan2(b.uz, b.ux);
+    const b = orientedBox(court), H = m.minaret_m, rot = Math.atan2(b.uz, b.ux);
     for (const [sa, sb] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
       const x = b.cx + b.ux * sa * b.ha + b.vx * sb * b.hb, z = b.cz + b.uz * sa * b.ha + b.vz * sb * b.hb;
       const levels = [0.3, 0.6, 0.78, 0.86].map((k) => y0 + k * H);
-      wallGeos.push(walls(ngon(x, z, 5 * Math.SQRT2, 4, rot + Math.PI / 4), y0 - 0.5, levels[0], 4, true));
-      wallGeos.push(walls(ngon(x, z, 4.3, 8, rot + Math.PI / 8), levels[0], levels[1], 3.3, true));
-      wallGeos.push(walls(ngon(x, z, 3.4, 16, rot), levels[1], levels[2], 2.6, true));
+      wallGeos.push(walls(ngon(x, z, 5 * Math.SQRT2, 4, rot + Math.PI / 4), y0 - 0.5, levels[0], 4, { centred: true }));
+      wallGeos.push(walls(ngon(x, z, 4.3, 8, rot + Math.PI / 8), levels[0], levels[1], 3.3, { centred: true }));
+      wallGeos.push(walls(ngon(x, z, 3.4, 16, rot), levels[1], levels[2], 2.6, { centred: true }));
       for (const [y, rb] of [[levels[0], 6.2], [levels[1], 5.3], [levels[2], 4.4]]) {
         plain.push(at(new THREE.CylinderGeometry(rb, rb * 0.8, 1.4, 16), x, y + 0.2, z, 1));
       }
@@ -310,74 +111,325 @@ function grandMosque(m) {
       plain.push(at(new THREE.LatheGeometry(ONION, 16), x, levels[3], z, 3, tip - levels[3], 3));
       for (const p of finialParts()) golden.push(at(p, x, tip - 0.1, z, f));
     }
-    const floor = new THREE.ShapeGeometry(toShape(court, THREE.Shape)).rotateX(-Math.PI / 2).translate(0, y0 + 0.35, 0);
-    g.add(new THREE.Mesh(floor, courtyardMaterial(b)));
+    g.add(mesh(flat(court, [], y0 + 0.35), courtyardMaterial(b), { cast: false }));
   }
-  g.add(new THREE.Mesh(merge(wallGeos), arcade), new THREE.Mesh(merge(plain), marble), new THREE.Mesh(merge(golden), gold));
-  if (m.pools?.length) {
-    const pools = new THREE.ShapeGeometry(m.pools.map((r) => toShape(r, THREE.Shape))).rotateX(-Math.PI / 2).translate(0, y0 + 0.3, 0);
-    g.add(new THREE.Mesh(pools, pool));
-  }
+  g.add(mesh(merge(wallGeos), facadeStone(MARBLE, { pattern: "arch" })), mesh(merge(plain), stone(MARBLE, { roughness: 0.42 })), mesh(merge(golden), gold()));
+  const water = pools(m);
+  if (water) g.add(water);
   return g;
 }
 
+// --- Capital Gate -----------------------------------------------------------------------------
+// The OSM footprint carried up 160 m: floors stacked vertically to the 12th storey, then
+// leaning on a smooth curve so the top sits where an 18 degree average lean puts it (the
+// curve's shape is a project choice). The facade is a diagrid of diamond glass panels:
+// their count (about 700) and the facade's area give their size (two storeys high). A
+// stainless steel "splash" runs from the facade down over the grandstand to the entrance
+// canopy (its course and size project choices).
+
 function leaningTower(m) {
-  const [dx, dz] = along(m.lean_toward_deg);
-  const shift = Math.tan((m.lean_deg * Math.PI) / 180) * m.height_m;
-  return prism(m.ring, m.ground_m, m.ground_m + m.height_m, GLASS, dx * shift, dz * shift);
+  const g = new THREE.Group(), H = m.height_m, y0 = m.ground_m, storey = H / m.storeys, yv = m.vertical_storeys * storey;
+  const shift = Math.tan((m.lean_deg * Math.PI) / 180) * H, k = shift / (H - yv) ** 2;
+  const [lx, lz] = along(m.lean_toward_deg);
+  const offset = (y) => {
+    const t = Math.max(0, y - y0 - yv);
+    return [lx * k * t * t, lz * k * t * t];
+  };
+  let perimeter = 0;
+  for (let i = 0, n = m.ring.length / 2; i < n; i++) {
+    const j = (i + 1) % n;
+    perimeter += Math.hypot(m.ring[2 * j] - m.ring[2 * i], m.ring[2 * j + 1] - m.ring[2 * i + 1]);
+  }
+  const diamondH = 2 * storey, diamondW = (2 * ((perimeter * H) / m.diagrid_panels)) / diamondH;
+  g.add(mesh(walls(m.ring, y0 - 0.5, y0 + H, diamondW, { offset, rowM: storey / 2 }), facadeGlass("diagrid", { diamondM: diamondH, color: 0x56737f })));
+  const [tx, tz] = offset(y0 + H);
+  g.add(mesh(flat(m.ring, [], y0 + H, tx, tz), stone(0x8d9398, { roughness: 0.7 })));
+
+  // The splash: a curved steel sheet from the facade at 45 % of the height, falling
+  // steeply and then flattening into a canopy 10 m above the ground, 95 m out.
+  const [dx, dz] = along(m.splash_toward_deg), [px, pz] = [-dz, dx];
+  const [cx, cz] = ringCentre(m.ring);
+  let reach = 0;
+  for (let i = 0; i < m.ring.length; i += 2) reach = Math.max(reach, (m.ring[i] - cx) * dx + (m.ring[i + 1] - cz) * dz);
+  const yS = 0.45 * H, [ox, oz] = offset(y0 + yS), start = reach + 1 + ox * dx + oz * dz;
+  const N = 28, M = 6, pos = [], idx = [];
+  for (let i = 0; i <= N; i++) {
+    const t = i / N, dist = start + (95 - start) * t, y = y0 + 10 + (yS - 10) * (1 - t) ** 2, w = 22 - 8 * t;
+    const sideX = ox - (ox * dx + oz * dz) * dx, sideZ = oz - (ox * dx + oz * dz) * dz; // the lean across the splash
+    for (let j = 0; j <= M; j++) {
+      const s = j / M - 0.5, sag = 1.6 * (1 - 4 * s * s);
+      pos.push(cx + sideX * (1 - t) + dx * dist + px * s * w, y + sag, cz + sideZ * (1 - t) + dz * dist + pz * s * w);
+      if (i < N && j < M) {
+        const a = i * (M + 1) + j;
+        idx.push(a, a + M + 1, a + 1, a + 1, a + M + 1, a + M + 2);
+      }
+    }
+  }
+  const splash = new THREE.BufferGeometry();
+  splash.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  splash.setIndex(idx);
+  splash.computeVertexNormals();
+  g.add(mesh(splash, steel(THREE.DoubleSide)));
+  return g;
+}
+
+// --- Louvre Abu Dhabi -----------------------------------------------------------------------
+// A shallow dome 180 m across on four piers 110 m apart; its rim (a 5 m steel frame) at
+// OSM's dome part's min_height and its top at min_height + roof:height. Two perforated
+// shells (stainless steel outside, aluminium inside) stand for the eight layers of stars,
+// so sunlight falls through in spots ("rain of light", also in the shadow pass). Under it
+// a museum city of white buildings on the land of the OSM footprint (layout, sizes and
+// heights project choices; the count from louvreabudhabi.ae).
+
+const STAR = `
+float lmStar(vec2 p, float cell, float rot) {
+  float c = cos(rot), s = sin(rot);
+  p = mat2(c, -s, s, c) * p;
+  vec2 q = (fract(p / cell) - 0.5) * cell;
+  float sq1 = max(abs(q.x), abs(q.y));
+  float sq2 = max(abs(q.x + q.y), abs(q.x - q.y)) * 0.70710678;
+  return min(sq1, sq2) - 0.3 * cell; // < 0: inside an eight-pointed star (an opening)
+}`;
+
+// A perforated shell: star openings where they are a few pixels or more across (and in
+// the shadow map); beyond that the pattern stays as shading (the frame around each star
+// darker), averaging out with distance.
+function perforated(color, cell, rot) {
+  const c = cell.toFixed(2), holes = `if (lmStar(vLmWorld.xz, ${c}, ${rot.toFixed(3)}) < 0.0 && fwidth(vLmWorld.x) < ${(cell * 0.12).toFixed(3)}) discard;`;
+  const shade = `{
+  float st = lmStar(vLmWorld.xz, ${c}, ${rot.toFixed(3)}), pw = fwidth(vLmWorld.x);
+  float near = smoothstep(-0.2 * ${c}, 0.15 * ${c}, st) * 0.4 + 0.6;
+  diffuseColor.rgb *= mix(near, 0.78, smoothstep(${c} * 0.05, ${c} * 0.3, pw));
+}`;
+  const mat = patched({ color, roughness: 0.42, metalness: 1, envMapIntensity: 0.9, side: THREE.DoubleSide }, { key: `star-${cell}`, head: STAR, color: `${holes}\n${shade}` });
+  const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, side: THREE.DoubleSide });
+  depth.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vLmWorld;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvLmWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", `#include <common>\nvarying vec3 vLmWorld;\n${STAR}`)
+      .replace("void main() {", `void main() {\n${holes}`);
+  };
+  depth.customProgramCacheKey = () => `star-depth-${cell}`;
+  return [mat, depth];
+}
+
+function hash2(i, j) {
+  const s = Math.sin(i * 127.1 + j * 311.7) * 43758.5453;
+  return s - Math.floor(s);
 }
 
 function flatDome(m) {
-  const g = new THREE.Group(), [cx, cz] = m.centre, r = m.dome_diameter_m / 2;
-  const [ux, uz] = along(m.axis_deg), [vx, vz] = [-uz, ux], h = m.pier_spacing_m / 2, top = m.ground_m + m.dome_top_m;
-  // A shallow spherical cap (the sphere of radius R through the rim r: rise = 0.12 r,
-  // project choice) on a 4 m deep rim, on four piers.
-  const rise = 0.12 * r, R = (r * r + rise * rise) / (2 * rise), theta = Math.asin(r / R);
-  const edge = top - rise;
-  const shell = new THREE.Mesh(new THREE.SphereGeometry(R, 64, 8, 0, Math.PI * 2, 0, theta), STEEL);
-  shell.position.set(cx, top - R, cz);
-  const rim = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 4, 64, 1, true), STEEL);
-  rim.position.set(cx, edge - 2, cz);
+  const g = new THREE.Group(), y0 = m.ground_m;
+  const part = (m.domes ?? []).reduce((a, d) => (!a || d.d > a.d ? d : a), null);
+  const [cx, cz] = part ? [part.x, part.z] : m.centre;
+  const r = m.dome_diameter_m / 2;
+  const rimLow = y0 + (part?.min ?? 10), rimTop = rimLow + m.frame_m;
+  const rise = part?.roof_h ? Math.max(4, part.roof_h - m.frame_m) : 0.12 * r;
+  const R = (r * r + rise * rise) / (2 * rise), theta = Math.asin(r / R);
+  const cap = (lift) => new THREE.SphereGeometry(R, 96, 10, 0, Math.PI * 2, 0, theta).translate(cx, rimTop + lift + rise - R, cz);
+  const [outerMat, outerDepth] = perforated(0xaeb3b8, 4.6, 0.0);
+  const [innerMat, innerDepth] = perforated(0xc9ccd0, 3.3, 0.39);
+  const outer = mesh(cap(0), outerMat), inner = mesh(cap(-2.5), innerMat);
+  outer.customDepthMaterial = outerDepth;
+  inner.customDepthMaterial = innerDepth;
+  const rimMat = steel(THREE.DoubleSide);
+  rimMat.color.setHex(0x80868c);
+  const rim = mesh(new THREE.CylinderGeometry(r, r, m.frame_m, 96, 1, true).translate(cx, (rimLow + rimTop) / 2, cz), rimMat);
+  g.add(outer, inner, rim);
+
+  // Piers and the museum city.
+  const [ux, uz] = along(m.axis_deg), [vx, vz] = [-uz, ux], h = m.pier_spacing_m / 2;
+  const white = [], roofs = [];
   for (const [a, b] of [[-h, -h], [-h, h], [h, -h], [h, h]]) {
-    const pier = new THREE.Mesh(new THREE.BoxGeometry(5, edge - 4 - m.ground_m, 5), WHITE);
-    pier.position.set(cx + ux * a + vx * b, (m.ground_m + edge - 4) / 2, cz + uz * a + vz * b);
-    g.add(pier);
+    white.push(walls(ngon(cx + ux * a + vx * b, cz + uz * a + vz * b, 4, 4, Math.atan2(uz, ux) + Math.PI / 4), y0 - 0.5, rimLow, 0));
   }
-  g.add(shell, rim);
+  const cand = [], step = 24;
+  for (let i = -5; i <= 5; i++) {
+    for (let j = -5; j <= 5; j++) {
+      const a = i * step + (hash2(i, j) - 0.5) * 8, b = j * step + (hash2(j, i) - 0.5) * 8;
+      const x = cx + ux * a + vx * b, z = cz + uz * a + vz * b;
+      if (Math.hypot(a, b) > r * 0.92 || !inside(x, z, m.ring)) continue;
+      cand.push({ x, z, key: hash2(i + 31, j + 7), w: 10 + 10 * hash2(i + 3, j), d: 10 + 10 * hash2(i, j + 5), hgt: 6 + 10 * hash2(i + 9, j + 2) });
+    }
+  }
+  cand.sort((p, q) => p.key - q.key);
+  for (const c of cand.slice(0, m.museum_buildings)) {
+    const ring = [];
+    for (const [sa, sb] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) ring.push(c.x + ux * sa * c.w * 0.5 + vx * sb * c.d * 0.5, c.z + uz * sa * c.w * 0.5 + vz * sb * c.d * 0.5);
+    white.push(walls(ring, y0 - 0.5, y0 + c.hgt, 0));
+    roofs.push(flat(ring, [], y0 + c.hgt));
+  }
+  g.add(mesh(merge(white), facadeStone(0xf1eee8, { roughness: 0.8, jointM: 2.4 })), mesh(merge(roofs), stone(0xeeebe5, { roughness: 0.85 })));
   return g;
 }
 
-function centralDome(m) {
-  const [cx, cz] = m.centre, r = m.dome_diameter_m / 2, base = m.ground_m + m.roof_m;
-  return dome(cx, cz, r, m.ground_m + m.dome_top_m - r * 1.1, m.ground_m + m.dome_top_m, base, SAND);
+// --- Palaces (Emirates Palace, Qasr Al Watan) ---------------------------------------------------
+// The OSM footprint (courtyards from its inner rings) at the region file's roof height or
+// OSM's height for it, walls with storeys of arched windows (4.2 m storeys, 4.5 m bays:
+// project choices) and a parapet; OSM's taller building parts; OSM's domes (raised domes
+// on drums with a spire finial), the largest at the published size (at the footprint's
+// centre when OSM maps no domes); the pools. Emirates Palace's main dome is gold and
+// silver glass mosaic; domes OSM tags golden are gilded.
+
+function mosaic(cx, cy, cz) {
+  return patched(
+    { color: 0xe3bf62, roughness: 0.24, metalness: 1, envMapIntensity: 1.1 },
+    {
+      key: "mosaic",
+      uniforms: { uC: { value: new THREE.Vector3(cx, cy, cz) } },
+      head: "uniform vec3 uC;",
+      color: `{
+  vec3 d = vLmWorld - uC;
+  vec2 p = vec2(atan(d.z, d.x) * 16.0 / 3.14159265, d.y / 2.4);
+  float lat = abs(fract(p.x + p.y + 0.5) - 0.5) + abs(fract(p.x - p.y + 0.5) - 0.5);
+  float det = 1.0 - smoothstep(0.15, 0.45, fwidth(p.x));
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.8, 0.82, 0.85), step(lat, 0.32) * det * 0.9);
+}`,
+    },
+  );
 }
 
-const BUILDERS = { grand_mosque: grandMosque, leaning_tower: leaningTower, flat_dome: flatDome, central_dome: centralDome };
+function palace(m) {
+  const g = new THREE.Group(), y0 = m.ground_m;
+  const colour = m.colour === "white" ? 0xece8df : 0xd5b48a;
+  const fp = m.footprints?.[0] ?? { ring: m.ring, inner: m.inner, height_m: null };
+  const roofH = m.roof_m ?? fp.height_m ?? 20, roof = y0 + roofH;
+  const wallGeos = [walls(fp.ring, y0 - 0.5, roof, 4.5), walls(fp.ring, roof, roof + PARAPET_M, 0, { out: false })];
+  for (const r of fp.inner ?? []) wallGeos.push(walls(r, y0 - 0.5, roof, 4.5, { out: false }), walls(r, roof, roof + PARAPET_M, 0));
+  const plain = [flat(fp.ring, fp.inner, roof)];
+  for (const p of m.building_parts ?? []) {
+    const top = p.top ?? (p.levels ? p.levels * 4.2 : null);
+    if (!top || top < roofH + 2) continue;
+    wallGeos.push(walls(p.ring, y0 + (p.min ?? 0) - 0.5, y0 + top, 4.5));
+    plain.push(flat(p.ring, [], y0 + top));
+  }
+  const domes = (m.domes ?? []).map((d) => ({ ...d }));
+  let main = domes.reduce((a, d) => (!a || d.d > a.d ? d : a), null);
+  if (!main && m.dome_diameter_m) domes.push((main = { x: m.centre[0], z: m.centre[1] }));
+  if (main) Object.assign(main, { d: m.dome_diameter_m, top: m.dome_top_m, min: null, main: true });
+  const gilded = [], finials = [], domeGeos = [];
+  for (const d of domes) {
+    const r = d.d / 2, base = y0 + (d.min ?? roofH);
+    const top = y0 + (d.top ?? roofH + 1.7 * r), f = Math.max(1, 0.22 * r), tip = top - f;
+    const spring = Math.max(base, tip - 0.95 * r);
+    if (spring - base > 0.3) {
+      const n = Math.max(8, Math.round((2 * Math.PI * r) / 3));
+      wallGeos.push(walls(ngon(d.x, d.z, r, n), base - 0.2, spring, (2 * Math.PI * r) / n, { centred: true }));
+      plain.push(at(new THREE.CylinderGeometry(r * 1.07, r * 1.03, Math.max(0.5, 0.08 * r), 32), d.x, spring, d.z, 1));
+    }
+    const geo = at(new THREE.LatheGeometry(CLASSIC, 32), d.x, spring, d.z, r, tip - spring, r);
+    if (d.main && m.mosaic) g.add(mesh(geo, mosaic(d.x, spring, d.z)));
+    else if (/gold/i.test(d.colour ?? "")) gilded.push(geo);
+    else domeGeos.push(geo);
+    for (const p of spireParts()) finials.push(at(p, d.x, tip - 0.05 * f, d.z, f));
+  }
+  g.add(mesh(merge(wallGeos), facadeStone(colour, { pattern: "storeys", glazed: true, storeyM: 4.2, jointM: 1.5 })));
+  g.add(mesh(merge(plain), stone(colour, { roughness: 0.6 })));
+  if (domeGeos.length) g.add(mesh(merge(domeGeos), stone(colour, { roughness: 0.5 })));
+  if (gilded.length) g.add(mesh(merge(gilded), gold()));
+  if (finials.length) g.add(mesh(merge(finials), gold()));
+  const water = pools(m);
+  if (water) g.add(water);
+  return g;
+}
+
+// --- Glass towers (Etihad Towers) -----------------------------------------------------------
+// Each OSM footprint at OSM's height for it, in mirror-like glass with mullions and
+// spandrel bands (3.9 m storeys, 1.6 m mullions: project choices).
+
+function glassTowers(m) {
+  const g = new THREE.Group(), y0 = m.ground_m;
+  const geos = [], roofs = [];
+  for (const fp of m.footprints ?? []) {
+    const h = fp.height_m ?? 150;
+    geos.push(walls(fp.ring, y0 - 0.5, y0 + h, 1.6));
+    roofs.push(flat(fp.ring, [], y0 + h));
+  }
+  g.add(mesh(merge(geos), facadeGlass("curtain", { storeyM: 3.9, color: 0x4f6f7d })), mesh(merge(roofs), stone(0x7d848a, { roughness: 0.7 })));
+  return g;
+}
+
+const BUILDERS = { grand_mosque: grandMosque, leaning_tower: leaningTower, flat_dome: flatDome, palace, glass_towers: glassTowers };
+
+// --- Landmarks ---------------------------------------------------------------------------------
+
+const SHADOW_MAP = 2048;
 
 export class Landmarks {
   constructor(scene) {
     this.group = new THREE.Group();
     scene.add(this.group);
+    this.sites = []; // per landmark: the centre {x, y, z} and the half size R its shadow covers
+    this.shadowSite = null;
   }
 
   build(list) {
     this.clear();
     for (const m of list ?? []) {
       const make = BUILDERS[m.kind];
-      if (make) this.group.add(make(m));
+      if (!make) continue;
+      const g = make(m);
+      this.group.add(g);
+      const box = new THREE.Box3().setFromObject(g), c = box.getCenter(new THREE.Vector3()), s = box.getSize(new THREE.Vector3());
+      const R = Math.max(Math.max(s.x, s.z) / 2, 0.9 * s.y) + 25;
+      const shadowOnly = new THREE.ShadowMaterial({ opacity: 0.42, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+      g.add(mesh(new THREE.PlaneGeometry(2 * R, 2 * R).rotateX(-Math.PI / 2).translate(c.x, m.ground_m + 0.12, c.z), shadowOnly, { cast: false }));
+      this.sites.push({ x: c.x, y: m.ground_m + s.y / 3, z: c.z, R });
     }
+  }
+
+  // Sun shadows for the landmark nearest the camera: the sun (a directional light: only
+  // its direction lights the scene) is moved so its shadow camera frames that landmark.
+  update(cameraPos, sun, sunDir) {
+    if (!this.sites.length) {
+      if (sun.castShadow) {
+        sun.castShadow = false;
+        sun.target.position.set(0, 0, 0);
+        sun.target.updateMatrixWorld();
+        sun.position.copy(sunDir).multiplyScalar(10000);
+      }
+      return;
+    }
+    let best = null, bd = Infinity;
+    for (const s of this.sites) {
+      const d = Math.hypot(cameraPos.x - s.x, cameraPos.z - s.z) - s.R;
+      if (d < bd) [best, bd] = [s, d];
+    }
+    if (!sun.castShadow) {
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
+      sun.shadow.bias = -0.0003;
+      sun.shadow.normalBias = 0.4;
+    }
+    if (best !== this.shadowSite) {
+      this.shadowSite = best;
+      const cam = sun.shadow.camera;
+      [cam.left, cam.right, cam.top, cam.bottom] = [-best.R, best.R, best.R, -best.R];
+      cam.near = 1;
+      cam.far = 4 * best.R + 200;
+      cam.updateProjectionMatrix();
+    }
+    sun.target.position.set(best.x, best.y, best.z);
+    sun.target.updateMatrixWorld();
+    sun.position.copy(sun.target.position).addScaledVector(sunDir, 2 * best.R + 100);
   }
 
   clear() {
     this.group.traverse((o) => {
       o.geometry?.dispose();
-      if (o.material?.customProgramCacheKey?.() === "mosque-courtyard") o.material.dispose();
+      o.material?.dispose();
+      o.customDepthMaterial?.dispose();
     });
     this.group.clear();
+    this.sites = [];
+    this.shadowSite = null;
   }
 
   // An environment map of the current sky (and a sand-coloured ground below the horizon)
-  // for the marble, gold and pools; again after the time of day or the renderer changes.
+  // for the stone, metal, glass and water; again after the time of day or the renderer
+  // changes.
   setEnvironment(renderer, sky) {
     if (!this.group.children.length) return;
     const pm = new THREE.PMREMGenerator(renderer);
@@ -393,12 +445,10 @@ export class Landmarks {
     pm.dispose();
     this.envTarget?.dispose();
     this.envTarget = target;
-    const mats = new Set([marble, gold, pool, arcade]);
-    this.group.traverse((o) => o.material && mats.add(o.material));
-    for (const m of mats) {
-      if (!(m instanceof THREE.MeshStandardMaterial)) continue;
-      m.envMap = target.texture;
-      m.needsUpdate = true;
-    }
+    this.group.traverse((o) => {
+      if (!(o.material instanceof THREE.MeshStandardMaterial)) return;
+      o.material.envMap = target.texture;
+      o.material.needsUpdate = true;
+    });
   }
 }
