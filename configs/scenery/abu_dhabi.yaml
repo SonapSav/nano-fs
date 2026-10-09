@@ -31,6 +31,17 @@ sources:
     - "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium"
     - "© OpenStreetMap contributors (ODbL)"
 
+# Published airfield data where OSM lacks or disagrees (OSM gives positions and numbers).
+# Runways without a width here or in OSM get default_runway_width_m.
+airports:
+  OMAD:
+    # Wikipedia "Al Bateen Executive Airport" (16 ft) and SkyVector OMAD (18 ft; runway
+    # 3202 x 45 m asphalt), retrieved 2026-10-09.
+    elevation_ft: 16
+    runways:
+      13/31: {length_m: 3202, width_m: 45}
+default_runway_width_m: 30  # project choice for runways of unknown width
+
 # sha256 of each source file, filled in after the first download (scripts/build_scenery.py
 # --pin): a changed file stops the build.
 pinned:

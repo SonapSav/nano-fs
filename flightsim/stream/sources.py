@@ -21,6 +21,7 @@ from flightsim.envs.approach import approach_geometry
 from flightsim.envs.config import env_config_from_raw
 from flightsim.envs.policies import PIDPolicy
 from flightsim.stream.protocol import frame_row
+from flightsim.world.geo import Geodesy
 
 
 @dataclass
@@ -51,6 +52,14 @@ class Source:
         raise NotImplementedError
 
 
+def _world(env) -> dict:
+    """The stream's `world`: the map (geodesy) and, over a real-world region, its scenery."""
+    world = env.cfg.geodesy.as_dict()
+    if env.ground.scenery is not None:
+        world["scenery"] = dict(env.ground.scenery)
+    return world
+
+
 def _logged_episode(meta: dict, seed: int | None):
     """The task environment of a log, reset with its seed (None if the config cannot be
     read, e.g. logs from older code). Replays use it for what the log does not carry:
@@ -62,8 +71,8 @@ def _logged_episode(meta: dict, seed: int | None):
         env = make_env(env_config_from_raw(raw))
         env.reset(seed=seed)
         return env
-    except (ValueError, KeyError, TypeError):
-        return None
+    except (ValueError, KeyError, TypeError, FileNotFoundError):
+        return None  # FileNotFoundError: a real-world region that is not built here
 
 
 def _logged_approach(meta: dict, seed: int | None, env=None) -> dict | None:
@@ -100,6 +109,13 @@ class ReplaySource(Source):
             self.visual = env.visual_conditions()
             t = env.targets
             self.targets = {"alt_msl_m": t.alt_msl_m, "heading_rad": t.heading_rad, "tas_mps": t.tas_mps}
+        else:  # e.g. a real-world region that is not built here: the map from the config alone
+            try:
+                self.world = Geodesy.from_config(json.loads(meta.get("flightsim.config_json", "null")).get("world")).as_dict()
+            except (ValueError, KeyError, TypeError, AttributeError):
+                self.world = None
+        if meta.get("flightsim.scenery") and self.world is not None:
+            self.world["scenery"] = json.loads(meta["flightsim.scenery"])
 
     def seek(self, t_s: float) -> None:
         """Continue from the first row at or after t_s (clamped to the log), also while
@@ -136,7 +152,7 @@ class LiveSource(Source):
         self.approach = self._env.approach_info() if hasattr(self._env, "approach_info") else None
         self.takeoff = self._env.runway_info() if hasattr(self._env, "runway_info") else None
         self.visual = self._env.visual_conditions()
-        self.world = env_cfg.geodesy.as_dict()
+        self.world = _world(self._env)
         self.route = self._env.route_info() if hasattr(self._env, "route_info") else None
         self._config_hash = env_cfg.config_hash
 

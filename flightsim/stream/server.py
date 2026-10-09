@@ -29,6 +29,7 @@ from flightsim.envs.policies import ApproachPolicy, CircuitPolicy, LQRPolicy, PI
 from flightsim.stream.protocol import PROTOCOL_VERSION, encode
 from flightsim.stream.results import ResultCache, flight_result
 from flightsim.stream.sources import LiveSource, ManualSource, ReplaySource, Source, list_logs
+from flightsim.world.scenery import SCENERY_DIR
 
 VIEWER_DIR = Path(__file__).resolve().parent.parent / "viewer"
 MAX_SPEED = 64.0
@@ -51,6 +52,9 @@ class ServerConfig:
     circuit_gains: CircuitGains | None = None
     route_env_cfg: EnvConfig | None = None  # navigation task flown by the route autopilot
     route_gains: "RouteGains | None" = None
+    # Real-world regions (a play/preview message's "region"): per region, its manual tasks
+    # by conditions name and its autopilot tasks by autopilot name.
+    regions: dict[str, dict[str, dict[str, EnvConfig]]] = field(default_factory=dict)
     # Past flight results (stream/results.py): computed in the background for logs outside
     # batches and sent with the log list. Off by default (tests); the viewer server turns it on.
     flight_results: bool = False
@@ -163,16 +167,23 @@ class Session:
             if "start_s" in msg:
                 source.seek(float(msg["start_s"]))
             return source
+        region = msg.get("region")
+        if region is not None and region not in self.cfg.regions:
+            raise ValueError(f"unknown region {region!r}; choose from {list(self.cfg.regions)}")
         if msg.get("source") == "live":
             name = str(msg.get("autopilot", "pid"))
             policy = self.cfg.autopilot(name)
-            env_cfg = {"approach": self.cfg.approach_env_cfg, "takeoff": self.cfg.takeoff_env_cfg, "circuit": self.cfg.circuit_env_cfg,
-                       "route": self.cfg.route_env_cfg}.get(
-                name, self.cfg.env_cfg
-            )
+            if region is not None:
+                live = self.cfg.regions[region]["live"]
+                if name not in live:
+                    raise ValueError(f"no {name} autopilot task in {region}; choose from {list(live)}")
+                env_cfg = live[name]
+            else:
+                env_cfg = {"approach": self.cfg.approach_env_cfg, "takeoff": self.cfg.takeoff_env_cfg, "circuit": self.cfg.circuit_env_cfg,
+                           "route": self.cfg.route_env_cfg}.get(name, self.cfg.env_cfg)  # fmt: skip
             return LiveSource(env_cfg, None, int(msg.get("seed", 0)), policy=policy)
         if msg.get("source") == "manual":
-            tasks = self.cfg.manual_env_cfgs or {"calm": self.cfg.env_cfg}
+            tasks = self.cfg.regions[region]["manual"] if region is not None else self.cfg.manual_env_cfgs or {"calm": self.cfg.env_cfg}
             conditions = str(msg.get("conditions", next(iter(tasks))))
             if conditions not in tasks:
                 raise ValueError(f"unknown conditions {conditions!r}; choose from {list(tasks)}")
@@ -367,9 +378,25 @@ def make_handler(cfg: ServerConfig):
     return handler
 
 
+def _scenery_response(path: str) -> Response:
+    """A built real-world region's files (data/scenery/<name>/: manifest, airfields, tiles),
+    read-only, for the viewer."""
+    rel = path.split("?", 1)[0].removeprefix("/scenery/")
+    file = (SCENERY_DIR / rel).resolve()
+    ok = file.is_relative_to(SCENERY_DIR) and file.is_file() and "sources" not in file.relative_to(SCENERY_DIR).parts
+    if not ok or file.suffix not in (".json", ".f32", ".u8"):
+        return Response(404, "Not Found", Headers([("Content-Type", "text/plain")]), b"not found\n")
+    body = file.read_bytes()
+    ctype = "application/json" if file.suffix == ".json" else "application/octet-stream"
+    headers = Headers([("Content-Type", ctype), ("Content-Length", str(len(body))), ("Cache-Control", "no-cache")])
+    return Response(200, "OK", headers, body)
+
+
 def process_request(connection: ServerConnection, request: Request) -> Response | None:
     if request.path.split("?", 1)[0] == "/ws":
         return None  # continue with the WebSocket handshake
+    if request.path.startswith("/scenery/"):
+        return _scenery_response(request.path)
     return _static_response(request.path)
 
 

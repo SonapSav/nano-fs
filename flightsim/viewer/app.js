@@ -13,7 +13,7 @@ import { MapBackground } from "./mapTiles.js";
 import { CameraReporter, CameraTrack, Gimbal, MOUNT_BODY_M, bodyToNed, cameraAxes, drawCameraOverlay, footprint } from "./camera.js";
 import { CAMERA_KEYS, CameraSink } from "./camsink.js";
 import { formatLat, formatLon } from "./gps.js";
-import { WATER_LEVEL_M, height as terrainHeight } from "./terrainCore.js";
+import { world } from "./world.js";
 import { HANDLED_KEYS, PilotInput } from "./input.js";
 import { AXES, BUTTONS, CONTROLS, DEFAULTS, MAX_CALIBRATION_SPREAD, MAX_CENTRE, buttonValue, controlValue, copyFeel, defaultProfile, detectAxis, detectButton, saveSettings } from "./stick.js";
 import { groupLogs } from "./flightlist.js";
@@ -34,7 +34,9 @@ const LIVE_TAKEOFF = "live_takeoff";
 const LIVE_CIRCUIT = "live_circuit";
 const LIVE_ROUTE = "live_route";
 const LIVE_AUTOPILOT = { [LIVE]: "pid", [LIVE_LQR]: "lqr", [LIVE_APPROACH]: "approach", [LIVE_TAKEOFF]: "takeoff", [LIVE_CIRCUIT]: "circuit", [LIVE_ROUTE]: "route" };
-const isLive = (v) => v in LIVE_AUTOPILOT;
+// A scenario in a real-world region: "<region>/<scenario>" (e.g. "abu_dhabi/manual_approach").
+const regionOf = (v) => (typeof v === "string" && /^[a-z_]+\/[a-z_]+$/.test(v) ? v.split("/") : [null, v]);
+const isLive = (v) => regionOf(v)[1] in LIVE_AUTOPILOT;
 const MANUAL = "manual"; // calm air
 const MANUAL_WIND = "manual_wind";
 const MANUAL_APPROACH = "manual_approach";
@@ -51,7 +53,7 @@ const MANUAL_CONDITIONS = {
   [MANUAL_CIRCUIT]: "circuit", [MANUAL_CIRCUIT_XW]: "circuit_crosswind",
   [MANUAL_ROUTE]: "route", [MANUAL_ROUTE_WIND]: "route_wind",
 };
-const isManual = (v) => v in MANUAL_CONDITIONS;
+const isManual = (v) => regionOf(v)[1] in MANUAL_CONDITIONS;
 // The Flights drawer's scenarios: [value, title, detail].
 const SCENARIOS_FLY = [
   [MANUAL, "Free flight", "Calm air: fly to the altitude and heading bugs"],
@@ -73,7 +75,29 @@ const SCENARIOS_WATCH = [
   [LIVE_CIRCUIT, "Circuit autopilot", "A whole circuit (wind varies by seed)"],
   [LIVE_ROUTE, "Route autopilot", "Flies a GPS route of waypoints (route and wind vary by seed)"],
 ];
-const SCENARIO_TITLES = Object.fromEntries([...SCENARIOS_FLY, ...SCENARIOS_WATCH].map(([v, t]) => [v, t]));
+// The same over Abu Dhabi (configs/envs/abu_dhabi_*.yaml; the region must be built:
+// scripts/build_scenery.py). Runway 31 at Al Bateen (OMAD).
+const AD = "abu_dhabi";
+const SCENARIOS_FLY_REAL = [
+  [`${AD}/${MANUAL}`, "Free flight over Abu Dhabi", "Calm air, from 2000 ft over Al Bateen"],
+  [`${AD}/${MANUAL_WIND}`, "Free flight over Abu Dhabi in wind", "Wind and turbulence (vary by seed)"],
+  [`${AD}/${MANUAL_APPROACH}`, "Approach to Al Bateen", "Runway 31, calm: glide path, flare, stop on the runway"],
+  [`${AD}/${MANUAL_CROSSWIND}`, "Approach to Al Bateen in crosswind", "Runway 31, wind and gusts (vary by seed)"],
+  [`${AD}/${MANUAL_TAKEOFF}`, "Takeoff from Al Bateen", "Runway 31, calm: climb to 1000 ft"],
+  [`${AD}/${MANUAL_TAKEOFF_XW}`, "Takeoff from Al Bateen in crosswind", "Runway 31, wind and gusts (vary by seed)"],
+  [`${AD}/${MANUAL_CIRCUIT}`, "Circuit at Al Bateen", "Runway 31, left-hand pattern over the city (calm)"],
+  [`${AD}/${MANUAL_CIRCUIT_XW}`, "Circuit at Al Bateen in crosswind", "The circuit with wind and gusts (vary by seed)"],
+  [`${AD}/${MANUAL_ROUTE}`, "Route over Abu Dhabi", "A GPS route of 3-6 waypoints at 3000 ft (varies by seed)"],
+  [`${AD}/${MANUAL_ROUTE_WIND}`, "Route over Abu Dhabi in wind", "The route with wind and turbulence (vary by seed)"],
+];
+const SCENARIOS_WATCH_REAL = [
+  [`${AD}/${LIVE}`, "PID autopilot over Abu Dhabi", "Holds altitude and heading at about 2000 ft"],
+  [`${AD}/${LIVE_APPROACH}`, "Approach autopilot at Al Bateen", "Lands on runway 31 (wind varies by seed)"],
+  [`${AD}/${LIVE_TAKEOFF}`, "Takeoff autopilot at Al Bateen", "Takes off from runway 31 (wind varies by seed)"],
+  [`${AD}/${LIVE_CIRCUIT}`, "Circuit autopilot at Al Bateen", "A whole circuit on runway 31 (wind varies by seed)"],
+  [`${AD}/${LIVE_ROUTE}`, "Route autopilot over Abu Dhabi", "A GPS route (route and wind vary by seed)"],
+];
+const SCENARIO_TITLES = Object.fromEntries([...SCENARIOS_FLY, ...SCENARIOS_WATCH, ...SCENARIOS_FLY_REAL, ...SCENARIOS_WATCH_REAL].map(([v, t]) => [v, t]));
 // Why an approach ended (envs/approach.py failure reasons), for the message line.
 const LANDING_FAILURES = {
   undershoot: "touched down short of the runway",
@@ -183,6 +207,8 @@ function populateSources(logs = allLogs) {
   const focused = document.activeElement?.classList.contains("flight-item") ? document.activeElement.dataset.value : null; // kept across a refresh
   $("list-fly").replaceChildren(...SCENARIOS_FLY.map(([v, t, d]) => flightItem(v, t, d)));
   $("list-watch").replaceChildren(...SCENARIOS_WATCH.map(([v, t, d]) => flightItem(v, t, d)));
+  $("list-fly-real").replaceChildren(...SCENARIOS_FLY_REAL.map(([v, t, d]) => flightItem(v, t, d)));
+  $("list-watch-real").replaceChildren(...SCENARIOS_WATCH_REAL.map(([v, t, d]) => flightItem(v, t, d)));
   const past = $("list-past");
   past.replaceChildren();
   const groups = groupLogs(logs, sourceFilter.value);
@@ -333,6 +359,23 @@ function stopInput() {
   els.hint.textContent = VIEW_HINT;
 }
 
+// Runway number from its heading (deg): 90 -> "09", 308 -> "31".
+const runwayName = (deg) => String(((Math.round(deg / 10) + 35) % 36) + 1).padStart(2, "0");
+
+// The flight's world (world.js): procedural, or a real-world region whose files load first.
+// The scene rebuilds its terrain and runways when they are here; the task's runway gets
+// the PAPI and windsock.
+let worldNear = { x: 0, z: 0 };
+function setWorld(msg) {
+  const rw = msg.approach ?? msg.takeoff;
+  worldNear = rw ? { x: rw.threshold_east_m, z: -rw.threshold_north_m } : { x: 0, z: 0 };
+  world.set(msg.world ?? null);
+}
+world.onChange(() => {
+  scene.setWorld(world, worldNear);
+  dirty = true;
+});
+
 // Set the scene up for a flight (its hello message): targets, runway, pattern, sky,
 // readouts and the task instructions. Used for playback and for previews.
 function applyHello(msg) {
@@ -344,12 +387,13 @@ function applyHello(msg) {
   updateSeekable();
   scene.reset();
   scene.setGeodesy(msg.world ?? null);
+  setWorld(msg);
   scene.setTargets(msg.targets);
   scene.setApproach(msg.approach ?? null);
   scene.setPattern(msg.pattern ?? null);
   setCameraTrack(msg);
   applySky();
-  if (msg.takeoff) scene.windsock.setWind(msg.takeoff.wind?.from_deg ?? 0, (msg.takeoff.wind?.u20_mps ?? 0) * 1.943844);
+  if (msg.takeoff) scene.setWindsock(msg.takeoff.wind?.from_deg ?? 0, (msg.takeoff.wind?.u20_mps ?? 0) * 1.943844);
   panel.setSession(msg);
   const pilotName = { pid: "PID", lqr: "LQR", approach: "Approach", takeoff: "Takeoff", circuit: "Circuit", route: "Route" }[msg.pilot ?? "pid"] ?? msg.pilot;
   panel.setRunText(`${msg.source === "live" ? `${pilotName} autopilot` : { manual: "You are flying", replay: "Replay" }[msg.source]} ${msg.run_id}`);
@@ -357,9 +401,9 @@ function applyHello(msg) {
     ? msg.route
       ? `Fly the magenta route (${msg.route.waypoints.length} waypoints) at ${Math.round((msg.targets?.alt_msl_m ?? 0) * 3.28084 / 100) * 100} ft: follow the GPS desired track (DTK) and keep the cross-track error (XTK) small; turns start before each waypoint. The Map window shows the route.`
       : msg.approach?.task === "circuit"
-      ? "Take off, climb straight ahead past the runway end, turn left at 700 ft, fly downwind at 1000 ft about 1 nm north, descend from abeam the threshold, turn base at 45 degrees and land on 09." + (msg.approach.wind ? " Crosswind and gusts." : "")
+      ? `Take off, climb straight ahead past the runway end, turn left at 700 ft, fly downwind at 1000 ft about 1 nm to the left of the runway, descend from abeam the threshold, turn base at 45 degrees and land on ${runwayName(msg.approach.heading_deg)}.` + (msg.approach.wind ? " Crosswind and gusts." : "")
       : msg.approach
-      ? "Follow the glide path to runway 09 (ahead), flare and land main wheels first." + (msg.approach.wind ? " Crosswind: crab on the approach, then line up with rudder and hold a wing low into the wind." : "")
+      ? `Follow the glide path to runway ${runwayName(msg.approach.heading_deg)} (ahead), flare and land main wheels first.` + (msg.approach.wind ? " Crosswind: crab on the approach, then line up with rudder and hold a wing low into the wind." : "")
       : msg.takeoff
         ? "Full throttle (W), keep the centreline with Z/X, lift the nose wheel at 55 kt and climb at 75 kt to 1000 ft." + (msg.takeoff.wind ? " Crosswind: aileron into the wind on the roll; after lift-off let the nose turn into the wind." : "")
         : "Fly to the magenta altitude and heading bugs."
@@ -465,8 +509,10 @@ function flightRequest() {
   const speed = Number(els.speed.value);
   const seed = Number(els.seed.value) || 0;
   const v = selection;
-  if (isManual(v)) return { source: "manual", conditions: MANUAL_CONDITIONS[v], seed, record: els.record.checked };
-  if (isLive(v)) return { source: "live", autopilot: LIVE_AUTOPILOT[v], seed, speed };
+  const [region, base] = regionOf(v);
+  const where = region ? { region } : {};
+  if (isManual(v)) return { source: "manual", conditions: MANUAL_CONDITIONS[base], seed, record: els.record.checked, ...where };
+  if (isLive(v)) return { source: "live", autopilot: LIVE_AUTOPILOT[base], seed, speed, ...where };
   return v ? { source: "replay", path: v, speed } : null;
 }
 
@@ -1152,9 +1198,9 @@ function drawCamera(now) {
   }
 }
 
-// The ground under the crosshair and the picture's corners (terrain as drawn; water
-// level where lower), from the camera's mount on the aircraft.
-const groundAt = (n, e) => Math.max(terrainHeight(e, -n), WATER_LEVEL_M);
+// The ground under the crosshair and the picture's corners (the world's ground, world.js;
+// water level where lower), from the camera's mount on the aircraft.
+const groundAt = (n, e) => world.groundAt(e, -n);
 function updateCameraGround(row) {
   const psiMap = row.psi_rad - scene.convergence;
   const off = bodyToNed(row.phi_rad, row.theta_rad, psiMap, MOUNT_BODY_M);

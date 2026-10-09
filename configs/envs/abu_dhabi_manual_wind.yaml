@@ -1,0 +1,12 @@
+# Free flight over Abu Dhabi, wind and turbulence (vary by seed).
+base: manual_wind.yaml
+world:                       # Abu Dhabi (configs/scenery/abu_dhabi.yaml; see abu_dhabi.yaml)
+  geodesy: wgs84
+  origin_lat_deg: 24.4284648
+  origin_lon_deg: 54.4580337
+  scenery: abu_dhabi
+terrain: dem
+
+initial_conditions:
+  alt_msl_m: 610             # 2000 ft (randomized +/-300 m: never below 310 m)
+  heading_deg: 308           # along runway 31

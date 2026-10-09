@@ -35,7 +35,7 @@ def test_python_port_matches_the_viewer_bit_for_bit(tmp_path):
     for f in ("three.module.js", "three.core.js"):
         shutil.copy(VIEWER / "vendor" / f, three / f)
     (three / "package.json").write_text('{"name":"three","type":"module","exports":{".":"./three.module.js"}}')
-    for f in ("terrain.js", "terrainCore.js", "groundDetail.js"):
+    for f in ("terrain.js", "terrainCore.js", "demTiles.js", "demCore.js", "world.js", "groundDetail.js"):
         shutil.copy(VIEWER / f, tmp_path / f)
     script = f"""
     const t = await import("./terrain.js");

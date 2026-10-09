@@ -179,6 +179,25 @@ export function addAirfieldDetail(scene) {
   return group;
 }
 
+// --- A runway for lights, PAPI and windsock ------------------------------------------------
+//
+// {widthM, pavement: [[x, z], [x, z]], ends: [{ident, x, z, y, dx, dz}, ...]}: each end is a
+// landing threshold (world x east, z south, y its elevation) with the landing direction
+// (dx, dz, unit). The procedural airfield's runway 09/27 and the real ones (realAirfields.js)
+// share the lights, PAPI and windsock below.
+
+export const PROCEDURAL_RUNWAY = (() => {
+  const { x, z, lengthM, widthM } = AIRFIELD;
+  return {
+    widthM, lengthM,
+    pavement: [[x - lengthM / 2, z], [x + lengthM / 2, z]],
+    ends: [{ ident: "09", x: x - lengthM / 2, z, y: 0, dx: 1, dz: 0 }, { ident: "27", x: x + lengthM / 2, z, y: 0, dx: -1, dz: 0 }],
+  };
+})();
+
+// Left of the landing direction (dx, dz) in the world frame (z south): heading east, north.
+const leftOf = (e) => [e.dz, -e.dx];
+
 // --- Runway lights and PAPI -------------------------------------------------------------
 
 // Lights are drawn as points of a fixed size on screen, so they stay visible from miles
@@ -193,19 +212,26 @@ function lightPoints(positions, colour, sizePx) {
 
 const LIGHT_Y = 0.6; // light height above the runway (m)
 
-export function addRunwayLights(scene) {
-  const { x, z, lengthM, widthM } = AIRFIELD;
+export function addRunwayLights(scene, rw = PROCEDURAL_RUNWAY) {
+  const { widthM, pavement, ends } = rw;
   const white = [], green = [];
-  for (let dx = -lengthM / 2; dx <= lengthM / 2 + 0.1; dx += 60) {
-    for (const side of [-1, 1]) white.push([x + dx, LIGHT_Y, z + side * (widthM / 2 + 1.5)]); // edge lights
+  const [[ax, az], [bx, bz]] = pavement;
+  const len = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / len, uz = (bz - az) / len;
+  const y0 = ends[0].y, y1 = ends[1].y;
+  for (let s = 0; s <= len + 0.1; s += 60) {
+    const y = y0 + (y1 - y0) * (s / len) + LIGHT_Y;
+    for (const side of [-1, 1]) white.push([ax + ux * s - uz * side * (widthM / 2 + 1.5), y, az + uz * s + ux * side * (widthM / 2 + 1.5)]); // edge lights
   }
-  for (const end of [-1, 1]) {
-    const tx = x + end * lengthM / 2;
-    for (let dz = -widthM / 2; dz <= widthM / 2 + 0.1; dz += 3) green.push([tx - end * 1.0, LIGHT_Y, z + dz]); // threshold bar
+  for (const e of ends) {
+    const [lx, lz] = leftOf(e);
+    for (let c = -widthM / 2; c <= widthM / 2 + 0.1; c += 3) green.push([e.x + e.dx * 1.0 + lx * c, e.y + LIGHT_Y, e.z + e.dz * 1.0 + lz * c]); // threshold bar
     // Approach lights: bars of 5 lights every 60 m, out to 420 m before the threshold.
-    for (let d = 60; d <= 420; d += 60) for (let k = -2; k <= 2; k++) white.push([tx + end * d, LIGHT_Y + 1, z + k * 1.0]);
+    for (let d = 60; d <= 420; d += 60) for (let k = -2; k <= 2; k++) white.push([e.x - e.dx * d + lx * k, e.y + LIGHT_Y + 1, e.z - e.dz * d + lz * k]);
   }
-  scene.add(lightPoints(white, 0xfff6d8, 5), lightPoints(green, 0x3cff6e, 5));
+  const group = new THREE.Group();
+  group.add(lightPoints(white, 0xfff6d8, 5), lightPoints(green, 0x3cff6e, 5));
+  scene.add(group);
+  return group;
 }
 
 // PAPI (precision approach path indicator), FAA L-880 4-box siting for a 3 deg glide path
@@ -219,43 +245,53 @@ export const PAPI_AIM_POINT_M = 250;
 const PAPI_ANGLES_DEG = [3.5, 3 + 10 / 60, 2 + 50 / 60, 2.5];
 
 export class Papi {
-  constructor(scene) {
-    const { x, z, lengthM, widthM } = AIRFIELD;
+  constructor(scene, rw = PROCEDURAL_RUNWAY) {
     this.units = [];
-    // Runway 09 lands eastbound (+x): its left is north (-z). Runway 27 lands westbound.
-    for (const [end, dir, leftZ] of [[-1, 1, -1], [1, -1, 1]]) {
-      const ux = x + end * lengthM / 2 + dir * PAPI_AIM_POINT_M;
+    this.group = new THREE.Group();
+    // On the left of each landing direction (runway 09 lands eastbound: its left is north).
+    for (const e of rw.ends) {
+      const [lx, lz] = leftOf(e);
       PAPI_ANGLES_DEG.forEach((angle, i) => {
-        const pos = new THREE.Vector3(ux, LIGHT_Y + 0.4, z + leftZ * (widthM / 2 + 15 + i * 9));
+        const off = rw.widthM / 2 + 15 + i * 9;
+        const pos = new THREE.Vector3(e.x + e.dx * PAPI_AIM_POINT_M + lx * off, e.y + LIGHT_Y + 0.4, e.z + e.dz * PAPI_AIM_POINT_M + lz * off);
         const box = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 0.9), new THREE.MeshLambertMaterial({ color: 0x3a3d40 }));
-        box.position.copy(pos).setY(0.4);
+        box.position.copy(pos).setY(e.y + 0.4);
+        box.rotation.y = Math.atan2(-e.dz, e.dx);
         const light = lightPoints([[pos.x, pos.y, pos.z]], 0xffffff, 9);
-        scene.add(box, light);
-        this.units.push({ pos, dir, angle: (angle * Math.PI) / 180, light });
+        this.group.add(box, light);
+        this.units.push({ pos, dx: e.dx, dz: e.dz, angle: (angle * Math.PI) / 180, light });
       });
     }
+    scene.add(this.group);
   }
 
   // Colours as seen from the pilot's eye (world position), not from the camera.
   update(eye) {
     for (const u of this.units) {
-      const ahead = (eye.x - u.pos.x) * -u.dir; // distance out on the approach side
-      const visible = ahead > 0 && Math.abs(eye.z - u.pos.z) < ahead * 0.3; // the beam faces the approach
+      const rx = eye.x - u.pos.x, rz = eye.z - u.pos.z;
+      const ahead = -(rx * u.dx + rz * u.dz); // distance out on the approach side
+      const side = Math.abs(rx * u.dz - rz * u.dx);
+      const visible = ahead > 0 && side < ahead * 0.3; // the beam faces the approach
       u.light.visible = visible;
       if (visible) u.light.material.color.setHex(Math.atan2(eye.y - u.pos.y, ahead) > u.angle ? 0xffffff : 0xff2a1e);
     }
+  }
+
+  dispose(scene) {
+    scene.remove(this.group);
   }
 }
 
 // --- Windsock ----------------------------------------------------------------------------
 
-// Left of runway 09's threshold. The sock points downwind and rises with the wind: it hangs
+// Left of the runway's first landing end (runway 09's on the procedural airfield). The sock points downwind and rises with the wind: it hangs
 // limp in calm air and stands straight out at 15 kt (a common windsock design point).
 export class Windsock {
-  constructor(scene) {
-    const { x, z, lengthM, widthM } = AIRFIELD;
+  constructor(scene, rw = PROCEDURAL_RUNWAY) {
+    const e = rw.ends[0];
+    const [lx, lz] = leftOf(e);
     this.group = new THREE.Group();
-    this.group.position.set(x - lengthM / 2 + 70, 0, z - widthM / 2 - 30);
+    this.group.position.set(e.x + e.dx * 70 + lx * (rw.widthM / 2 + 30), e.y, e.z + e.dz * 70 + lz * (rw.widthM / 2 + 30));
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 6, 8), new THREE.MeshLambertMaterial({ color: 0xd8d8d8 }));
     pole.position.y = 3;
     this.pivot = new THREE.Group(); // at the top of the pole; the sock extends along its +x
@@ -274,6 +310,10 @@ export class Windsock {
     this.group.add(pole, this.pivot);
     scene.add(this.group);
     this.setWind(0, 0);
+  }
+
+  dispose(scene) {
+    scene.remove(this.group);
   }
 
   // fromDeg: the direction the wind comes from (true); speedKt at 20 ft.

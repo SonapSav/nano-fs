@@ -1,0 +1,8 @@
+# Navigation over Abu Dhabi, wind and turbulence (vary by seed).
+base: navigation_wind.yaml
+world:                       # Abu Dhabi (configs/scenery/abu_dhabi.yaml; see abu_dhabi.yaml)
+  geodesy: wgs84
+  origin_lat_deg: 24.4284648
+  origin_lon_deg: 54.4580337
+  scenery: abu_dhabi
+terrain: dem

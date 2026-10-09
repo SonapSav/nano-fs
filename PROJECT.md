@@ -1032,12 +1032,39 @@ water, mangroves and irrigated green: classes the procedural generator does not 
   procedural terrain (6 workers). Procedural results unchanged (12 crosswind approaches
   identical before and after). Tests: `tests/test_world_dem.py` (synthetic region; with
   the Abu Dhabi region built, an episode records its scenery and touching the sea ends it).
-- [ ] **3. Real airfield and runway tasks:** runways from OSM geometry checked against
-  published data (per-airfield overrides with their source); approach, takeoff, circuit,
-  HUD, GPS and maps on the real runway; runway numbers from magnetic heading. (Covers
-  "Real airfield placement" above.)
-- [ ] **4. Viewer terrain from the height tiles:** meshes built in the worker, coarser
-  with distance, uploads limited per frame; sea and lakes at their real level.
+- [x] **3. Real airfield and runway tasks** (2026-10-09): the build extracts every runway
+  in the region from OSM (`world/scenery_osm.py`: split ways joined, displaced threshold
+  sections extend the pavement, each end named by its landing number, helipads left out,
+  the aerodrome with an ICAO code preferred) into `airfields.json`, applies the region
+  file's published data (OMAD 13/31: 3202 x 45 m, 16 ft) and flattens the ground along
+  every runway onto a straight slope fitted to the terrain under its centreline (flat to
+  40 m beyond the sides and 60 m beyond the ends, blended over 150 m; project choices).
+  9 runways: OMAD 13/31 3202 m (elevation 3.4 m against the published 16 ft = 4.9 m),
+  Zayed International 13L/31R and 13R/31L (4099, 4103 m), Al Dhafra (two), Abu Dhabi
+  sports aviation club 12/30 (865 m) and three others. Task configs on runway 31
+  (threshold 426 m in from the pavement end, map heading 307.95, 2777 m to the far end):
+  `configs/envs/abu_dhabi_{approach,takeoff,circuit}[_crosswind].yaml`, manual variants,
+  free flight and routes (`abu_dhabi_manual*`, `abu_dhabi_navigation*`); a test checks
+  them against the built `airfields.json`. Existing autopilots, unchanged, 200 seeds each
+  (0-199): crosswind approaches 196/200 landed (3 nose first, 1 side load); crosswind
+  takeoffs 200/200; crosswind circuits 200/200 climbed, 196/200 landed (3 side load, 1
+  nose first); routes in wind 200/200 (cross-track max mean 47.5 m, worst 208.6 m).
+  Viewer: Abu Dhabi scenarios in the Flights drawer (fly and watch); task messages name
+  the runway from its heading. Tests: `tests/test_scenery_airfields.py`.
+- [ ] **4. Viewer terrain from the height tiles** (in progress 2026-10-09): the stream's
+  `world` carries the region (`scenery`: name and hash); the server serves its files
+  under `/scenery/<name>/` (manifest, airfields, tiles; never the sources); `viewer/
+  world.js` holds the flight's world for every part of the viewer (ground height as the
+  physics, land cover, tiles on demand); `demTiles.js` builds a region's tiles (at full
+  detail the vertices are the physics' posts; water cells sink under a sea surface at
+  -0.3 m; colours from the land cover; trees where WorldCover has trees, mangroves or
+  shrubs) in the tile worker, which fetches the tiles it needs; `realAirfields.js` draws
+  every runway (markings, displaced thresholds, lights); the PAPI and windsock go to the
+  task's runway (scenery.js runway descriptors, shared with the procedural airfield, whose
+  lights and PAPI are unchanged). The procedural airfield, roads and villages hide over a
+  region. Checked headless (AMD GPU): the approach autopilot lands on 31 over the real
+  coast and mangroves. To do: coastlines are blocky (land cover per height post: a land
+  cover texture per tile), the map windows still draw procedural terrain (milestone 5).
 - [ ] **5. Land cover and features:** WorldCover classes drive the generator (new desert,
   coastal and urban styles; mangroves, irrigated green); OSM coastline, water, roads and
   railways drawn in place; the map window and corner map draw the same features.

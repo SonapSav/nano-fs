@@ -1,0 +1,13 @@
+# Approach and landing on runway 31 at Al Bateen, calm air.
+# Runway 31 at Al Bateen (OMAD): threshold, map heading and length to the far pavement end from
+# data/scenery/abu_dhabi/airfields.json (OSM, 3202 x 45 m published; tests/test_scenery_tasks.py checks them).
+base: approach_landing.yaml
+world:                       # Abu Dhabi (configs/scenery/abu_dhabi.yaml; see abu_dhabi.yaml)
+  geodesy: wgs84
+  origin_lat_deg: 24.4284648
+  origin_lon_deg: 54.4580337
+  scenery: abu_dhabi
+terrain: dem
+
+approach:
+  runway: {threshold_north_m: -724.0, threshold_east_m: 926.5, heading_deg: 307.95, length_m: 2776.9, width_m: 45}

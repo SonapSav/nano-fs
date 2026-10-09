@@ -2,7 +2,8 @@
 //
 // World frame: x = east, y = up, z = south (three.js is y-up, right-handed): the flight's
 // map (geo.js; metres north and east of the world's origin, where the procedural scenery
-// and its airfield are) and height above the ellipsoid. Headings and velocities are true
+// and its airfield are, or a real-world region's origin: world.js) and height above mean
+// sea level. Headings and velocities are true
 // (north); on the map they turn by the grid convergence (zero on the origin's meridian
 // and at the equator).
 
@@ -13,7 +14,9 @@ import { Papi, Windsock, addAirfield, addAirfieldDetail, addGroundFallback, addR
 import { SkyController, TIMES } from "./sky.js";
 import { CloudField } from "./clouds.js";
 import { RoadNetwork } from "./roads.js";
-import { QUALITY, Terrain, WATER_LEVEL_M, height as terrainHeight } from "./terrain.js";
+import { QUALITY, Terrain } from "./terrain.js";
+import { RealAirfields } from "./realAirfields.js";
+import { world } from "./world.js";
 import { groundDetailStrength } from "./groundDetail.js";
 import { buildC172 } from "./aircraft.js";
 import { buildPattern } from "./pattern.js";
@@ -99,13 +102,19 @@ export class FlightScene {
     this.skyLight = new SkyController(this.scene, this.renderer);
     this.sunDir = this.skyLight.sunDir; // updated in place with the time of day
     this.clouds = new CloudField(this.scene);
-    this.roads = new RoadNetwork(this.scene);
-    addGroundFallback(this.scene);
-    addAirfield(this.scene);
-    addAirfieldDetail(this.scene);
-    addRunwayLights(this.scene);
-    this.papi = new Papi(this.scene);
-    this.windsock = new Windsock(this.scene);
+    this.fallback = addGroundFallback(this.scene);
+    // The procedural world's airfield, roads and lights (hidden over a real-world region,
+    // which has its own runways: setWorld).
+    this.procedural = new THREE.Group();
+    this.scene.add(this.procedural);
+    this.roads = new RoadNetwork(this.procedural);
+    addAirfield(this.procedural);
+    addAirfieldDetail(this.procedural);
+    addRunwayLights(this.procedural);
+    this.proceduralPapi = this.papi = new Papi(this.procedural);
+    this.proceduralWindsock = this.windsock = new Windsock(this.procedural);
+    this.realAirfields = new RealAirfields(this.scene);
+    this.wind = [0, 0]; // the windsock's wind (from deg, kt), kept across a world change
     this.terrain = new Terrain(this.scene, quality);
     this._applyQuality(quality);
 
@@ -229,7 +238,7 @@ export class FlightScene {
   setApproach(a) {
     this.approach = a;
     const w = a?.wind;
-    this.windsock.setWind(w ? w.from_deg : 0, w ? w.u20_mps * 1.943844 : 0);
+    this.setWindsock(w ? w.from_deg : 0, w ? w.u20_mps * 1.943844 : 0);
     this.glidePath.visible = Boolean(a);
     this.glidePath.clear();
     if (!a) return;
@@ -259,6 +268,33 @@ export class FlightScene {
     this.targetLine.visible = false;
   }
 
+  // The windsock's wind: from (deg true), speed at 20 ft (kt).
+  setWindsock(fromDeg, kt) {
+    this.wind = [fromDeg, kt];
+    this.windsock.setWind(fromDeg, kt);
+  }
+
+  // The flight's world (world.js): procedural, or a real-world region with its terrain and
+  // runways. `near` (world x, z): the runway nearest it gets the PAPI and windsock (the
+  // task's runway; default the origin's).
+  setWorld(w, near = { x: 0, z: 0 }) {
+    const real = Boolean(w.real && w.airfields);
+    this.procedural.visible = !real;
+    this.fallback.material.color.setHex(real ? 0xcdb58c : 0x6f7f4a); // beyond a region: desert sand
+    if (this.papi !== this.proceduralPapi) this.papi.dispose(this.scene);
+    if (this.windsock !== this.proceduralWindsock) this.windsock.dispose(this.scene);
+    this.papi = this.proceduralPapi;
+    this.windsock = this.proceduralWindsock;
+    this.realAirfields.build(real ? w.airfields : null);
+    const home = real ? this.realAirfields.nearest(near.x, near.z) : null;
+    if (home) {
+      this.papi = new Papi(this.scene, home);
+      this.windsock = new Windsock(this.scene, home);
+    }
+    this.windsock.setWind(...this.wind);
+    this.terrain.setWorld(w);
+  }
+
   // Circuit: draw the pattern legs (null clears them). Needs the runway from setApproach.
   setPattern(p) {
     this.pattern.clear();
@@ -270,9 +306,9 @@ export class FlightScene {
   updateShadow() {
     const p = this.position, s = this.sunDir, sh = this.shadow;
     // The ground where the sun's ray through the aircraft meets it (two steps on hills).
-    let ground = Math.max(terrainHeight(p.x, p.z), WATER_LEVEL_M);
+    let ground = world.groundAt(p.x, p.z);
     let t = (p.y - ground) / s.y;
-    ground = Math.max(terrainHeight(p.x - s.x * t, p.z - s.z * t), WATER_LEVEL_M);
+    ground = world.groundAt(p.x - s.x * t, p.z - s.z * t);
     const agl = p.y - ground;
     sh.patch.visible = agl < 200 && s.y > 0.02;
     if (!sh.patch.visible) return;
@@ -449,7 +485,7 @@ export class FlightScene {
       this.camera.quaternion.setFromRotationMatrix(rot.multiply(head));
       this.terrain.update(this.camera.position.x, this.camera.position.z);
       this.clouds.update(this.camera.position.x, this.camera.position.z);
-      this.roads.update(this.camera.position.x, this.camera.position.z);
+      if (this.procedural.visible) this.roads.update(this.camera.position.x, this.camera.position.z);
       this.renderer.render(this.scene, this.camera);
       return;
     }
@@ -462,7 +498,7 @@ export class FlightScene {
     this.camera.lookAt(this.position);
     this.terrain.update(this.camera.position.x, this.camera.position.z);
     this.clouds.update(this.camera.position.x, this.camera.position.z);
-    this.roads.update(this.camera.position.x, this.camera.position.z);
+    if (this.procedural.visible) this.roads.update(this.camera.position.x, this.camera.position.z);
     this.renderer.render(this.scene, this.camera);
   }
 

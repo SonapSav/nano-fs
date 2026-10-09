@@ -472,3 +472,22 @@ def test_demonstrations_record_the_camera_pointing(env_cfg, tmp_path):
     _, meta = read_log(plain.save(tmp_path / "plain"))
     assert "flightsim.camera" not in meta
     assert _camera_used(None) is None
+
+
+@pytest.mark.skipif(not (Path(__file__).parent.parent / "data" / "scenery" / "abu_dhabi" / "manifest.json").exists(),
+                    reason="Abu Dhabi scenery not built (scripts/build_scenery.py)")
+def test_region_flights_carry_their_scenery(env_cfg, gains, tmp_path):
+    from flightsim.stream.__main__ import abu_dhabi_tasks
+    from flightsim.world.scenery import load_region
+
+    cfg = ServerConfig(data_dir=tmp_path, env_cfg=env_cfg, gains=gains, regions={"abu_dhabi": abu_dhabi_tasks()})
+    from flightsim.stream.server import Session
+
+    session = Session(None, cfg)
+    source = session._open({"source": "manual", "conditions": "approach", "seed": 1, "region": "abu_dhabi"})
+    hello = session._hello(source)
+    assert hello["world"]["scenery"] == {"name": "abu_dhabi", "hash": load_region("abu_dhabi").scenery_hash}
+    assert hello["approach"]["heading_deg"] == pytest.approx(307.95)
+    assert 2.0 < hello["approach"]["elevation_m"] < 6.0  # Al Bateen, a few metres above the sea
+    with pytest.raises(ValueError, match="unknown region"):
+        session._open({"source": "manual", "region": "atlantis"})

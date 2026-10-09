@@ -41,7 +41,7 @@ def tips(tmp_path_factory):
         shutil.copy(VIEWER / "vendor" / f, three / f)
     (three / "package.json").write_text('{"name":"three","type":"module","exports":{".":"./three.module.js","./addons/*":"./addons/*"}}')
     shutil.copytree(VIEWER / "vendor" / "addons", three / "addons")
-    for f in ("scenery.js", "terrain.js", "terrainCore.js", "groundDetail.js", "aircraft.js", "camera.js"):
+    for f in ("scenery.js", "terrain.js", "terrainCore.js", "demTiles.js", "demCore.js", "world.js", "groundDetail.js", "aircraft.js", "camera.js"):
         shutil.copy(VIEWER / f, d / f)
     out = subprocess.run([NODE, "--input-type=module", "-e", SCRIPT], cwd=d, capture_output=True, text=True, timeout=60)
     assert out.returncode == 0, out.stderr

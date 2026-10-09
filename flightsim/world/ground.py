@@ -23,7 +23,10 @@ class Ground:
 
             if not scenery:
                 raise ValueError("terrain: dem needs world.scenery (a built region, scripts/build_scenery.py)")
-            self.dem = load_terrain(scenery)
+            try:
+                self.dem = load_terrain(scenery)
+            except FileNotFoundError:
+                raise ValueError(f"scenery {scenery!r} is not built here: uv run --group scenery python scripts/build_scenery.py configs/scenery/{scenery}.yaml") from None
             r = self.dem.region
             if geodesy.model != "wgs84" or (geodesy.origin_lat_deg, geodesy.origin_lon_deg) != (r.origin_lat_deg, r.origin_lon_deg):
                 raise ValueError(

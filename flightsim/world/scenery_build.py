@@ -11,7 +11,10 @@ and the viewer read the built files through scenery.py. Steps, each repeatable:
    the same transverse Mercator as world/geo.py, here on numpy arrays).
 3. land cover: ESA WorldCover, the class at each cell's centre; cells without data (the
    open sea, outside WorldCover) become water.
-4. manifest.json: the region, its sources, every file's sha256.
+4. airfields (OpenStreetMap, scenery_osm.py, with the region file's published data):
+   every runway's ends, width and elevation; the ground along each runway is flattened
+   onto a straight slope fitted to the terrain under its centreline (`airfields.json`).
+5. manifest.json: the region, its sources, every file's sha256.
 
 The same sources and code give byte-identical files.
 """
@@ -50,6 +53,8 @@ class RegionSpec:
     tiles_radius: int  # tiles from -radius to radius - 1 east and south
     sources: dict
     pinned: dict = field(default_factory=dict)  # file name -> sha256
+    airports: dict = field(default_factory=dict)  # ICAO -> published data (elevation_ft, runways)
+    default_runway_width_m: float = 30.0
 
     @property
     def ix_range(self) -> tuple[int, int]:
@@ -61,6 +66,7 @@ def load_spec(path: str | Path) -> RegionSpec:
     return RegionSpec(
         name=raw["name"], origin_lat_deg=float(raw["origin_lat_deg"]), origin_lon_deg=float(raw["origin_lon_deg"]),
         tiles_radius=int(raw["tiles_radius"]), sources=raw["sources"], pinned=raw.get("pinned", {}) or {},
+        airports=raw.get("airports", {}) or {}, default_runway_width_m=float(raw.get("default_runway_width_m", 30.0)),
     )  # fmt: skip
 
 
@@ -326,6 +332,111 @@ def build_landcover(spec: RegionSpec, lc_paths: list[Path], out: Path, log=print
     log(f"land cover: {no_data / total:.1%} of the cells without data (open sea), set to water")
 
 
+# --- Airfields --------------------------------------------------------------------------------
+
+# Runway flattening (project choices): the flat area reaches this far beyond the pavement's
+# sides and ends, then blends into the terrain over BLEND_M.
+RUNWAY_SIDE_M = 40.0
+RUNWAY_END_M = 60.0
+RUNWAY_BLEND_M = 150.0
+
+
+def _smoothstep(a: float, b: float, x: np.ndarray) -> np.ndarray:
+    t = np.clip((x - a) / (b - a), 0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
+def build_airfields(spec: RegionSpec, pbf: Path, out: Path, log=print) -> dict:
+    from flightsim.world.scenery_osm import extract_airfields
+
+    g = geo.Geodesy("wgs84", spec.origin_lat_deg, spec.origin_lon_deg)
+    lo, hi = spec.ix_range
+    half = max(abs(lo), hi + 1) * TILE_SIZE_M
+    fields = extract_airfields(pbf, g, half)
+    # The region's height posts as one grid: post (row, col) at x = x0 + col * POST_M
+    # (east), z = x0 + row * POST_M (south).
+    nt = hi - lo + 1
+    npost = nt * HEIGHT_CELLS + 1
+    grid = np.empty((npost, npost), dtype=np.float32)
+    for iz in range(lo, hi + 1):
+        for ix in range(lo, hi + 1):
+            r0, c0 = (iz - lo) * HEIGHT_CELLS, (ix - lo) * HEIGHT_CELLS
+            grid[r0 : r0 + HEIGHT_CELLS + 1, c0 : c0 + HEIGHT_CELLS + 1] = np.fromfile(out / heights_name(ix, iz), "<f4").reshape(HEIGHT_CELLS + 1, -1)
+    x0 = lo * TILE_SIZE_M
+    original = grid.astype(np.float64)
+    h = original.copy()
+
+    def sample(xs, zs):  # bilinear in the original heights
+        u, v = (xs - x0) / POST_M, (zs - x0) / POST_M
+        i, j = np.floor(u).astype(int), np.floor(v).astype(int)
+        fx, fz = u - i, v - j
+        a = original[j, i] + (original[j, i + 1] - original[j, i]) * fx
+        b = original[j + 1, i] + (original[j + 1, i + 1] - original[j + 1, i]) * fx
+        return a + (b - a) * fz
+
+    for rw in fields["runways"]:
+        pub = (spec.airports.get((rw["airport"] or {}).get("icao") or "", {}).get("runways") or {}).get(rw["ref"], {})
+        if "width_m" in pub:
+            rw["width_m"], rw["width_source"] = float(pub["width_m"]), "published"
+        elif rw["width_m"] is not None:
+            rw["width_source"] = "osm"
+        else:
+            rw["width_m"], rw["width_source"] = spec.default_runway_width_m, "default"
+        if "length_m" in pub:
+            rw["published_length_m"] = float(pub["length_m"])
+            if abs(rw["length_m"] - pub["length_m"]) > 30:
+                log(f"runway {rw['ref']} ({rw['airport']['icao']}): OSM length {rw['length_m']:.0f} m, published {pub['length_m']} m")
+        # Along the pavement (x = east, z = south) from the first end's pavement end.
+        (n0, e0), (n1, e1) = rw["ends"][0]["pavement"], rw["ends"][1]["pavement"]
+        p0, p1 = np.array([e0, -n0]), np.array([e1, -n1])
+        length = float(np.linalg.norm(p1 - p0))
+        d = (p1 - p0) / length
+        nrm = np.array([-d[1], d[0]])
+        s = np.linspace(0.0, length, max(2, int(length / POST_M) + 1))
+        prof = sample(p0[0] + d[0] * s, p0[1] + d[1] * s)
+        slope, base = np.polyfit(s, prof, 1)
+        # Posts near the runway.
+        reach = rw["width_m"] / 2 + RUNWAY_SIDE_M + RUNWAY_END_M + RUNWAY_BLEND_M
+        xs = [p0[0], p1[0]]
+        zs = [p0[1], p1[1]]
+        c_lo = max(0, int(np.floor((min(xs) - reach - x0) / POST_M)))
+        c_hi = min(npost - 1, int(np.ceil((max(xs) + reach - x0) / POST_M)))
+        r_lo = max(0, int(np.floor((min(zs) - reach - x0) / POST_M)))
+        r_hi = min(npost - 1, int(np.ceil((max(zs) + reach - x0) / POST_M)))
+        if c_lo > c_hi or r_lo > r_hi:
+            continue
+        px = x0 + np.arange(c_lo, c_hi + 1)[None, :] * POST_M - p0[0]
+        pz = x0 + np.arange(r_lo, r_hi + 1)[:, None] * POST_M - p0[1]
+        along = px * d[0] + pz * d[1]
+        cross = px * nrm[0] + pz * nrm[1]
+        da = np.maximum(0.0, np.maximum(-along - RUNWAY_END_M, along - length - RUNWAY_END_M))
+        dc = np.maximum(0.0, np.abs(cross) - (rw["width_m"] / 2 + RUNWAY_SIDE_M))
+        w = 1.0 - _smoothstep(0.0, RUNWAY_BLEND_M, np.sqrt(da * da + dc * dc))
+        flat = base + slope * np.clip(along, 0.0, length)
+        block = h[r_lo : r_hi + 1, c_lo : c_hi + 1]
+        h[r_lo : r_hi + 1, c_lo : c_hi + 1] = block * (1.0 - w) + flat * w
+        for end in rw["ends"]:
+            t = end["threshold"]
+            a = float((np.array([t[1], -t[0]]) - p0) @ d)
+            end["elevation_m"] = float(base + slope * min(max(a, 0.0), length))
+            other = rw["ends"][1] if end is rw["ends"][0] else rw["ends"][0]
+            end["heading_deg"] = math.degrees(math.atan2(other["threshold"][1] - t[1], other["threshold"][0] - t[0])) % 360.0
+        rw["elevation_m"] = float(base + slope * length / 2)
+        rw["slope_pct"] = float(slope * 100.0)
+        ad = spec.airports.get((rw["airport"] or {}).get("icao") or "")
+        if ad and "elevation_ft" in ad:
+            rw["published_elevation_m"] = float(ad["elevation_ft"]) * 0.3048
+        log(f"runway {rw['ref']} {(rw['airport'] or {}).get('icao') or ''}: {rw['length_m']:.0f} x {rw['width_m']:.0f} m, "
+            f"elevation {rw['elevation_m']:.1f} m (slope {rw['slope_pct']:+.2f} %)")  # fmt: skip
+    grid = h.astype(np.float32)
+    for iz in range(lo, hi + 1):
+        for ix in range(lo, hi + 1):
+            r0, c0 = (iz - lo) * HEIGHT_CELLS, (ix - lo) * HEIGHT_CELLS
+            (out / heights_name(ix, iz)).write_bytes(grid[r0 : r0 + HEIGHT_CELLS + 1, c0 : c0 + HEIGHT_CELLS + 1].astype("<f4").tobytes())
+    (out / "airfields.json").write_text(json.dumps(fields, indent=1, sort_keys=True) + "\n")
+    return fields
+
+
 # --- Manifest --------------------------------------------------------------------------------
 
 
@@ -334,6 +445,9 @@ def write_manifest(spec: RegionSpec, sources: list[dict], out: Path) -> dict:
     files = {}
     for p in sorted((out / "tiles").iterdir()):
         files[f"tiles/{p.name}"] = sha256_file(p)
+    for p in sorted(out.glob("*.json")):
+        if p.name != "manifest.json":
+            files[p.name] = sha256_file(p)
     manifest = {
         "format": FORMAT,
         "name": spec.name,
@@ -356,4 +470,5 @@ def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print) -> dict:
     src = out / "sources"
     build_heights(spec, [src / f["name"] for f in sources if f["kind"] == "dem"], out, log)
     build_landcover(spec, [src / f["name"] for f in sources if f["kind"] == "landcover"], out, log)
+    build_airfields(spec, src / next(f["name"] for f in sources if f["kind"] == "osm"), out, log)
     return write_manifest(spec, sources, out)

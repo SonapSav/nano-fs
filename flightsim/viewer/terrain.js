@@ -9,6 +9,8 @@
 import * as THREE from "three";
 import { addGroundDetail } from "./groundDetail.js";
 import { TILE_SIZE_M, WATER_LEVEL_M, tileGeometryData, tileObjectsData } from "./terrainCore.js";
+import { SEA_SURFACE_M, demTileGeometryData, demTileObjectsData } from "./demTiles.js";
+import { world } from "./world.js";
 
 // Height, land cover and tile data live in terrainCore.js (no three.js: also used by the
 // tile worker); re-exported here for the rest of the viewer.
@@ -23,11 +25,14 @@ export const terrainEffects = { value: 1.0 };
 
 // Lambert material plus a per-pixel field patchwork: ~450 m cells on a slightly rotated
 // grid, one crop colour per cell, darker hedgerows along the edges. Crisp at any range.
-function fieldMaterial() {
+// `rivers`: {value: 1} draws the procedural world's rivers, 0 not (a real-world region has
+// its own water).
+function fieldMaterial(rivers) {
   const material = new THREE.MeshLambertMaterial({ vertexColors: true });
   material.onBeforeCompile = (shader) => {
     shader.uniforms.fieldColours = { value: FIELD_COLOURS };
     shader.uniforms.terrainEffects = terrainEffects;
+    shader.uniforms.terrainRivers = rivers;
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nattribute float fieldness;\nvarying float vFieldness;\nvarying vec2 vWorldXZ;\nvarying float vHeight;")
       .replace("#include <begin_vertex>", "#include <begin_vertex>\nvFieldness = fieldness;\nvWorldXZ = (modelMatrix * vec4(position, 1.0)).xz;\nvHeight = position.y;");
@@ -37,6 +42,7 @@ function fieldMaterial() {
         `#include <common>
 uniform vec3 fieldColours[${FIELD_COLOURS.length}];
 uniform float terrainEffects;
+uniform float terrainRivers;
 varying float vFieldness;
 varying vec2 vWorldXZ;
 varying float vHeight;
@@ -63,7 +69,7 @@ if (terrainEffects > 0.5) {
   crop *= mix(0.72, 1.0, smoothstep(2.0, 7.0, edge)); // hedgerow
   diffuseColor.rgb = mix(diffuseColor.rgb, crop, clamp(vFieldness, 0.0, 1.0));
 }
-if (terrainEffects > 0.5) {
+if (terrainEffects > 0.5 && terrainRivers > 0.5) {
   // River on the valley floors (dry land at ~0 m): the 0.5 contour of rvField, its width
   // kept in metres by dividing by the field's gradient; grassy banks either side.
   float valley = (1.0 - smoothstep(0.4, 2.0, vHeight)) * smoothstep(1800.0, 2400.0, length(vWorldXZ)); // not on the airfield
@@ -83,6 +89,7 @@ if (terrainEffects > 0.5) {
 }
 
 const WATER = new THREE.MeshLambertMaterial({ color: 0x3f6b8c });
+const SEA = new THREE.MeshLambertMaterial({ color: 0x3b7d93 }); // a real region's sea and lakes (the Gulf's shallow turquoise, by eye)
 const WATER_QUAD = new THREE.PlaneGeometry(TILE_SIZE_M, TILE_SIZE_M).rotateX(-Math.PI / 2);
 
 // --- Tiles: meshes from tile data -------------------------------------------------------
@@ -196,7 +203,9 @@ export class Terrain {
     this.rings = QUALITY[quality].rings;
     this.tiles = new Map(); // key -> { mesh, objects, segments }
     this.queue = [];
-    this.material = fieldMaterial();
+    this.rivers = { value: 1.0 };
+    this.material = fieldMaterial(this.rivers);
+    this.scenery = null; // a real-world region (world.js), or null: procedural
     this.shared = {
       crown: new THREE.ConeGeometry(4, 14, 6),
       farCrown: new THREE.ConeGeometry(4.5, 14, 4), // far ring: fewer faces
@@ -225,6 +234,18 @@ export class Terrain {
     for (const key of [...this.tiles.keys()]) this._drop(key);
     this.queue = [];
     this.inFlight.clear(); // late answers no longer match the wanted spec and are dropped
+    this.centre = null;
+  }
+
+  // The world the tiles show (world.js): procedural, or a real-world region. Rebuilds them.
+  setWorld(w) {
+    const scenery = w.real && w.manifest ? { scenery: w.scenery, tiles: w.manifest.tiles } : null;
+    if ((scenery?.scenery.hash ?? null) === (this.scenery?.scenery.hash ?? null)) return;
+    this.scenery = scenery;
+    this.rivers.value = scenery ? 0 : 1;
+    for (const key of [...this.tiles.keys()]) this._drop(key);
+    this.queue = [];
+    this.inFlight.clear();
     this.centre = null;
   }
 
@@ -271,7 +292,13 @@ export class Terrain {
     while (this.queue.length && (performance.now() - start < budgetMs || budgetMs <= 0)) {
       const w = this.queue.shift();
       const wantsObjects = Boolean(w.objects || w.farTrees);
-      this._add(w, tileGeometryData(w.tx, w.tz, w.segments), wantsObjects ? tileObjectsData(w.tx, w.tz, this.shared.maxTrees, !w.objects) : null);
+      if (this.scenery) {
+        // Without a worker: from the tiles the page has (world.js loads them on demand).
+        const g = demTileGeometryData(w.tx, w.tz, w.segments, world.tiles);
+        this._add(w, g, g && wantsObjects ? demTileObjectsData(w.tx, w.tz, this.shared.maxTrees, !w.objects, world.tiles) : null);
+      } else {
+        this._add(w, tileGeometryData(w.tx, w.tz, w.segments), wantsObjects ? tileObjectsData(w.tx, w.tz, this.shared.maxTrees, !w.objects) : null);
+      }
       if (budgetMs <= 0) break; // budget 0: exactly one tile (tests)
     }
   }
@@ -281,9 +308,12 @@ export class Terrain {
   _pump() {
     while (this.worker && this.queue.length && this.inFlight.size < MAX_IN_FLIGHT) {
       const w = this.queue.shift(), key = `${w.tx},${w.tz}`;
-      if (this.inFlight.get(key) === specKey(w) || this.tiles.has(key)) continue;
-      this.inFlight.set(key, specKey(w));
-      this.worker.postMessage({ key, spec: specKey(w), tx: w.tx, tz: w.tz, segments: w.segments, objects: Boolean(w.objects || w.farTrees), far: !w.objects, maxTrees: this.shared.maxTrees });
+      if (this.inFlight.get(key) === this._spec(w) || this.tiles.has(key)) continue;
+      this.inFlight.set(key, this._spec(w));
+      this.worker.postMessage({
+        key, spec: this._spec(w), tx: w.tx, tz: w.tz, segments: w.segments, objects: Boolean(w.objects || w.farTrees), far: !w.objects,
+        maxTrees: this.shared.maxTrees, scenery: this.scenery?.scenery ?? null, tiles: this.scenery?.tiles ?? null,
+      });  // fmt: skip
     }
   }
 
@@ -291,17 +321,28 @@ export class Terrain {
   _built({ key, spec, geometry, objects }) {
     if (this.inFlight.get(key) === spec) this.inFlight.delete(key);
     const w = this.wanted.get(key);
-    if (w && specKey(w) === spec && !this.tiles.has(key)) this._add(w, geometry, objects);
+    if (w && this._spec(w) === spec && !this.tiles.has(key)) this._add(w, geometry, objects);
     this._pump();
   }
 
+  // A tile's detail and world: answers built for another world are dropped.
+  _spec(w) {
+    return `${specKey(w)}|${this.scenery?.scenery.hash ?? "procedural"}`;
+  }
+
   _add(w, geometryData, objectsData) {
+    if (!geometryData) {
+      // No terrain here (outside a real-world region): the ground fallback shows.
+      this.tiles.set(`${w.tx},${w.tz}`, { mesh: null, objects: null, segments: w.segments, near: Boolean(w.objects), far: Boolean(w.farTrees) });
+      return;
+    }
     const geometry = tileGeometry(geometryData);
     const mesh = new THREE.Mesh(geometry, this.material);
     if (geometry.userData.hasWater) {
-      // Water only where this tile has lakes; elsewhere the land fallback shows through gaps.
-      const water = new THREE.Mesh(WATER_QUAD, WATER);
-      water.position.set((w.tx + 0.5) * TILE_SIZE_M, WATER_LEVEL_M, (w.tz + 0.5) * TILE_SIZE_M);
+      // Water only where this tile has lakes (or a region's sea); elsewhere the land
+      // fallback shows through gaps.
+      const water = new THREE.Mesh(WATER_QUAD, this.scenery ? SEA : WATER);
+      water.position.set((w.tx + 0.5) * TILE_SIZE_M, this.scenery ? SEA_SURFACE_M : WATER_LEVEL_M, (w.tz + 0.5) * TILE_SIZE_M);
       mesh.add(water);
     }
     this.scene.add(mesh);
@@ -316,8 +357,10 @@ export class Terrain {
 
   _drop(key) {
     const t = this.tiles.get(key);
-    this.scene.remove(t.mesh); // its water quad (a child) shares geometry and material
-    t.mesh.geometry.dispose();
+    if (t.mesh) {
+      this.scene.remove(t.mesh); // its water quad (a child) shares geometry and material
+      t.mesh.geometry.dispose();
+    }
     if (t.objects) {
       this.scene.remove(t.objects);
       t.objects.traverse((o) => o.isInstancedMesh && o.dispose());

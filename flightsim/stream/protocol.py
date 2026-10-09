@@ -16,7 +16,9 @@ Server -> client messages (JSON):
              conditions, envs visual_conditions; null when unknown: viewer defaults),
    "world" ({"model": "wgs84" | "sphere", "origin_lat_deg", "origin_lon_deg"}: how the
             flight's latitude/longitude map to metres, world/geo.py and viewer/geo.js;
-            null when unknown: the original sphere),
+            null when unknown: the original sphere; over a real-world region also
+            "scenery": {"name", "hash"}, whose files the server serves under
+            /scenery/<name>/ (manifest.json, airfields.json, tiles/...)),
    "route" (navigation task: {"name", "start": {north_m, east_m}, "waypoints": [{name, north_m,
             east_m, fly_over}], "turn_bank_deg", "geodesy"}, envs.navigation; the viewer
             sequences it with nav.js; else null)}

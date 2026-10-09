@@ -14,6 +14,23 @@ from flightsim.envs import load_env_config
 from flightsim.stream.server import ServerConfig, run_server
 
 
+# Abu Dhabi (real-world scenery, configs/scenery/abu_dhabi.yaml): the same scenarios on
+# runway 31 at Al Bateen, configs/envs/abu_dhabi_*.yaml.
+ABU_DHABI_MANUAL = {
+    "calm": "manual", "windy": "manual_wind", "approach": "manual_approach", "approach_crosswind": "manual_approach_crosswind",
+    "takeoff": "manual_takeoff", "takeoff_crosswind": "manual_takeoff_crosswind", "circuit": "circuit",
+    "circuit_crosswind": "circuit_crosswind", "route": "manual_route", "route_wind": "manual_route_wind",
+}  # fmt: skip
+ABU_DHABI_LIVE = {"pid": "", "approach": "_approach_crosswind", "takeoff": "_takeoff_crosswind", "circuit": "_circuit_crosswind", "route": "_navigation_wind"}
+
+
+def abu_dhabi_tasks() -> dict:
+    return {
+        "manual": {k: load_env_config(f"configs/envs/abu_dhabi_{f}.yaml") for k, f in ABU_DHABI_MANUAL.items()},
+        "live": {k: load_env_config(f"configs/envs/abu_dhabi{f}.yaml") for k, f in ABU_DHABI_LIVE.items()},
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="127.0.0.1", help="use 0.0.0.0 inside Docker")
@@ -71,6 +88,7 @@ def main() -> None:
         route_env_cfg=load_env_config(args.route_config),
         route_gains=route_gains_from_raw(load_route_raw(args.route_autopilot)),
         flight_results=not args.no_flight_results,
+        regions={"abu_dhabi": abu_dhabi_tasks()},
     )
     # Design the LQR gain schedule now (or load it from data/cache/lqr), so the first
     # "watch the LQR" flight starts at once; designing takes ~15 s.
