@@ -17,6 +17,7 @@ import { QUALITY, Terrain, WATER_LEVEL_M, height as terrainHeight } from "./terr
 import { groundDetailStrength } from "./groundDetail.js";
 import { buildC172 } from "./aircraft.js";
 import { buildPattern } from "./pattern.js";
+import { ASPECT, MOUNT_BODY_M, cameraAxes, vfov } from "./camera.js";
 
 const TRAIL_POINTS = 4000;
 
@@ -363,6 +364,43 @@ export class FlightScene {
       this.targetLine.geometry.setFromPoints([start, end]);
       this.targetLine.visible = true;
     }
+  }
+
+  // The belly camera's picture (camera.js; gimbal: {pan, tilt, hfov}), drawn into the
+  // bottom-left corner of this view's canvas before the main view is drawn over it, so it
+  // can be copied out in the same frame (copyCameraTo). widthPx: the picture's width in
+  // canvas pixels (16:9), at most the canvas's. Returns the canvas region it occupies.
+  renderCamera(gimbal, widthPx) {
+    const r = this.renderer, canvas = r.domElement, pr = r.getPixelRatio();
+    let w = Math.min(widthPx, canvas.width), h = Math.round(w / ASPECT);
+    if (h > canvas.height) {
+      h = canvas.height;
+      w = Math.round(h * ASPECT);
+    }
+    if (!w || !h) return null;
+    this.camCamera ??= new THREE.PerspectiveCamera(60, ASPECT, 0.05, 120000);
+    const cam = this.camCamera;
+    cam.fov = vfov(gimbal.hfov) / (Math.PI / 180);
+    cam.aspect = ASPECT;
+    cam.updateProjectionMatrix();
+    cam.position.set(...MOUNT_BODY_M).applyMatrix4(this.aircraft.matrix);
+    const { forward, up, right } = cameraAxes(this.heading ?? 0, gimbal.pan, gimbal.tilt);
+    const back = nedToWorld(...forward).negate();
+    cam.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(nedToWorld(...right), nedToWorld(...up), back));
+    this._renderShadowMask();
+    const wasVisible = this.aircraft.visible;
+    this.aircraft.visible = true; // the belly camera sees the gear, whatever the main view
+    this.model.cameraPod.visible = false;
+    const size = r.getSize(new THREE.Vector2());
+    r.setViewport(0, 0, w / pr, h / pr);
+    r.setScissor(0, 0, w / pr, h / pr);
+    r.setScissorTest(true);
+    r.render(this.scene, cam);
+    r.setScissorTest(false);
+    r.setViewport(0, 0, size.x, size.y);
+    this.aircraft.visible = wasVisible;
+    this.model.cameraPod.visible = true;
+    return { x: 0, y: canvas.height - h, w, h };
   }
 
   // Horizontal screen position (0..1 across the view) of the aircraft's straight-ahead

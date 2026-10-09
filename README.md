@@ -38,7 +38,9 @@ you can fly with a keyboard, gamepad or joystick.
   tachometer and control positions, a GPS unit (position, ground speed, track, distance,
   bearing and time to the runway or the next waypoint, desired track and cross-track
   error), an optional head-up display, an instruments window and a moving-map window for
-  more monitors (terrain, villages, roads, the route and your track), a corner map,
+  more monitors (terrain, villages, roads, the route and your track), a corner map, a
+  stabilized belly camera you point and zoom (in the view, its own window or beside the
+  map; its overlay gives the position of the ground under the crosshair),
   procedural scenery with an airfield, PAPI and windsock, time of day, clouds, the
   aircraft's real shadow and synthesized sound. Replays of any recorded
   flight, and a list of your past flights with their results (landed, nose wheel first,
@@ -94,12 +96,15 @@ demonstrations in `data/demos/` and listed under **Past flights**.
 | `R` or double-click | re-centre the view |
 | `L` | flights |
 | `I` | corner map (wheel to zoom, click for north up / track up) |
+| `K` | belly camera in the view (drag to point, wheel to zoom, double-click: straight down) |
+| Numpad `4` `6` `8` `2`, `+` `−`, `5`, `0` | point and zoom the camera, straight down, follow a replay's recorded camera |
 | `P` | frame rate readout |
 | `M` | sound on / off |
 | Space | pause |
 
-**More monitors:** **Instruments window** opens the panel on its own and **Map window** a
-moving map (`+` / `−` zoom, `N` north up / track up); press F11 there for full screen.
+**More monitors:** **Instruments window** opens the panel on its own, **Map window** a
+moving map (`+` / `−` zoom, `N` north up / track up, `K` map / map and camera / camera) and
+**Camera window** the belly camera; press F11 there for full screen.
 Keys typed in either window still fly the aircraft.
 
 **Gamepads and joysticks** (tested with an Xbox pad and a Thrustmaster T.Flight HOTAS X):

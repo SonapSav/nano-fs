@@ -55,6 +55,7 @@ export function itemText(log) {
   if (log.group === "demos") parts.push(fmtDate(log.mtime));
   if (who) parts.push(who);
   if (log.hud) parts.push("HUD");
+  if (log.camera) parts.push("camera");
   return { title, detail: parts.join(" · "), result };
 }
 

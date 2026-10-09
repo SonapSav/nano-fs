@@ -176,7 +176,9 @@ class Session:
             conditions = str(msg.get("conditions", next(iter(tasks))))
             if conditions not in tasks:
                 raise ValueError(f"unknown conditions {conditions!r}; choose from {list(tasks)}")
-            return ManualSource(tasks[conditions], int(msg.get("seed", 0)), hud=bool((msg.get("aids") or {}).get("hud", False)))
+            camera = msg.get("camera")
+            return ManualSource(tasks[conditions], int(msg.get("seed", 0)), hud=bool((msg.get("aids") or {}).get("hud", False)),
+                                camera=camera if isinstance(camera, dict) else None)  # fmt: skip
         raise ValueError(f"unknown source {msg.get('source')!r}")
 
     async def handle(self, msg: dict) -> None:
@@ -219,6 +221,11 @@ class Session:
             # Metadata only: never reaches the physics.
             if isinstance(self.source, ManualSource) and self.task and not self.task.done():
                 self.source.set_hud(bool(msg.get("hud", False)))
+        elif kind == "camera":
+            # The belly camera's pointing, recorded with a manual flight's demonstration.
+            # Metadata only: never reaches the physics.
+            if isinstance(self.source, ManualSource) and self.task and not self.task.done():
+                self.source.set_camera(msg)
         elif kind == "pause":
             self.paused.set()
         elif kind == "resume":

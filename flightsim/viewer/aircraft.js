@@ -14,6 +14,7 @@
 // shows the propeller as a disc when it turns.
 
 import * as THREE from "three";
+import { MOUNT_STRUCT_IN } from "./camera.js";
 
 const IN = 0.0254;
 const CG = { x: 40.9, z: 36.6 }; // structural position of the body origin (matches EYE_BODY in scene.js)
@@ -478,6 +479,11 @@ export function buildC172({ registration = REGISTRATION } = {}) {
   group.add(wheel([-6.8, 0, -14], 5.5, 4, tyre));
   group.add(ellipsoid([-5, 0, -12], 12, 4, 7, white));
 
+  // Belly camera (camera.js): a ball turret under the cabin floor, its lens at the centre.
+  // Hidden while the camera draws its own picture.
+  const cameraPod = ellipsoid([MOUNT_STRUCT_IN.x, MOUNT_STRUCT_IN.y, MOUNT_STRUCT_IN.z], 4, 4, 4, grey);
+  group.add(cameraPod);
+
   const q = new THREE.Quaternion();
   const set = (pivot, angle) => pivot.quaternion.copy(q.setFromAxisAngle(pivot.userData.axis, angle));
   let propAngle = 0;
@@ -485,6 +491,7 @@ export function buildC172({ registration = REGISTRATION } = {}) {
   return {
     group,
     pivots,
+    cameraPod,
     update(row, dtS = 0) {
       set(pivots.elevator, row.elevator_pos_rad ?? 0);
       set(pivots.aileronL, row.aileron_left_pos_rad ?? 0);

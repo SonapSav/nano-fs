@@ -179,19 +179,37 @@ class LiveSource(Source):
                 return
 
 
+CAMERA_COLUMNS = ["t_s", "on", "pan_rad", "tilt_rad", "hfov_rad"]
+
+
+def _finite(v, lo: float, hi: float) -> float:
+    v = float(v)
+    if not math.isfinite(v):
+        raise ValueError("camera values must be finite")
+    return min(hi, max(lo, v))
+
+
 class ManualSource(LiveSource):
     """A human flies the task episode in real time; the flight is kept as a demonstration,
-    with the pilot aids the viewer reported (when the HUD was in view)."""
+    with the pilot aids the viewer reported (when the HUD was in view) and the belly
+    camera's pointing (visual only)."""
 
     max_speed = 1.0
     min_save_s = 5.0
 
-    def __init__(self, env_cfg: EnvConfig, seed: int, hud: bool = False):
+    def __init__(self, env_cfg: EnvConfig, seed: int, hud: bool = False, camera: dict | None = None):
         self.pilot = HumanPolicy()
         super().__init__(env_cfg, None, seed, policy=self.pilot, source="manual")
         self._hud_intervals: list[list[float]] = []
         self._hud_since: float | None = None
         self.set_hud(hud)
+        # The camera's mount and pointing, when the viewer has one (its play message).
+        self._camera_info: dict | None = None
+        self._camera_samples: list[list[float]] = []
+        if camera is not None:
+            mount = [_finite(v, -10.0, 10.0) for v in camera.get("mount_body_m", [0.0, 0.0, 0.0])][:3]
+            self._camera_info = {"mount_body_m": mount, "stabilized": bool(camera.get("stabilized", True))}
+            self.set_camera(camera)
 
     def _now_s(self) -> float:
         states, _ = self._env.recorded
@@ -204,6 +222,28 @@ class ManualSource(LiveSource):
         elif not on and self._hud_since is not None:
             self._hud_intervals.append([self._hud_since, self._now_s()])
             self._hud_since = None
+
+    def set_camera(self, msg: dict) -> None:
+        """The camera's pointing ({on, pan_rad, tilt_rad, hfov_rad}) from now on; ignored
+        when the flight started without a camera. A sample at the same time replaces the
+        previous one."""
+        if self._camera_info is None:
+            return
+        sample = [round(self._now_s(), 6), 1 if msg.get("on") else 0, round(_finite(msg.get("pan_rad", 0.0), -7.0, 7.0), 4),
+                  round(_finite(msg.get("tilt_rad", 0.0), -1.6, 0.1), 4), round(_finite(msg.get("hfov_rad", 1.0), 0.01, 3.2), 4)]  # fmt: skip
+        s = self._camera_samples
+        if s and s[-1][1:] == sample[1:]:
+            return
+        if s and s[-1][0] == sample[0]:
+            s[-1] = sample
+        else:
+            s.append(sample)
+
+    def camera(self) -> dict | None:
+        """The camera's metadata (datalog/schema.py META_CAMERA), or None without one."""
+        if self._camera_info is None:
+            return None
+        return {**self._camera_info, "columns": CAMERA_COLUMNS, "samples": [list(x) for x in self._camera_samples]}
 
     def pilot_aids(self) -> dict:
         """{"hud": [[t_on_s, t_off_s], ...]} up to now (an interval still open ends now)."""
@@ -223,7 +263,7 @@ class ManualSource(LiveSource):
             return None
         run_id = self.demo_run_id()
         path = data_dir / "demos" / f"{run_id}.parquet"
-        provenance = replace(self._env.provenance(run_id=run_id, pilot="human"), pilot_aids=self.pilot_aids())
+        provenance = replace(self._env.provenance(run_id=run_id, pilot="human"), pilot_aids=self.pilot_aids(), camera=self.camera())
         return write_log(path, self._env.episode_result(), provenance)
 
 
@@ -248,6 +288,7 @@ def _log_info(path: Path) -> dict | None:
                     "task": task,
                     "windy": windy,
                     "hud": _hud_used(meta.get("flightsim.pilot_aids")),
+                    "camera": _camera_used(meta.get("flightsim.camera")),
                     "aircraft": meta.get("flightsim.aircraft"),
                     "rows": md.num_rows,
                     "duration_s": _last_time(path, md),
@@ -287,6 +328,16 @@ def _hud_used(aids_json: str | None) -> bool | None:
     except ValueError:
         return None
     return bool(aids.get("hud")) if isinstance(aids, dict) and "hud" in aids else None
+
+
+def _camera_used(camera_json: str | None) -> bool | None:
+    """Whether the belly camera's picture was in view at any time (None: not recorded)."""
+    try:
+        cam = json.loads(camera_json) if camera_json else None
+        on = cam["columns"].index("on")
+        return any(s[on] for s in cam["samples"])
+    except (ValueError, KeyError, TypeError, IndexError):
+        return None
 
 
 def _last_time(path: Path, md) -> float:

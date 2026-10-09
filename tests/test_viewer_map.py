@@ -1,6 +1,6 @@
 """Moving map geometry (flightsim/viewer/map.js), run with Node when available: screen
 orientation (north up, track up), the flown track's bookkeeping, the predicted path,
-the runway and ring spacing."""
+the runway and ring spacing, the belly camera's footprint."""
 
 import json
 import math
@@ -39,8 +39,26 @@ out.parked = m.predictedPath({ v_north_mps: 0.1, v_east_mps: 0, r_radps: 0 }, 0,
 const own = m.mapRunway(null), task = m.mapRunway({ approach: { threshold_north_m: 0, threshold_east_m: -500, heading_deg: 90, length_m: 1000, width_m: 30 } });
 out.runways = [own, task, m.runwayToMap(task, 1000, 0), m.runwayToMap(task, 0, 15)];
 out.rings = [0.5, 1, 2, 5, 10, 20].map(m.ringStepNm);
+// The belly camera's footprint: a recording 2D context; the patch is the path filled in
+// the camera's yellow, its corners at the footprint's screen points.
+const calls = [];
+let path = [];
+const ctx = new Proxy({}, {
+  get: (o, k) => (k in o ? o[k] : (...a) => {
+    if (k === "beginPath") path = [];
+    if (k === "moveTo" || k === "lineTo") path.push(a);
+    if (k === "fill") calls.push({ fill: o.fillStyle, path: [...path] });
+  }),
+  set: (o, k, v) => ((o[k] = v), true),
+});
+const row = { t_s: 1, lat_rad: 0, lon_rad: 0, alt_msl_m: 500, psi_rad: 0, phi_rad: 0, theta_rad: 0, v_north_mps: 50, v_east_mps: 0, r_radps: 0 };
+const { Geodesy } = await import(%s);
+m.drawMap(ctx, 1000, 800, { hello: null, row, geodesy: new Geodesy({ model: "wgs84", origin_lat_deg: 0, origin_lon_deg: 0 }), track: new m.Track(),
+  rangeNm: 2, northUp: true, camera: { origin: [0, 0], ground: [500, 0], corners: [[700, -200], [700, 200], [300, 200], [300, -200]] } });
+out.cameraPatch = calls.find((c) => c.fill === "rgba(255, 207, 58, 0.18)")?.path ?? null;
+out.cameraView = m.makeView(1000, 800, 0, 0, 0, 2).toScreen(700, -200);
 console.log(JSON.stringify(out));
-""" % json.dumps((VIEWER / "map.js").as_uri())
+""" % (json.dumps((VIEWER / "map.js").as_uri()), json.dumps((VIEWER / "geo.js").as_uri()))
 
 
 @pytest.fixture(scope="module")
@@ -80,3 +98,13 @@ def test_runways_and_rings(out):
     assert own == {"thresholdN": 0, "thresholdE": -500, "headingDeg": 90, "lengthM": 1000, "widthM": 30, "task": False}
     assert task["task"] and far_end == pytest.approx([0, 500]) and right_edge == pytest.approx([-15, -500])
     assert out["rings"] == [0.25, 0.25, 0.5, 2, 5, 5]
+
+
+def test_camera_footprint_is_drawn_where_the_camera_looks(out):
+    patch = out["cameraPatch"]
+    assert patch is not None and len(patch) == 4
+    assert patch[0] == pytest.approx(out["cameraView"])  # first corner, 700 m north and 200 m west
+    xs = [p[0] for p in patch]
+    ys = [p[1] for p in patch]
+    assert max(ys) < 400  # all north of the aircraft (screen centre y = 400, north up)
+    assert min(xs) < 500 < max(xs)  # centred on the aircraft's longitude

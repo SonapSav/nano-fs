@@ -101,7 +101,9 @@ export function ringStepNm(rangeNm) {
 // nav} (`background`: optional, a mapTiles.js MapBackground: terrain, villages and roads;
 // `nav`: a route's GPS quantities for this frame, nav.js).
 // `compact`: the corner map in the 3D view (smaller text, no key help, a short info line).
-export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northUp, background = null, nav = null, compact = false }) {
+// `camera`: what the belly camera sees ({origin, ground, corners}: map [north, east]
+// metres; app.js), drawn as a translucent patch with a line to the point under its crosshair.
+export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northUp, background = null, nav = null, compact = false, camera = null }) {
   ctx.fillStyle = C.ground;
   ctx.fillRect(0, 0, w, h);
   const font = (size, weight = 500) => `${weight} ${size}px "Barlow Condensed", "Roboto Condensed", "Arial Narrow", sans-serif`;
@@ -194,6 +196,30 @@ export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northU
       }
       text(wp.name, x + 12, y - 14, 15, C.text, "left", 600);
     });
+  }
+
+  // Belly camera: the ground in its picture, and its line of sight to the crosshair.
+  if (camera) {
+    ctx.fillStyle = "rgba(255, 207, 58, 0.18)";
+    ctx.strokeStyle = "rgba(255, 207, 58, 0.85)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    camera.corners.forEach(([n, e], i) => {
+      const [x, y] = v.toScreen(n, e);
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    if (camera.ground) {
+      line([camera.origin, camera.ground], "rgba(255, 207, 58, 0.85)", 1.5, [5, 4]);
+      const [x, y] = v.toScreen(...camera.ground);
+      ctx.strokeStyle = "#ffcf3a";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x - 7, y); ctx.lineTo(x + 7, y); ctx.moveTo(x, y - 7); ctx.lineTo(x, y + 7);
+      ctx.stroke();
+    }
   }
 
   // Flown track, predicted path, aircraft.

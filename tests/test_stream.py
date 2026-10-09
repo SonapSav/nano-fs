@@ -432,3 +432,43 @@ def test_demonstrations_record_when_the_hud_was_in_view(env_cfg, tmp_path):
         pass
     _, meta = read_log(plain.save(tmp_path / "plain"))
     assert json.loads(meta["flightsim.pilot_aids"]) == {"hud": []}  # recorded as never, not unknown
+
+
+def test_demonstrations_record_the_camera_pointing(env_cfg, tmp_path):
+    from flightsim.datalog import read_log
+    from flightsim.stream.sources import ManualSource, _camera_used
+
+    cam = {"on": False, "pan_rad": 0.0, "tilt_rad": -1.5708, "hfov_rad": 1.0472, "mount_body_m": [0.023, 0.0, 0.942], "stabilized": True}
+    src = ManualSource(env_cfg, seed=1, camera=cam)
+    frames = src.frames()
+    for t, _ in frames:
+        if t >= 1.0:
+            break
+    src.set_camera({"on": True, "pan_rad": 0.5, "tilt_rad": -0.3, "hfov_rad": 0.2})
+    src.set_camera({"on": True, "pan_rad": 0.6, "tilt_rad": -0.3, "hfov_rad": 0.2})  # same time: replaces
+    src.set_camera({"on": True, "pan_rad": 0.6, "tilt_rad": -0.3, "hfov_rad": 0.2})  # unchanged: ignored
+    for t, _ in frames:
+        if t >= 2.0:
+            break
+    with pytest.raises(ValueError):
+        src.set_camera({"on": True, "pan_rad": float("nan"), "tilt_rad": 0, "hfov_rad": 0.2})
+    src.set_camera({"on": False, "pan_rad": 0.6, "tilt_rad": -5, "hfov_rad": 0.2})  # tilt clamped
+    for _ in frames:
+        pass
+    path = src.save(tmp_path)
+    _, meta = read_log(path)
+    rec = json.loads(meta["flightsim.camera"])
+    assert rec["mount_body_m"] == [0.023, 0.0, 0.942] and rec["stabilized"] is True
+    assert rec["columns"] == ["t_s", "on", "pan_rad", "tilt_rad", "hfov_rad"]
+    t = [s[0] for s in rec["samples"]]
+    assert [s[1:] for s in rec["samples"]] == [[0, 0.0, -1.5708, 1.0472], [1, 0.6, -0.3, 0.2], [0, 0.6, -1.6, 0.2]]
+    assert t[0] == 0.0 and t[1] == pytest.approx(1.0, abs=0.1) and t[2] == pytest.approx(2.0, abs=0.1)
+    assert _camera_used(meta["flightsim.camera"]) is True
+
+    plain = ManualSource(env_cfg, seed=1)  # an older viewer: no camera, nothing recorded
+    plain.set_camera({"on": True, "pan_rad": 0, "tilt_rad": 0, "hfov_rad": 1})
+    for _ in plain.frames():
+        pass
+    _, meta = read_log(plain.save(tmp_path / "plain"))
+    assert "flightsim.camera" not in meta
+    assert _camera_used(None) is None

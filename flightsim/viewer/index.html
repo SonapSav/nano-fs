@@ -92,6 +92,9 @@
   #view canvas { display: block; width: 100%; height: 100%; touch-action: none; }
   #view #minimap { position: absolute; right: 16px; bottom: 64px; z-index: 2; width: min(32vh, 280px); height: min(32vh, 280px);
     border: 2px solid #5b6167; border-radius: 6px; box-shadow: 0 2px 10px rgba(0, 0, 0, .35); cursor: pointer; }
+  #view #camera-inset { position: absolute; right: 16px; top: 12px; z-index: 2; width: min(30vw, 400px); aspect-ratio: 16 / 9; height: auto;
+    border: 2px solid #5b6167; border-radius: 6px; box-shadow: 0 2px 10px rgba(0, 0, 0, .35); background: #000; cursor: grab; }
+  #view:has(#camera-inset:not([hidden])) #perf { top: calc(12px + min(30vw, 400px) * 9 / 16 + 12px); }
   #message {
     position: absolute; left: 16px; bottom: 16px; max-width: 34em;
     padding: 8px 12px; border-radius: 4px; background: rgba(44, 48, 52, .86);
@@ -162,6 +165,7 @@
     <button id="hud-toggle" type="button" aria-pressed="false" hidden title="Head-up display in the cockpit view (H). Not fitted to a real C172.">HUD off</button>
     <button id="panel-window" type="button" title="Open the instruments in their own window, e.g. full screen (F11) on a second monitor">Instruments window</button>
     <button id="map-window" type="button" title="Open a moving map in its own window, e.g. on another monitor">Map window</button>
+    <button id="camera-window" type="button" title="Open the belly camera in its own window, e.g. full screen (F11) on another monitor">Camera window</button>
     <button id="settings-open" type="button">Settings</button>
     <button id="stick-open" type="button">Stick settings</button>
     <div id="progress"><div id="progress-track" aria-label="Replay position" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><div id="progress-bar"><div id="progress-fill"></div></div></div><span id="clock">0:00</span></div>
@@ -206,6 +210,7 @@
     <div id="boresight" aria-hidden="true"></div>
     <canvas id="hud" aria-hidden="true"></canvas>
     <div id="perf" hidden aria-live="off"></div>
+    <canvas id="camera-inset" hidden aria-label="Belly camera" title="Belly camera: drag to point, wheel to zoom, double-click for straight down (K to hide)"></canvas>
     <canvas id="minimap" hidden aria-label="Corner map" title="Corner map: wheel to zoom, click for north up / track up (I to hide)"></canvas>
     <div id="hint">Drag to look around, scroll to zoom, space to pause</div>
   </main>
@@ -291,6 +296,19 @@
       <div class="set-row"><span></span>
         <button type="button" id="bench" title="Measure the frame rate with the costly features switched off one at a time (about a minute)">Performance test</button>
         <span class="what">about a minute</span></div>
+      <h3>Belly camera</h3>
+      <div class="set-row"><span class="axis">In the view</span>
+        <label class="check"><input type="checkbox" id="camera-inset-toggle"> Show the camera in the view (K)</label>
+        <span class="what">or open the Camera window</span></div>
+      <div class="set-row"><label class="axis" for="camera-size">Picture</label>
+        <select id="camera-size"><option value="low">480 × 270</option><option value="medium">640 × 360</option><option value="high">960 × 540</option></select>
+        <span class="what">drawn as a second, smaller view: costs frame rate</span></div>
+      <div class="set-row"><label class="axis" for="camera-fps">Rate</label>
+        <select id="camera-fps"><option value="15">15 a second</option><option value="30">30 a second</option></select>
+        <span></span></div>
+      <div class="set-row"><span class="axis">Replays</span>
+        <label class="check"><input type="checkbox" id="camera-follow"> Follow the recorded camera (numpad 0)</label>
+        <span class="what">until you move it</span></div>
       <div class="dialog-buttons">
         <span></span>
         <button value="done">Done</button>

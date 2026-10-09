@@ -66,7 +66,8 @@ def model(tmp_path_factory):
     for f in ("three.module.js", "three.core.js"):
         shutil.copy(VIEWER / "vendor" / f, three / f)
     (three / "package.json").write_text('{"name":"three","type":"module","exports":{".":"./three.module.js"}}')
-    shutil.copy(VIEWER / "aircraft.js", d / "aircraft.js")
+    for f in ("aircraft.js", "camera.js"):
+        shutil.copy(VIEWER / f, d / f)
     out = subprocess.run([NODE, "--input-type=module", "-e", SCRIPT], cwd=d, capture_output=True, text=True, timeout=120)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout)

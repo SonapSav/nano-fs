@@ -30,10 +30,11 @@ Server -> client messages (JSON):
       takeoff: the takeoff task's result (lift-off, 50 ft point, ...), takeoff only
       route: the navigation task's route summary (legs, time, cross-track RMS and max), routes only
   {"type": "logs", "logs": [{"path", "group", "run_id", "aircraft", "rows", "duration_s", "seed",
-                             "pilot", "mtime", "task", "windy", "hud", "result"?}, ...]}
+                             "pilot", "mtime", "task", "windy", "hud", "camera", "result"?}, ...]}
       group: "demos", "batch/<id>" or the top directory under the data dir.
       task: "free" | "approach" | "takeoff" | "circuit" (null if unknown); windy: flew in
-      wind; hud: the HUD was in view at some time (null: not recorded).
+      wind; hud: the HUD was in view at some time (null: not recorded); camera: the
+      belly camera's picture was in view at some time (null: not recorded).
       result (when the server computes results and has it; never for batches): what the
       task decided, from re-flying the log (stream/results.py). Sent again, with more
       results, while they are being computed.
@@ -45,7 +46,8 @@ Client -> server messages:
   {"type": "play", "source": "replay", "path": "<relative to the data dir>", "speed": 1.0, "start_s"?: 0.0}
   {"type": "play", "source": "live", "autopilot": "pid" | "lqr" | "approach" | "takeoff" | "circuit" | "route" (default "pid"), "seed": 0, "speed": 1.0}
   {"type": "play", "source": "manual", "conditions": "calm" | "windy" | "approach" | "approach_crosswind" | "takeoff"
-   | "takeoff_crosswind" | "circuit" | "circuit_crosswind" | "route" | "route_wind", "seed": 0, "record": true, "aids"?: {"hud": false}}
+   | "takeoff_crosswind" | "circuit" | "circuit_crosswind" | "route" | "route_wind", "seed": 0, "record": true, "aids"?: {"hud": false},
+   "camera"?: {"on", "pan_rad", "tilt_rad", "hfov_rad", "mount_body_m": [x, y, z], "stabilized": true}}
       (speed is capped at 1)
   {"type": "preview", "id"?, <the fields of a "play" message>}
       The starting state of that flight without starting it (shown when a flight is
@@ -63,6 +65,11 @@ Client -> server messages:
       Manual flights only: the HUD came into or left the pilot's view (and "aids" in the
       play message: in view at the start). Recorded in the demonstration's metadata
       (flightsim.pilot_aids); never reaches the physics.
+  {"type": "camera", "on": true, "pan_rad", "tilt_rad", "hfov_rad"}
+      Manual flights only: the viewer's belly camera (viewer/camera.js) was pointed
+      (at most 5 Hz) or came into or left view; "camera" in the play message gives its
+      mount and starting state (a flight started without it records no camera). Recorded
+      in the demonstration's metadata (flightsim.camera); never reaches the physics.
   {"type": "pause"} | {"type": "resume"} | {"type": "speed", "value": 2.0} | {"type": "stop"}
   {"type": "seek", "t_s": 42.0}
       Replays only: continue from the first row at or after t_s; while paused, the

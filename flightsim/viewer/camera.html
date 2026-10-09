@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Belly camera</title>
+<link rel="stylesheet" href="./vendor/fonts/barlow-condensed.css">
+<link rel="stylesheet" href="./theme.css">
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100dvh; touch-action: none; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  #status { position: fixed; left: 50%; top: 45%; transform: translateX(-50%); color: var(--dim); font: 500 18px var(--font); text-align: center; }
+  #status:empty { display: none; }
+  #help { position: fixed; right: 14px; bottom: 8px; color: #8a9096; font: 500 13px var(--font); pointer-events: none; }
+</style>
+</head>
+<body>
+  <canvas id="camera" aria-label="Belly camera picture: drag to point, wheel to zoom, double-click to re-centre"></canvas>
+  <div id="status" role="status">Waiting for the flight viewer window…</div>
+  <div id="help">drag: point · wheel: zoom · double-click: straight down · numpad 4 6 8 2, + −, 5, 0: follow recording</div>
+  <script type="module" src="./camerawindow.js"></script>
+</body>
+</html>

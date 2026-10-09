@@ -4,25 +4,30 @@
 // it does not use itself, so flying with the keyboard keeps working. It never says
 // "alive": the viewer keeps its own instrument panel while only the map is open.
 //
-// Keys here: + / - zoom, N north up / track up; the mouse wheel zooms. Remembered in this browser.
+// Keys here: + / - zoom, N north up / track up; the mouse wheel zooms; K the layout: the
+// map, the map and the belly camera, the camera alone (camsink.js; it needs this window to
+// be opened from the viewer). Remembered in this browser.
 
 import { Geodesy } from "./geo.js";
 import { PANEL_CHANNEL, PANEL_TIMEOUT_MS } from "./panel.js";
 import { RANGES_NM, Track, drawMap } from "./map.js";
 import { MapBackground } from "./mapTiles.js";
 import { NavTracker } from "./nav.js";
+import { CameraSink } from "./camsink.js";
 
 const canvas = document.getElementById("map");
 const status = document.getElementById("status");
 const channel = new BroadcastChannel(PANEL_CHANNEL);
 const KEY = "flightsim.map";
-let settings = { rangeIndex: 2, northUp: true };
+const LAYOUTS = ["map", "split", "camera"];
+let settings = { rangeIndex: 2, northUp: true, layout: "map" };
 try {
   settings = { ...settings, ...JSON.parse(localStorage.getItem(KEY) ?? "{}") };
 } catch {
   // defaults
 }
 settings.rangeIndex = Math.max(0, Math.min(RANGES_NM.length - 1, settings.rangeIndex | 0));
+if (!LAYOUTS.includes(settings.layout)) settings.layout = "map";
 const save = () => {
   try {
     localStorage.setItem(KEY, JSON.stringify(settings));
@@ -33,6 +38,7 @@ const save = () => {
 
 let hello = null, row = null, geodesy = new Geodesy(null), heardAt = 0, dirty = true;
 let navTracker = null, nav = null; // a route's navigation (nav.js), fed every frame
+let camera = null; // what the belly camera sees (app.js camShape), drawn on the map
 const track = new Track();
 let background = null;
 try {
@@ -59,6 +65,9 @@ channel.addEventListener("message", (e) => {
     row = m.row;
     if (row) addToTrack(row);
     dirty = true;
+  } else if (m.type === "camera") {
+    camera = m.camera;
+    dirty = true;
   } else if (m.type === "frame") {
     row = m.row;
     addToTrack(row);
@@ -79,8 +88,35 @@ canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
   zoom(e.deltaY > 0 ? 1 : -1);
 }, { passive: false });
+const cameraCanvas = document.getElementById("camera");
+const cameraSink = new CameraSink(cameraCanvas, { onStatus: (t) => (document.getElementById("camera-status").textContent = t) });
+function applyLayout() {
+  document.body.classList.toggle("split", settings.layout === "split");
+  canvas.hidden = settings.layout === "camera";
+  cameraCanvas.hidden = settings.layout === "map";
+  if (settings.layout === "map") {
+    cameraSink.disable();
+    document.getElementById("camera-status").textContent = "";
+  } else cameraSink.enable();
+  dirty = true;
+}
+applyLayout();
+
 document.addEventListener("keydown", (e) => {
   if (e.ctrlKey || e.altKey || e.metaKey || /^F\d+$/.test(e.key)) return;
+  if (e.code === "KeyK") {
+    e.preventDefault();
+    if (!e.repeat) {
+      settings.layout = LAYOUTS[(LAYOUTS.indexOf(settings.layout) + 1) % LAYOUTS.length];
+      save();
+      applyLayout();
+    }
+    return;
+  }
+  if (settings.layout !== "map" && cameraSink.key(e.code, true)) {
+    e.preventDefault();
+    return;
+  }
   if (["+", "=", "-", "_"].includes(e.key) || e.code === "NumpadAdd" || e.code === "NumpadSubtract") {
     e.preventDefault();
     if (!e.repeat) zoom(e.key === "+" || e.key === "=" || e.code === "NumpadAdd" ? -1 : 1);
@@ -98,7 +134,8 @@ document.addEventListener("keydown", (e) => {
   channel.postMessage({ type: "key", event: "down", code: e.code, key: e.key, shiftKey: e.shiftKey, repeat: e.repeat });
 });
 document.addEventListener("keyup", (e) => {
-  if (e.ctrlKey || e.altKey || e.metaKey || /^F\d+$/.test(e.key) || e.code === "KeyN" || ["+", "=", "-", "_"].includes(e.key)) return;
+  if (e.ctrlKey || e.altKey || e.metaKey || /^F\d+$/.test(e.key) || e.code === "KeyN" || e.code === "KeyK" || ["+", "=", "-", "_"].includes(e.key)) return;
+  if (cameraSink.key(e.code, false)) return;
   channel.postMessage({ type: "key", event: "up", code: e.code, key: e.key, shiftKey: e.shiftKey, repeat: false });
 });
 window.addEventListener("resize", () => (dirty = true));
@@ -113,7 +150,7 @@ function frame() {
     }
     const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm: RANGES_NM[settings.rangeIndex], northUp: settings.northUp, background, nav });
+    if (w && h) drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm: RANGES_NM[settings.rangeIndex], northUp: settings.northUp, background, nav, camera });
   }
   requestAnimationFrame(frame);
 }

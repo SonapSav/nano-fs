@@ -68,6 +68,12 @@ META_PILOT = "flightsim.pilot"  # optional: "human" for demonstrations
 # simulation times the pilot had the viewer's HUD in view (empty list: never). Logs
 # without it predate the HUD or did not come from the viewer.
 META_PILOT_AIDS = "flightsim.pilot_aids"
+# optional, demonstrations (2026-10-09 on): JSON {"mount_body_m": [x, y, z], "stabilized": true,
+# "columns": ["t_s", "on", "pan_rad", "tilt_rad", "hfov_rad"], "samples": [[...], ...]}: the
+# viewer's belly camera (viewer/camera.js), a sample at each reported change (at most 5 Hz;
+# on = its picture in view; pan from the nose, clockwise; tilt from the horizon, negative
+# down; horizontal field of view). Visual only: never part of the physics.
+META_CAMERA = "flightsim.camera"
 META_CODE_VERSION = "flightsim.code_version"  # JSON: source hash and git commit (flightsim.provenance)
 
 

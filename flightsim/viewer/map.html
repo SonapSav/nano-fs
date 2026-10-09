@@ -8,13 +8,26 @@
 <link rel="stylesheet" href="./theme.css">
 <style>
   html, body { margin: 0; height: 100%; background: #1d2a22; overflow: hidden; }
-  canvas { display: block; width: 100vw; height: 100dvh; touch-action: none; }
+  [hidden] { display: none !important; }
+  /* Layouts (K): the map, the map and the belly camera side by side (stacked on a tall
+     window), or the camera alone. */
+  #panes { display: grid; width: 100vw; height: 100dvh; grid-template: 1fr / 1fr; }
+  body.split #panes { grid-template: 1fr / 1fr 1fr; }
+  @media (max-aspect-ratio: 1/1) { body.split #panes { grid-template: 1fr 1fr / 1fr; } }
+  canvas { display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; touch-action: none; }
+  #camera { background: #000; cursor: grab; }
+  #camera-status { position: fixed; right: 14px; top: 40px; color: var(--dim); font: 500 16px var(--font); max-width: 45vw; text-align: right; }
+  #camera-status:empty { display: none; }
   #status { position: fixed; left: 14px; top: 40px; color: var(--dim); font: 500 16px var(--font); }
   #status:empty { display: none; }
 </style>
 </head>
 <body>
-  <canvas id="map" aria-label="Moving map"></canvas>
+  <div id="panes">
+    <canvas id="map" aria-label="Moving map"></canvas>
+    <canvas id="camera" hidden aria-label="Belly camera picture: drag to point, wheel to zoom, double-click to re-centre"></canvas>
+  </div>
+  <div id="camera-status" role="status"></div>
   <div id="status" role="status">Waiting for the flight viewer window…</div>
   <script type="module" src="./mapwindow.js"></script>
 </body>

@@ -10,6 +10,10 @@ import { benchReport, runBench } from "./bench.js";
 import { FrameBuffer } from "./smooth.js";
 import { RANGES_NM, Track, drawMap } from "./map.js";
 import { MapBackground } from "./mapTiles.js";
+import { CameraReporter, CameraTrack, Gimbal, MOUNT_BODY_M, bodyToNed, cameraAxes, drawCameraOverlay, footprint } from "./camera.js";
+import { CAMERA_KEYS, CameraSink } from "./camsink.js";
+import { formatLat, formatLon } from "./gps.js";
+import { WATER_LEVEL_M, height as terrainHeight } from "./terrainCore.js";
 import { HANDLED_KEYS, PilotInput } from "./input.js";
 import { AXES, BUTTONS, CONTROLS, DEFAULTS, MAX_CALIBRATION_SPREAD, MAX_CENTRE, buttonValue, controlValue, copyFeel, defaultProfile, detectAxis, detectButton, saveSettings } from "./stick.js";
 import { groupLogs } from "./flightlist.js";
@@ -92,7 +96,7 @@ const LANDING_FAILURES = {
   off_course: "too far off the route (the task's cross-track limit)",
 };
 const INPUT_SEND_HZ = 30;
-const VIEW_HINT = "L for flights, I for the corner map; drag to look around, scroll to zoom, R or double-click to re-centre, space to pause, C for cockpit view (H: HUD), M for sound";
+const VIEW_HINT = "L for flights, I for the corner map, K for the belly camera; drag to look around, scroll to zoom, R or double-click to re-centre, space to pause, C for cockpit view (H: HUD), M for sound";
 const FLY_HINT = "Arrows pitch and roll; Z/X rudder and nosewheel; W/S throttle; F/V flaps; T/G trim; B brakes; hold a key to build it up, Shift for full deflection; R re-centres the view, H HUD (cockpit view). Gamepad: LB/RB flaps, D-pad trim, B brakes, Y view, X HUD (buttons: Stick settings)";
 
 // Graphics quality (terrain.js QUALITY), remembered in this browser only.
@@ -343,6 +347,7 @@ function applyHello(msg) {
   scene.setTargets(msg.targets);
   scene.setApproach(msg.approach ?? null);
   scene.setPattern(msg.pattern ?? null);
+  setCameraTrack(msg);
   applySky();
   if (msg.takeoff) scene.windsock.setWind(msg.takeoff.wind?.from_deg ?? 0, (msg.takeoff.wind?.u20_mps ?? 0) * 1.943844);
   panel.setSession(msg);
@@ -358,7 +363,7 @@ function applyHello(msg) {
       : msg.takeoff
         ? "Full throttle (W), keep the centreline with Z/X, lift the nose wheel at 55 kt and climb at 75 kt to 1000 ft." + (msg.takeoff.wind ? " Crosswind: aileron into the wind on the roll; after lift-off let the nose turn into the wind." : "")
         : "Fly to the magenta altitude and heading bugs."
-    : "");
+    : camTrack?.used ? "The belly camera was recorded with this flight: press K (or Camera window) to watch where it pointed." : "");
 }
 
 function handle(msg) {
@@ -474,6 +479,10 @@ function play() {
   if (req.source === "manual") {
     req.aids = { hud: hudInView() }; // recorded with the demonstration
     hudReported = hudInView();
+    req.camera = { ...cameraMessage(), mount_body_m: MOUNT_BODY_M, stabilized: true };
+    delete req.camera.type;
+    camReporter.reset();
+    camReporter.next(cameraReportState(), performance.now());
   }
   send({ type: "play", ...req });
   document.activeElement?.blur(); // so the arrow keys fly instead of changing the menu
@@ -669,6 +678,15 @@ try {
 
 // Keys, typed here or in the instruments window (forwarded; never "in a form" there).
 function keyDown(e, inForm) {
+  if (CAMERA_KEYS.has(e.code) && !inForm) {
+    e.preventDefault();
+    cameraKey(e.code, true);
+    return;
+  }
+  if (e.code === "KeyK" && !inForm && !e.repeat) {
+    setCameraInset($("camera-inset").hidden);
+    return;
+  }
   if (e.code === "KeyM" && !inForm && !e.repeat) {
     toggleSound();
     return;
@@ -708,8 +726,15 @@ function keyDown(e, inForm) {
   }
 }
 document.addEventListener("keydown", (e) => keyDown(e, ["INPUT", "SELECT", "BUTTON"].includes(document.activeElement?.tagName)));
-document.addEventListener("keyup", (e) => pilot.keyup(e));
-window.addEventListener("blur", () => pilot.releaseAll());
+function keyUp(e) {
+  if (CAMERA_KEYS.has(e.code)) cameraKey(e.code, false);
+  else pilot.keyup(e);
+}
+document.addEventListener("keyup", keyUp);
+window.addEventListener("blur", () => {
+  pilot.releaseAll();
+  camKeys.clear();
+});
 window.addEventListener("resize", () => (dirty = true));
 
 // Instruments window (panel.html, e.g. on a second monitor): mirrors this window's flight
@@ -735,7 +760,7 @@ panelChannel?.addEventListener("message", (e) => {
   else if (m.type === "key") {
     const ev = { code: m.code, key: m.key, shiftKey: m.shiftKey, repeat: m.repeat, preventDefault() {} };
     if (m.event === "down") keyDown(ev, false);
-    else pilot.keyup(ev);
+    else keyUp(ev);
   }
   placePanel();
 });
@@ -748,6 +773,9 @@ $("panel-window").addEventListener("click", () => {
 });
 $("map-window").addEventListener("click", () => {
   window.open("map.html", "flightsim-map", "popup=yes,width=900,height=900");
+});
+$("camera-window").addEventListener("click", () => {
+  window.open("camera.html", "flightsim-camera", "popup=yes,width=1280,height=720");
 });
 
 // Performance readout (P), remembered in this browser: drawn frames per second, the
@@ -798,8 +826,10 @@ $("bench").addEventListener("click", async () => {
     const result = await runBench({
       scene, setView, restoreClouds: applySky, progress: say, scriptTimes,
       setHud: (on) => (benchHud = on), setPanel: (on) => { benchPanel = on; dirty = true; },
+      setCamera: (on) => setCameraInset(on), cameraOn: !$("camera-inset").hidden,
     });
-    const extra = `HUD ${hudOn ? "on" : "off"} (cockpit view); instruments window ${$("panel").hidden ? "open" : "closed"}`;
+    const extra = `HUD ${hudOn ? "on" : "off"} (cockpit view); instruments window ${$("panel").hidden ? "open" : "closed"}; ` +
+      `belly camera ${CAMERA_WIDTHS[camSettings.size]} px at ${camSettings.fps}/s, ${camSinks.size} picture(s) in view`;
     $("bench-out").textContent = benchReport(result) + "\n" + extra;
     say("Performance test finished.");
     $("bench-dialog").showModal();
@@ -877,9 +907,241 @@ function drawMinimap(now) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   drawMap(ctx, w, h, {
     hello: session, row: latest, geodesy: scene.geodesy, track: minimapState.track, rangeNm: RANGES_NM[minimapState.rangeIndex],
-    northUp: minimapState.northUp, background: minimapState.background, nav: panel.nav, compact: true,
+    northUp: minimapState.northUp, background: minimapState.background, nav: panel.nav, compact: true, camera: camShape,
   });
 }
+
+// --- Belly camera (camera.js) ---------------------------------------------------------
+// A stabilized camera under the fuselage. This window renders its picture (in this view's
+// canvas, before the main view; scene.renderCamera) at a set size and rate, and draws it,
+// with the overlay, into every attached canvas: the inset (K) and the camera and map
+// windows (camsink.js, through window.flightsimCamera). Pointed with the mouse on the
+// picture, the numpad, or controller buttons (Stick settings). During a manual flight its
+// pointing is recorded with the demonstration (protocol "camera"; never reaches the
+// physics); replays follow the recorded pointing until it is moved (numpad 0: follow again).
+const CAMERA_KEY = "flightsim.camera";
+const CAMERA_WIDTHS = { low: 480, medium: 640, high: 960 }; // picture width, pixels (16:9)
+const camSettings = { inset: false, size: "medium", fps: 30, follow: true };
+try {
+  Object.assign(camSettings, JSON.parse(localStorage.getItem(CAMERA_KEY) ?? "{}"));
+} catch {
+  // defaults
+}
+if (!(camSettings.size in CAMERA_WIDTHS)) camSettings.size = "medium";
+if (![15, 30].includes(camSettings.fps)) camSettings.fps = 30;
+function saveCamera() {
+  try {
+    localStorage.setItem(CAMERA_KEY, JSON.stringify({ ...camSettings, inset: !$("camera-inset").hidden }));
+  } catch {
+    // not remembered
+  }
+}
+const gimbal = new Gimbal();
+const camPicture = document.createElement("canvas"); // the latest picture, before the overlay
+const camSinks = new Map(); // id -> {canvas, win, compact}
+let camSinkId = 0, camDrawnAt = -Infinity, camGroundAt = -Infinity, camStepAt = null, camShapeAt = -Infinity;
+let camGround = null; // the ground point under the crosshair, for the overlay
+let camShape = null; // what the camera sees, for the maps: {origin, ground, corners} (map metres)
+let camTrack = null; // a replay's recorded pointing
+const camReporter = new CameraReporter();
+const camKeys = new Set();
+const camPadPrev = {};
+const CAMERA_KEY_RATES = { Numpad4: ["pan", -1], Numpad6: ["pan", 1], Numpad8: ["tilt", 1], Numpad2: ["tilt", -1], NumpadAdd: ["zoom", 1], NumpadSubtract: ["zoom", -1] };
+
+function cameraKey(code, down) {
+  if (code === "Numpad5") {
+    if (down) gimbal.startRecentre(performance.now() / 1000);
+  } else if (code === "Numpad0") {
+    if (down) followRecording();
+  } else if (down) camKeys.add(code);
+  else camKeys.delete(code);
+}
+function followRecording() {
+  if (camTrack && !camTrack.empty) gimbal.following = true;
+}
+function setCameraTrack(hello) {
+  let meta = null;
+  try {
+    meta = hello.source === "replay" && hello.meta?.["flightsim.camera"] ? JSON.parse(hello.meta["flightsim.camera"]) : null;
+  } catch {
+    meta = null;
+  }
+  camTrack = meta ? new CameraTrack(meta) : null;
+  gimbal.following = Boolean(camSettings.follow && camTrack && !camTrack.empty);
+}
+
+// The viewer side of camsink.js.
+window.flightsimCamera = {
+  attach(canvas, win, opts = {}) {
+    const id = ++camSinkId;
+    camSinks.set(id, { canvas, win, compact: Boolean(opts.compact) });
+    camDrawnAt = -Infinity;
+    return id;
+  },
+  detach(id) {
+    camSinks.delete(id);
+  },
+  drag: (dx, dy, widthPx) => gimbal.drag(dx, dy, widthPx),
+  zoom: (factor) => gimbal.zoomBy(factor),
+  recentre: () => gimbal.startRecentre(performance.now() / 1000),
+  key: (code, down) => cameraKey(code, down),
+};
+
+const insetSink = new CameraSink($("camera-inset"), { host: window, compact: true });
+function setCameraInset(on) {
+  $("camera-inset").hidden = !on;
+  $("camera-inset-toggle").checked = on;
+  if (on) insetSink.enable();
+  else insetSink.disable();
+  saveCamera();
+}
+$("camera-inset-toggle").addEventListener("change", (e) => setCameraInset(e.target.checked));
+$("camera-size").value = camSettings.size;
+$("camera-size").addEventListener("change", (e) => {
+  camSettings.size = e.target.value;
+  saveCamera();
+});
+$("camera-fps").value = String(camSettings.fps);
+$("camera-fps").addEventListener("change", (e) => {
+  camSettings.fps = Number(e.target.value);
+  saveCamera();
+});
+$("camera-follow").checked = camSettings.follow;
+$("camera-follow").addEventListener("change", (e) => {
+  camSettings.follow = e.target.checked;
+  if (!camSettings.follow) gimbal.following = false;
+  else followRecording();
+  saveCamera();
+});
+
+function cameraActive() {
+  for (const [id, s] of camSinks) {
+    let gone = true;
+    try {
+      gone = s.win.closed || !s.canvas.isConnected;
+    } catch {
+      gone = true;
+    }
+    if (gone) camSinks.delete(id);
+  }
+  return camSinks.size > 0;
+}
+const cameraReportState = () => ({ on: cameraActive(), ...gimbal.state });
+function cameraMessage() {
+  const s = cameraReportState();
+  const r4 = (v) => Math.round(v * 1e4) / 1e4;
+  return { type: "camera", on: s.on, pan_rad: r4(s.pan), tilt_rad: r4(s.tilt), hfov_rad: r4(s.hfov) };
+}
+
+// Held keys and controller buttons -> gimbal rates; re-centre button once per press.
+function cameraInputs() {
+  const rates = { pan: 0, tilt: 0, zoom: 0 };
+  for (const code of camKeys) {
+    const [k, sgn] = CAMERA_KEY_RATES[code];
+    rates[k] += sgn;
+  }
+  const pad = pilot.readPad();
+  const profile = pad ? pilot.profile() : null;
+  if (profile) {
+    const btn = (f) => buttonValue(pad, profile.buttons[f]) > 0.5;
+    rates.pan += btn("camera_right") - btn("camera_left");
+    rates.tilt += btn("camera_up") - btn("camera_down");
+    rates.zoom += btn("camera_zoom_in") - btn("camera_zoom_out");
+    const centre = btn("camera_center");
+    if (centre && !camPadPrev.centre) gimbal.startRecentre(performance.now() / 1000);
+    camPadPrev.centre = centre;
+  }
+  gimbal.setRates(rates);
+}
+
+function drawCamera(now) {
+  const active = cameraActive();
+  if (flying()) {
+    const msg = camReporter.next(cameraReportState(), now);
+    if (msg) send(msg);
+  }
+  if (!active) {
+    if (camShape) {
+      camShape = null;
+      tellPanel({ type: "camera", camera: null });
+    }
+    camStepAt = null;
+    return;
+  }
+  cameraInputs();
+  const dt = camStepAt === null ? 0 : Math.min(0.25, (now - camStepAt) / 1000);
+  camStepAt = now;
+  if (gimbal.following && camTrack && shown) {
+    const p = camTrack.at(shown.t_s);
+    if (p) gimbal.set(p);
+  }
+  gimbal.step(dt, now / 1000);
+  if (!shown || now - camDrawnAt < 1000 / camSettings.fps - 4) return;
+  camDrawnAt = now;
+  const src = scene.renderCamera(gimbal.state, CAMERA_WIDTHS[camSettings.size]);
+  if (!src) return;
+  if (camPicture.width !== src.w || camPicture.height !== src.h) {
+    camPicture.width = src.w;
+    camPicture.height = src.h;
+  }
+  camPicture.getContext("2d").drawImage(scene.renderer.domElement, src.x, src.y, src.w, src.h, 0, 0, src.w, src.h);
+  if (now - camGroundAt >= 100) {
+    camGroundAt = now;
+    updateCameraGround(shown);
+  }
+  const info = {
+    ...gimbal.state, ground: camGround, mode: gimbal.following ? "PLAYBACK" : "LIVE",
+    recording: flying() && els.record.checked, formatLat, formatLon,
+  };
+  for (const s of camSinks.values()) {
+    const c = s.canvas, dpr = s.win.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+    if (!w || !h) continue;
+    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) {
+      c.width = Math.round(w * dpr);
+      c.height = Math.round(h * dpr);
+    }
+    const ctx = c.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, w, h);
+    // The whole 16:9 picture, fitted (black bars on other shapes).
+    const pw = Math.min(w, (h * src.w) / src.h), ph = (pw * src.h) / src.w, ox = (w - pw) / 2, oy = (h - ph) / 2;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(camPicture, ox, oy, pw, ph);
+    ctx.translate(ox, oy);
+    drawCameraOverlay(ctx, pw, ph, info, s.compact);
+  }
+  if (now - camShapeAt >= 200) {
+    camShapeAt = now;
+    tellPanel({ type: "camera", camera: camShape });
+  }
+}
+
+// The ground under the crosshair and the picture's corners (terrain as drawn; water
+// level where lower), from the camera's mount on the aircraft.
+const groundAt = (n, e) => Math.max(terrainHeight(e, -n), WATER_LEVEL_M);
+function updateCameraGround(row) {
+  const psiMap = row.psi_rad - scene.convergence;
+  const off = bodyToNed(row.phi_rad, row.theta_rad, psiMap, MOUNT_BODY_M);
+  const [n0, e0] = scene.geodesy.toMap(row.lat_rad, row.lon_rad);
+  const origin = { n: n0 + off[0], e: e0 + off[1], h: row.alt_msl_m - off[2] };
+  const fp = footprint(origin, cameraAxes(psiMap, gimbal.pan, gimbal.tilt), gimbal.hfov, groundAt);
+  const c = fp.centre;
+  if (c) {
+    const [lat, lon] = scene.geodesy.toGeodetic(c.n, c.e);
+    const brg = (Math.atan2(c.e - e0, c.n - n0) + scene.convergence) * (180 / Math.PI);
+    camGround = {
+      latDeg: lat * (180 / Math.PI), lonDeg: lon * (180 / Math.PI), elevM: c.h, slantM: c.range,
+      groundM: Math.hypot(c.n - n0, c.e - e0), bearingTrueDeg: ((brg % 360) + 360) % 360,
+    };
+  } else camGround = null;
+  // Corners that miss the ground (above the horizon): drawn 10 km out along their bearing.
+  const az = psiMap + gimbal.pan, half = gimbal.hfov / 2;
+  const far = (k) => [origin.n + 10000 * Math.cos(az + k * half), origin.e + 10000 * Math.sin(az + k * half)];
+  const corners = fp.corners.map((p, i) => (p ? [p.n, p.e] : far(i === 0 || i === 3 ? -1 : 1)));
+  camShape = { origin: [origin.n, origin.e], ground: c ? [c.n, c.e] : null, corners };
+}
+setCameraInset(Boolean(camSettings.inset));
 
 const hudCanvas = $("hud");
 function drawHudLayer() {
@@ -945,6 +1207,7 @@ function frame(now = performance.now()) {
     if (latest && session?.duration_s && !dragging) showPosition(latest.t_s);
     dirty = false;
   }
+  drawCamera(now); // before the main view: drawn in the same canvas, then copied out
   scene.render();
   drawHudLayer();
   drawMinimap(now);
@@ -1061,6 +1324,8 @@ function renderAxisRows() {
 const BUTTON_LABELS = {
   flaps_up: "Flaps up", flaps_down: "Flaps down", trim_nose_down: "Trim nose down", trim_nose_up: "Trim nose up",
   brake: "Brakes", throttle_up: "Throttle up", throttle_down: "Throttle down", view_center: "Centre view", hud_toggle: "HUD on/off",
+  camera_left: "Camera left", camera_right: "Camera right", camera_up: "Camera up", camera_down: "Camera down",
+  camera_zoom_in: "Camera zoom in", camera_zoom_out: "Camera zoom out", camera_center: "Camera straight down",
 };
 const bindingKey = (b) => (!b ? "" : b.button !== undefined ? `b${b.button}` : `a${b.axis}${b.dir > 0 ? "+" : "-"}`);
 const bindingFromKey = (k) => (!k ? null : k[0] === "b" ? { button: Number(k.slice(1)) } : { axis: Number(k.slice(1, -1)), dir: k.endsWith("+") ? 1 : -1 });

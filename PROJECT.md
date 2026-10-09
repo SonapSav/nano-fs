@@ -808,6 +808,29 @@ owner before work can start.
 - [ ] Photo-real aircraft (option B, discussed 2026-10-05): the project is now MIT
   (2026-10-07), so a GPL model such as FlightGear's c172p (AC3D, needs glTF conversion)
   would not fit; look for a CC0 or CC-BY model instead (attribution in THIRD_PARTY.md).
+- [x] **Belly camera** (2026-10-09, discussed and decided the same day: both windows,
+  stabilized, zoom and overlays, recorded). `viewer/camera.js` (pure, tested with Node):
+  a ball turret under the cabin floor (structural x 40 in, lens 4 in below the skin;
+  drawn on the model), pan 0-360 deg from the nose, tilt 0 to -90 deg, horizontal field of
+  view 60 to 5 deg (x1 to x12); stabilized (heading only: no pitch or roll in the
+  picture). Rendered by the viewer in its own canvas before the main view and copied out
+  in the same frame (`scene.renderCamera`): 480/640/960 px wide at 15 or 30 a second
+  (Settings), so other windows need no 3D world of their own. Shown in the inset (K),
+  the Camera window (camera.html) and the map window's layouts (K: map, map + camera,
+  camera; `viewer/camsink.js`, through `window.opener`, re-attaching after a viewer
+  reload). Pointing: drag on the picture (the ground follows the pointer at any zoom),
+  wheel to zoom, double-click or numpad 5 back to straight down (eased), numpad 4/6/8/2
+  and +/- held, controller buttons or hat (Stick settings: Camera left/right/up/down/
+  zoom/straight down; none by default). Overlay: pan, tilt, zoom and field of view, tilt
+  scale, pan dial, crosshair, and the ground point under it (latitude/longitude,
+  elevation, slant and ground distance, true bearing; a ray marched over the terrain as
+  drawn). Maps (window and corner) draw the picture's footprint and the line of sight.
+  Recorded with manual flights (protocol "camera", at most 5 Hz; metadata
+  `flightsim.camera`, SI, visual only); replays follow the recorded pointing until it is
+  moved (numpad 0 or Settings: follow again); Past flights tag "camera". Performance
+  test: a "belly camera on" case. Checked headless (inset, window, map split, a flown
+  and replayed demonstration). Pending: its cost on this computer's graphics (run the
+  performance test with it).
 
 ### Geography and navigation (GPS)
 
