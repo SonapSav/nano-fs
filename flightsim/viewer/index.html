@@ -73,7 +73,7 @@
   .set-row .axis { font-weight: 600; }
   .set-row .what { color: var(--dim); }
   /* With the Flights drawer open, the message line moves out from under it. */
-  #view:has(#flights:not([hidden])) #message { left: calc(min(27em, 92vw) + 16px); }
+  #view:has(#flights:not([hidden])) #top-left { left: calc(min(27em, 92vw) + 16px); }
   #progress { flex: 1 1 200px; display: flex; align-items: center; gap: 10px; min-width: 180px; }
   #progress-track { flex: 1; padding: 8px 0; touch-action: none; } /* padding: a larger target for seeking */
   #progress-bar { height: 4px; background: #5b6167; border-radius: 2px; overflow: hidden; }
@@ -86,25 +86,25 @@
   /* 3D view */
   #view { position: relative; background: var(--sky); min-height: 0; }
   #hud { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
-  #message, #pad-status, #hint, #boresight { z-index: 2; }
-  #perf { position: absolute; right: 16px; top: 12px; z-index: 2; padding: 4px 10px; border-radius: 4px;
+  #top-left, #hint, #boresight { z-index: 2; }
+  #perf { position: absolute; right: 16px; bottom: 16px; z-index: 2; padding: 4px 10px; border-radius: 4px;
     background: rgba(44, 48, 52, .86); font: 500 14px/1.4 var(--font); font-variant-numeric: tabular-nums; white-space: pre; }
   #view canvas { display: block; width: 100%; height: 100%; touch-action: none; }
   #view #minimap { position: absolute; right: 16px; bottom: 16px; z-index: 2; width: min(32vh, 280px); height: min(32vh, 280px);
     border: 2px solid #5b6167; border-radius: 6px; box-shadow: 0 2px 10px rgba(0, 0, 0, .35); cursor: pointer; }
-  /* The hint line sits above the corner map. */
-  #view:has(#minimap:not([hidden])) #hint { bottom: calc(16px + min(32vh, 280px) + 4px + 12px); }
+  /* The frame rate readout sits above the corner map. */
+  #view:has(#minimap:not([hidden])) #perf { bottom: calc(16px + min(32vh, 280px) + 4px + 12px); }
   #view #camera-inset { position: absolute; left: 16px; bottom: 16px; z-index: 2; width: min(30vw, 400px); aspect-ratio: 16 / 9; height: auto;
     border: 2px solid #5b6167; border-radius: 6px; box-shadow: 0 2px 10px rgba(0, 0, 0, .35); background: #000; cursor: grab; }
-  /* The message line sits above the camera; both move out from under the Flights drawer. */
-  #view:has(#camera-inset:not([hidden])) #message { bottom: calc(16px + min(30vw, 400px) * 9 / 16 + 12px); }
+  /* The camera moves out from under the Flights drawer. */
   #view:has(#flights:not([hidden])) #camera-inset { left: calc(min(27em, 92vw) + 16px); }
+  /* Top left: the message line, the gamepad status under it. */
+  #top-left { position: absolute; left: 16px; top: 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
   #message {
-    position: absolute; left: 16px; bottom: 16px; max-width: 34em;
-    padding: 8px 12px; border-radius: 4px; background: rgba(44, 48, 52, .86);
+    max-width: 34em; padding: 8px 12px; border-radius: 4px; background: rgba(44, 48, 52, .86);
   }
   #message:empty { display: none; }
-  #hint { position: absolute; right: 16px; bottom: 16px; max-width: 46%; text-align: right; color: var(--marking);
+  #hint { position: absolute; right: 16px; top: 12px; max-width: 46%; text-align: right; color: var(--marking);
     padding: 8px 12px; border-radius: 4px; background: rgba(44, 48, 52, .86); }
   #hint:empty { display: none; }
 
@@ -113,7 +113,7 @@
   #boresight { position: absolute; bottom: 0; width: 0; height: 0; transform: translateX(-50%); display: none;
     border-left: 11px solid transparent; border-right: 11px solid transparent; border-bottom: 18px solid var(--marking);
     filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, .9)); pointer-events: none; }
-  #pad-status { position: absolute; left: 16px; top: 12px; padding: 4px 10px; border-radius: 4px;
+  #pad-status { padding: 4px 10px; border-radius: 4px;
     background: rgba(44, 48, 52, .86); font-size: 14px; }
   #pad-status:empty { display: none; }
   dialog { background: var(--panel); color: var(--marking); border: 1px solid #5b6167; border-radius: 6px;
@@ -210,8 +210,10 @@
         <button type="button" id="drawer-go">Fly</button>
       </div>
     </aside>
-    <div id="message" role="status" aria-live="polite"></div>
-    <div id="pad-status" role="status" aria-live="polite"></div>
+    <div id="top-left">
+      <div id="message" role="status" aria-live="polite"></div>
+      <div id="pad-status" role="status" aria-live="polite"></div>
+    </div>
     <div id="boresight" aria-hidden="true"></div>
     <canvas id="hud" aria-hidden="true"></canvas>
     <div id="perf" hidden aria-live="off"></div>
