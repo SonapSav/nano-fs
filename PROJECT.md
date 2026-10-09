@@ -1130,8 +1130,18 @@ landmarks; later night lighting, shadows, haze.
   50 ft 607 m (508 m); circuits 200/200 climbed, 196/200 landed (4 nose first); routes
   200/200 (cross-track max mean 46.6 m, worst 141.5 m). Procedural results unchanged
   (12 crosswind circuits and 12 routes in wind identical before and after).
-- [ ] **2. Sea and coast:** waves, sun glint, sky reflection, shallow turquoise by distance
-  to the shore.
+- [x] **2. Sea and coast** (2026-10-09): the build adds a shore distance file per tile
+  (`tiles/w_<ix>_<iz>.u8`: 0 on land, else 1 + the distance to the nearest land in 8 m
+  steps, capped at ~2 km; computed over the whole region with scipy's Euclidean distance
+  transform, so no seams at tile edges). The region tiles' material (terrain.js
+  `regionMaterial`) draws the water on the terrain itself, so it stays the physics' sea
+  at 0 m: colour from shallow turquoise near the shore to deep blue offshore, four
+  directional waves (6-40 m) tilting the lighting and fading out by 2 km (moire beyond),
+  the haze colour reflected with Schlick's Fresnel (water 2 %), the sun's glint; colours
+  and wave sizes project choices by eye. Shared uniforms (time, sun, haze) kept current
+  by the scene. Fixed on the way: `addGroundDetail` replaced a material's shader cache
+  key instead of extending it. Headless performance test unchanged (60 fps; the Abu Dhabi
+  case below the procedural one in script time).
 - [ ] **3. Sentinel-2 imagery from altitude** (researched 2026-10-09, needs the owner's
   go-ahead and a decision on size): Copernicus Sentinel data, free and open, commercial
   use too; attribution "Contains modified Copernicus Sentinel data [year]". AWS Earth

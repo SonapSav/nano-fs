@@ -19,6 +19,7 @@ const LC_CELL_M = TILE_SIZE_M / LANDCOVER_CELLS;
 
 export const heightsName = (ix, iz) => `tiles/h_${ix}_${iz}.f32`;
 export const landcoverName = (ix, iz) => `tiles/lc_${ix}_${iz}.u8`;
+export const shoreName = (ix, iz) => `tiles/w_${ix}_${iz}.u8`; // 0 land, else 1 + distance to land / 8 m (scenery.py)
 
 // Ground height (m MSL): bilinear within the post cell, never below sea level.
 export function heightAt(tiles, x, z) {

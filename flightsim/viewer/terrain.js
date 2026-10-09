@@ -106,18 +106,92 @@ function tileGeometry(data) {
   return g;
 }
 
+// The sea and lakes of a real-world region, drawn on the terrain itself (the physics' sea is
+// the ground at 0 m): colour from shallow turquoise near the shore to deep blue offshore
+// (the shore distance file), small moving waves tilting the lighting (fading out with
+// distance, where they would shimmer), the sky reflected at low angles (Schlick's Fresnel
+// with water's 2 %) and the sun's glint. Colours and wave sizes are project choices, by
+// eye. `waterUniforms` are shared by every tile: the scene keeps the time, sun and sky
+// (haze colour) current.
+export const waterUniforms = {
+  waterTime: { value: 0 },
+  waterSun: { value: new THREE.Vector3(0, 1, 0) },
+  waterSky: { value: new THREE.Color(0.7, 0.8, 0.9) },
+};
+const NO_SHORE = new THREE.DataTexture(new Uint8Array([0]), 1, 1, THREE.RedFormat); // older builds: no water effects
+NO_SHORE.needsUpdate = true;
+const WATER_GLSL = `
+uniform sampler2D shoreMap;
+uniform float waterTime;
+uniform vec3 waterSun;
+uniform vec3 waterSky;
+varying vec3 vWaterPos;
+// Slope of a sum of directional waves (wavelengths ~6-40 m), for the surface normal.
+vec2 waterSlope(vec2 p, float t) {
+  vec2 g = vec2(0.0);
+  vec2 d1 = vec2(0.82, 0.57), d2 = vec2(0.31, 0.95), d3 = vec2(0.97, -0.24), d4 = vec2(-0.45, 0.89);
+  g += 0.050 * cos(dot(p, d1) * 0.16 + t * 1.25) * d1;
+  g += 0.040 * cos(dot(p, d2) * 0.37 + t * 1.90) * d2;
+  g += 0.030 * cos(dot(p, d3) * 0.71 + t * 2.60) * d3;
+  g += 0.022 * cos(dot(p, d4) * 1.05 + t * 3.20) * d4;
+  return g;
+}`;
+
 // A real-world region's tile: its land cover texture (demTiles.js) on a plain material with
-// the close-up ground detail.
+// the close-up ground detail, and the water above.
 function regionMaterial(data) {
-  const tex = new THREE.DataTexture(data.texture, data.textureSize, data.textureSize, THREE.RGBAFormat);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.magFilter = THREE.LinearFilter;
-  tex.minFilter = THREE.LinearMipmapLinearFilter;
-  tex.generateMipmaps = true;
-  tex.anisotropy = 4;
-  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-  tex.needsUpdate = true;
-  return addGroundDetail(new THREE.MeshLambertMaterial({ map: tex }));
+  const texture = (pixels, format, srgb) => {
+    const t = new THREE.DataTexture(pixels, data.textureSize, data.textureSize, format);
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    t.magFilter = THREE.LinearFilter;
+    t.minFilter = THREE.LinearMipmapLinearFilter;
+    t.generateMipmaps = true;
+    t.anisotropy = 4;
+    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+    t.needsUpdate = true;
+    return t;
+  };
+  const tex = texture(data.texture, THREE.RGBAFormat, true);
+  const shore = data.shore ? texture(data.shore, THREE.RedFormat, false) : NO_SHORE;
+  const material = new THREE.MeshLambertMaterial({ map: tex });
+  material.userData.shore = shore;
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, waterUniforms, { shoreMap: { value: shore } });
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vWaterPos;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvWaterPos = (modelMatrix * vec4(position, 1.0)).xyz;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", `#include <common>\n${WATER_GLSL}`)
+      .replace(
+        "#include <color_fragment>",
+        `#include <color_fragment>
+float shoreCode = texture2D(shoreMap, vMapUv).r * 255.0;
+float water = smoothstep(0.3, 0.9, shoreCode);
+float waterDistM = max(0.0, shoreCode - 1.0) * 8.0;
+vec3 waterColour = mix(vec3(0.075, 0.36, 0.33), vec3(0.012, 0.10, 0.17), smoothstep(15.0, 1200.0, waterDistM));
+diffuseColor.rgb = mix(diffuseColor.rgb, waterColour, water);
+vec2 wslope = water * (1.0 - smoothstep(300.0, 2000.0, length(vViewPosition))) * waterSlope(vWaterPos.xz, waterTime);`,
+      )
+      .replace(
+        "#include <normal_fragment_begin>",
+        `#include <normal_fragment_begin>
+if (water > 0.01) normal = normalize(mix(normal, normalize((viewMatrix * vec4(-wslope.x, 1.0, -wslope.y, 0.0)).xyz), water));`,
+      )
+      .replace(
+        "#include <opaque_fragment>",
+        `if (water > 0.01) {
+  vec3 wv = normalize(cameraPosition - vWaterPos);
+  vec3 wn = normalize(vec3(-wslope.x, 1.0, -wslope.y));
+  float fresnel = 0.02 + 0.98 * pow(1.0 - max(dot(wn, wv), 0.0), 5.0);
+  outgoingLight = mix(outgoingLight, waterSky * 0.9, fresnel * water);
+  float glint = pow(max(dot(reflect(-wv, wn), normalize(waterSun)), 0.0), 180.0) * step(0.02, waterSun.y);
+  outgoingLight += vec3(1.0, 0.93, 0.8) * glint * 4.0 * water;
+}
+#include <opaque_fragment>`,
+      );
+  };
+  material.customProgramCacheKey = () => "regionWater";
+  return addGroundDetail(material);
 }
 
 const NEAR_TEXTURE = 256, FAR_TEXTURE = 64; // land cover texels per tile side (near: one per cell)
@@ -441,7 +515,8 @@ export class Terrain {
       this.scene.remove(t.mesh); // its water quad (a child) shares geometry and material
       t.mesh.geometry.dispose();
       if (t.mesh.material !== this.material) {
-        t.mesh.material.map?.dispose(); // a region tile's own texture and material
+        t.mesh.material.map?.dispose(); // a region tile's own textures and material
+        if (t.mesh.material.userData.shore !== NO_SHORE) t.mesh.material.userData.shore?.dispose();
         t.mesh.material.dispose();
       }
     }

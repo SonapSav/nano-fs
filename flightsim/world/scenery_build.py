@@ -14,6 +14,7 @@ and the viewer read the built files through scenery.py. Steps, each repeatable:
 4. airfields (OpenStreetMap, scenery_osm.py, with the region file's published data):
    every runway's ends, width and elevation; the ground along each runway is flattened
    onto a straight slope fitted to the terrain under its centreline (`airfields.json`).
+4b. shore distance: from each water cell to the nearest land (the viewer's shallow water).
 5. features (OpenStreetMap): roads, railways, taxiways, aprons and buildings per tile.
 6. manifest.json: the region, its sources, every file's sha256.
 
@@ -34,7 +35,8 @@ import yaml
 
 from flightsim.world import geo
 from flightsim.world.scenery import (
-    FORMAT, HEIGHT_CELLS, LANDCOVER_CELLS, POST_M, SCENERY_DIR, TILE_SIZE_M, features_name, heights_name, landcover_name,
+    FORMAT, HEIGHT_CELLS, LANDCOVER_CELLS, POST_M, SCENERY_DIR, SHORE_STEP_M, TILE_SIZE_M, features_name, heights_name,
+    landcover_name, shore_name,
 )  # fmt: skip
 
 USER_AGENT = "nano-fs-scenery-build/1"
@@ -335,6 +337,28 @@ def build_landcover(spec: RegionSpec, lc_paths: list[Path], out: Path, log=print
     log(f"land cover: {no_data / total:.1%} of the cells without data (open sea), set to water")
 
 
+def build_shore(spec: RegionSpec, out: Path, log=print) -> None:
+    """Distance from each water cell (WorldCover class 80) to the nearest land, over the
+    whole region (Euclidean, scipy.ndimage), for the viewer's shallow water colour."""
+    from scipy.ndimage import distance_transform_edt
+
+    lo, hi = spec.ix_range
+    n = (hi - lo + 1) * LANDCOVER_CELLS
+    water = np.zeros((n, n), dtype=bool)
+    for iz in range(lo, hi + 1):
+        for ix in range(lo, hi + 1):
+            r0, c0 = (iz - lo) * LANDCOVER_CELLS, (ix - lo) * LANDCOVER_CELLS
+            cls = np.fromfile(out / landcover_name(ix, iz), np.uint8).reshape(LANDCOVER_CELLS, LANDCOVER_CELLS)
+            water[r0 : r0 + LANDCOVER_CELLS, c0 : c0 + LANDCOVER_CELLS] = cls == WATER
+    dist_m = distance_transform_edt(water) * (TILE_SIZE_M / LANDCOVER_CELLS)
+    code = np.where(water, 1 + np.minimum(253, np.round(dist_m / SHORE_STEP_M)), 0).astype(np.uint8)
+    for iz in range(lo, hi + 1):
+        for ix in range(lo, hi + 1):
+            r0, c0 = (iz - lo) * LANDCOVER_CELLS, (ix - lo) * LANDCOVER_CELLS
+            (out / shore_name(ix, iz)).write_bytes(code[r0 : r0 + LANDCOVER_CELLS, c0 : c0 + LANDCOVER_CELLS].tobytes())
+    log(f"shore distance: {water.mean():.1%} water, at most {dist_m.max():.0f} m from land")
+
+
 # --- Airfields --------------------------------------------------------------------------------
 
 # Runway flattening (project choices): the flat area reaches this far beyond the pavement's
@@ -475,6 +499,7 @@ def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print) -> dict:
     src = out / "sources"
     build_heights(spec, [src / f["name"] for f in sources if f["kind"] == "dem"], out, log)
     build_landcover(spec, [src / f["name"] for f in sources if f["kind"] == "landcover"], out, log)
+    build_shore(spec, out, log)
     pbf = src / next(f["name"] for f in sources if f["kind"] == "osm")
     build_airfields(spec, pbf, out, log)
     build_features(spec, pbf, out, log)

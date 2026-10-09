@@ -30,8 +30,11 @@ def test_dem_tile_data():
       if (c < L / 4) lc[r * L + c] = 80;
       else if (c >= L / 2 && r < L / 2) lc[r * L + c] = 10;
     }}
-    const tiles = {{ heights: (ix, iz) => (ix === 0 && iz === 0 ? h : null), landcover: (ix, iz) => (ix === 0 && iz === 0 ? lc : null) }};
+    const shore = new Uint8Array(L * L).map((_, k) => (k % L < L / 4 ? 1 + (k % L) : 0));  // water west, distance rising east
+    const tiles = {{ heights: (ix, iz) => (ix === 0 && iz === 0 ? h : null), landcover: (ix, iz) => (ix === 0 && iz === 0 ? lc : null),
+                     shore: (ix, iz) => (ix === 0 && iz === 0 ? shore : null) }};
     const g = t.demTileGeometryData(0, 0, d.HEIGHT_CELLS, tiles);
+    const far = t.demTileGeometryData(0, 0, 16, tiles, 64);
     const at = (i, j) => [g.position[3 * (i * n + j)], g.position[3 * (i * n + j) + 1], g.position[3 * (i * n + j) + 2]];
     const objects = t.demTileObjectsData(0, 0, 500, false, tiles);
     const trees = [];
@@ -40,7 +43,7 @@ def test_dem_tile_data():
     console.log(JSON.stringify({{
       landPost: at(10, 100), physics: d.heightAt(tiles, at(10, 100)[0], at(10, 100)[2]),
       waterPost: at(10, 5), size: g.textureSize, uvLast: [...g.uv.slice(2 * (n * n - 1), 2 * n * n)],
-      texWater: texel(5, 5), texDesert: texel(200, 100), texTree: texel(10, 200),
+      texWater: texel(5, 5), shore: [g.shore[5 * 256 + 3], g.shore[5 * 256 + 200], far.shore.length, far.shore[2 * 64 + 1]], texDesert: texel(200, 100), texTree: texel(10, 200),
       trees: trees.length, treesOk: trees.every(([x, z]) => d.landcoverAt(tiles, x, z) === 10),
       outside: t.demTileGeometryData(3, 3, 32, tiles),
     }}));
@@ -49,6 +52,7 @@ def test_dem_tile_data():
     assert out["landPost"][1] == out["physics"] == pytest.approx(102.0)  # the post's height, as the physics
     assert out["waterPost"][1] == pytest.approx(7.0)  # water is drawn by colour, on the physics' ground
     assert out["size"] == 256 and out["uvLast"] == [1, 1]
+    assert out["shore"] == [4, 0, 64 * 64, 1 + 6]  # one value per texel; distant tiles sample every 4th cell
     assert out["texWater"] == [0x3B, 0x7D, 0x93] and out["texTree"] == [0x4B, 0x6A, 0x3C]
     assert out["texDesert"][0] > out["texDesert"][2] > 100  # sand (warmer on this 50 m "dune")
     assert out["trees"] > 100 and out["treesOk"]

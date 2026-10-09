@@ -53,6 +53,7 @@ export function addGroundDetail(material, { strength = 0.4, tint = 0.5, fadeStar
 }`,
     );
   };
-  material.customProgramCacheKey = () => `groundDetail-${strength}-${tint}-${fadeStartM}-${fadeEndM}`;
+  const previousKey = material.hasOwnProperty("customProgramCacheKey") ? material.customProgramCacheKey.bind(material) : () => "";
+  material.customProgramCacheKey = () => `${previousKey()}|groundDetail-${strength}-${tint}-${fadeStartM}-${fadeEndM}`;
   return material;
 }

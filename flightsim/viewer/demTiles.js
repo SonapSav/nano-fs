@@ -69,8 +69,18 @@ export function demTileGeometryData(tx, tz, segments, tiles, textureSize = LANDC
   return {
     position: new Float32Array(pos), color: new Float32Array(col), fieldness: new Float32Array(fld),
     normal: new Float32Array(nrm), uv: new Float32Array(uv), index: new Uint32Array(idx), hasWater: false,
-    texture: landcoverTexture(tx, tz, textureSize, tiles), textureSize,
+    texture: landcoverTexture(tx, tz, textureSize, tiles), textureSize, shore: shoreTexture(tx, tz, textureSize, tiles),
   };
+}
+
+// The shore distance per texel (scenery.py shore files: 0 land, else 1 + metres to land / 8),
+// sampled like the land cover; null when the region has none (an older build).
+function shoreTexture(tx, tz, size, tiles) {
+  const src = tiles.shore?.(tx, tz);
+  if (!src) return null;
+  const out = new Uint8Array(size * size), step = LANDCOVER_CELLS / size;
+  for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) out[r * size + c] = src[Math.floor((r + 0.5) * step) * LANDCOVER_CELLS + Math.floor((c + 0.5) * step)];
+  return out;
 }
 
 // RGBA (sRGB) texels: the land cover class colour at each texel's cell, sand warmer on

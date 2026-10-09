@@ -14,7 +14,7 @@ import { Papi, Windsock, addAirfield, addAirfieldDetail, addGroundFallback, addR
 import { SkyController, TIMES } from "./sky.js";
 import { CloudField } from "./clouds.js";
 import { RoadNetwork } from "./roads.js";
-import { QUALITY, Terrain } from "./terrain.js";
+import { QUALITY, Terrain, waterUniforms } from "./terrain.js";
 import { RealAirfields } from "./realAirfields.js";
 import { world } from "./world.js";
 import { groundDetailStrength } from "./groundDetail.js";
@@ -101,6 +101,9 @@ export class FlightScene {
     this.scene = new THREE.Scene();
     this.skyLight = new SkyController(this.scene, this.renderer);
     this.sunDir = this.skyLight.sunDir; // updated in place with the time of day
+    // A real-world region's water reflects the haze and the sun (both updated in place).
+    waterUniforms.waterSun.value = this.sunDir;
+    waterUniforms.waterSky.value = this.scene.fog.color;
     this.clouds = new CloudField(this.scene);
     this.fallback = addGroundFallback(this.scene);
     // The procedural world's airfield, roads and lights (hidden over a real-world region,
@@ -474,6 +477,7 @@ export class FlightScene {
   }
 
   render() {
+    waterUniforms.waterTime.value = (performance.now() / 1000) % 10000;
     this._stepRecentre();
     this._renderShadowMask();
     this.papi.update(new THREE.Vector3().copy(EYE_BODY).applyMatrix4(this.aircraft.matrix)); // as the pilot sees them

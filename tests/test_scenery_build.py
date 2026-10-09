@@ -104,3 +104,26 @@ def test_pinning_rewrites_only_the_pinned_block(tmp_path):
     assert region.read_text() == "name: r\npinned:\n  a.tif: 11\n  b.tif: 22\nafter: 1\n"
     module.pin(region, [{"name": "a.tif", "sha256": "33"}])
     assert region.read_text() == "name: r\npinned:\n  a.tif: 33\nafter: 1\n"
+
+
+def test_shore_distance(tmp_path):
+    from flightsim.world.scenery import SHORE_STEP_M, landcover_name, shore_name
+    from flightsim.world.scenery_build import build_shore
+
+    (tmp_path / "tiles").mkdir()
+    # Tiles -1..0 square; land in the west half of tile column -1, water elsewhere.
+    for iz in (-1, 0):
+        for ix in (-1, 0):
+            lc = np.full((LANDCOVER_CELLS, LANDCOVER_CELLS), 80, np.uint8)
+            if ix == -1:
+                lc[:, : LANDCOVER_CELLS // 2] = 60
+            (tmp_path / landcover_name(ix, iz)).write_bytes(lc.tobytes())
+    build_shore(SPEC, tmp_path, log=lambda *_: None)
+    cell = TILE_SIZE_M / LANDCOVER_CELLS
+    w = np.fromfile(tmp_path / shore_name(0, 0), np.uint8).reshape(LANDCOVER_CELLS, LANDCOVER_CELLS)
+    w_west = np.fromfile(tmp_path / shore_name(-1, 0), np.uint8).reshape(LANDCOVER_CELLS, LANDCOVER_CELLS)
+    assert (w_west[:, : LANDCOVER_CELLS // 2] == 0).all()  # land
+    assert w_west[5, LANDCOVER_CELLS // 2] == 1 + round(cell / SHORE_STEP_M)  # the first water cell: one cell from land
+    # Across the tile edge: tile (0, 0)'s first column is 129 cells from the land (no seam).
+    assert w[5, 0] == 1 + min(253, round((LANDCOVER_CELLS // 2 + 1) * cell / SHORE_STEP_M))
+    assert w[5, -1] == 254  # capped (about 2 km)
