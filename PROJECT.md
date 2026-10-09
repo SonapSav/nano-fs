@@ -673,6 +673,11 @@ owner before work can start.
     - Result (same profile): panel 80 -> 43 ms per second, HUD layer 56 -> 0, the
       viewer's script in all 658 -> 566 ms per second (-14%). The 3D scene (~490 ms/s)
       is left for the realistic-scenery work (fewer, merged objects there).
+    - Owner's run after it (2026-10-09, Firefox 153, 144 Hz, 1920 x 903): "as set"
+      114-118 fps (was 108-112), the panel no longer measurable ("no instrument panel"
+      the same as "as set"), all off 144 fps; with the display at 60 Hz every case a
+      steady 60 fps, worst frame 17 ms, script 5-6 ms. Half the display rate (72 fps)
+      selectable once the browser was back at 144 Hz.
 - [x] **HUD in the cockpit view** (2026-10-07, phase 1; an option, not fitted to a real
   C172): H, the "HUD" button (cockpit view) or a controller button ("HUD on/off"; X on
   standard pads), remembered per browser. Green, fixed to the aircraft (a combiner about
