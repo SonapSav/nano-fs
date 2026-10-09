@@ -1204,6 +1204,19 @@ landmarks; later night lighting, shadows, haze.
     Louvre dome's height, the palace dome's size and the mosque's base height are project
     choices. Etihad Towers already carry their OSM heights (305/278/260/234/218 m, matching
     Wikipedia). Qasr Al Watan left out: its main building is not mapped in OSM.
+  - [x] 4e Detailed Grand Mosque (2026-10-10), a trial of code-built detail before deciding
+    how to treat the other landmarks: OSM's 3D parts drive the layout (the courtyard as
+    the footprint's inner ring; 42 `building:part=dome` areas with heights; 10 pools),
+    the main dome at the official 32.6 m / 84 m, minarets 107 m at the courtyard's
+    corners (szgmc.gov.ae). Arcaded walls (pointed-arch shader), onion domes on drums
+    with gold crescent finials, minarets of square, octagonal and circular layers with
+    balconies and a gilded lantern, a courtyard with floral inlays, dark reflecting
+    pools; marble, gold and pools lit by an environment map of the sky (regenerated
+    with the time of day). Proportions not published are project choices (in
+    `landmarks.js`). All four landmarks: +15 draw calls, +50k triangles, about +0.5 ms
+    a frame on the integrated GPU. `?debug` in the viewer URL exposes the scene for
+    test-browser screenshots. Pending: the owner's verdict; then the same treatment,
+    ready-made models (option D) or OSM 3D tags for the city (option C).
 
 ### Licence and documentation
 

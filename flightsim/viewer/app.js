@@ -134,6 +134,8 @@ const savedQuality = (() => {
 })();
 const initialQuality = ["low", "medium", "high"].includes(savedQuality) ? savedQuality : "high";
 const scene = new FlightScene($("view"), initialQuality);
+// Screenshots and checks from a test browser (?debug in the URL): the scene and the frame shown.
+if (new URLSearchParams(location.search).has("debug")) window.flightDebug = { scene, shown: () => shown };
 $("quality").value = initialQuality;
 $("quality").addEventListener("change", (e) => {
   scene.setQuality(e.target.value);

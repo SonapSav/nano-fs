@@ -99,3 +99,35 @@ def test_feature_meshes():
     assert out["top"] == pytest.approx(10 + 80)
     assert out["outward"]
     assert 0 < out["tallCount"] < out["allCount"]  # only the 80 m tower on distant tiles
+
+
+def test_landmark_parts_and_courtyard(tmp_path):
+    """A building with a courtyard (multipolygon with an inner ring), a dome part on it and
+    a pool beside it: the capture keeps the courtyard; extract_parts finds the dome (centre,
+    diameter, top) and the pool near the site, not the far dome."""
+    pytest.importorskip("osmium")
+    from flightsim.world.scenery_osm import extract_features, extract_parts
+
+    g = geo.Geodesy("wgs84", 24.0, 54.0)
+    ll = lambda n, e: [math.degrees(v) for v in g.to_geodetic(n, e)]  # noqa: E731
+    sq = lambda i, n, e, h: {i: (n - h, e - h), i + 1: (n - h, e + h), i + 2: (n + h, e + h), i + 3: (n + h, e - h)}  # noqa: E731
+    pts = {**sq(1, 0, 0, 100), **sq(11, 0, 0, 40), **sq(21, 70, 70, 5), **sq(31, -70, 0, 10), **sq(41, 3000, 3000, 5)}
+    xml = ['<?xml version="1.0" encoding="UTF-8"?>', '<osm version="0.6">']
+    for i, (n, e) in pts.items():
+        lat, lon = ll(n, e)
+        xml.append(f'<node id="{i}" version="1" lat="{lat:.9f}" lon="{lon:.9f}"/>')
+    way = lambda wid, first, tags: (f'<way id="{wid}" version="1">' + "".join(f'<nd ref="{first + k % 4}"/>' for k in range(5))  # noqa: E731
+                                    + "".join(f'<tag k="{k}" v="{v}"/>' for k, v in tags.items()) + "</way>")  # fmt: skip
+    xml += [way(100, 1, {}), way(101, 11, {}), way(102, 21, {"building:part": "dome", "height": "43"}),
+            way(103, 31, {"natural": "water", "water": "pond"}), way(104, 41, {"building:part": "dome", "height": "20"}),
+            '<relation id="7" version="1"><member type="way" ref="100" role="outer"/><member type="way" ref="101" role="inner"/>'
+            '<tag k="type" v="multipolygon"/><tag k="building" v="mosque"/></relation>', "</osm>"]  # fmt: skip
+    (tmp_path / "t.osm").write_text("\n".join(xml))
+    f = extract_features(tmp_path / "t.osm", g, (23.9, 53.9, 24.1, 54.1), 8000, 4000, capture={"relation/7"})
+    shape = f["captured"]["relation/7"]
+    assert len(shape["outer"]) == 8 and len(shape["inner"]) == 1 and len(shape["inner"][0]) == 8
+    assert max(abs(v) for v in shape["inner"][0]) == pytest.approx(40, abs=0.2)
+    parts = extract_parts(tmp_path / "t.osm", g, {"m": (0.0, 0.0, 150.0)})["m"]
+    ((x, z, d, top),) = parts["domes"]
+    assert (x, z, d, top) == (pytest.approx(70, abs=0.2), pytest.approx(-70, abs=0.2), pytest.approx(10, abs=0.2), 43.0)
+    assert len(parts["pools"]) == 1 and len(parts["pools"][0]) == 8

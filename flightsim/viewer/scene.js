@@ -201,6 +201,7 @@ export class FlightScene {
   setVisual({ time_of_day = "afternoon", visibility = "normal", clouds = "few", cloud_seed = 0 } = {}) {
     this.skyLight.setTime(time_of_day);
     this.skyLight.setVisibility(visibility);
+    this.landmarks.setEnvironment(this.renderer, this.skyLight.sky); // reflections of this sky
     const tint = new THREE.Color(TIMES[this.skyLight.time].sun).lerp(new THREE.Color(0xffffff), 0.55);
     this.clouds.setTint(tint);
     this.clouds.set(clouds, cloud_seed);
@@ -220,6 +221,7 @@ export class FlightScene {
     this.renderer = r;
     this.skyLight.renderer = r;
     this.shadowMaskDirty = true; // the mask texture lived in the old context
+    this.landmarks.setEnvironment(r, this.skyLight.sky);
     this._bindPointer();
     this.resize();
   }
@@ -292,6 +294,7 @@ export class FlightScene {
     this.windsock = this.proceduralWindsock;
     this.realAirfields.build(real ? w.airfields : null);
     this.landmarks.build(real ? w.landmarks : null);
+    this.landmarks.setEnvironment(this.renderer, this.skyLight.sky);
     const home = real ? this.realAirfields.nearest(near.x, near.z) : null;
     if (home) {
       this.papi = new Papi(this.scene, home);

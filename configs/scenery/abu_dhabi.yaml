@@ -74,10 +74,15 @@ sources:
 # marked "project choice" (no source gave them). Qasr Al Watan is left out: its main
 # building is not mapped in OSM.
 landmarks:
-  # Sheikh Zayed Grand Mosque: 82 domes, outer dome 85 m high and 32.2 m across, four
-  # minarets 104 m (infobox; the text says about 107 m), white marble.
-  - {name: Sheikh Zayed Grand Mosque, kind: grand_mosque, osm: relation/1635169, replace: true,
-     dome_top_m: 85, dome_diameter_m: 32.2, minaret_m: 104, base_m: 12}  # base height: project choice
+  # Sheikh Zayed Grand Mosque. Official site (szgmc.gov.ae, retrieved 2026-10-10): 82 domes,
+  # the largest about 32.6 m across and 84 m high, white marble cladding, onion-shaped
+  # crowns and crescent finials in gold-glass mosaic; four minarets about 107 m at the
+  # corners of the courtyard, of square, octagonal and circular layers with balconies and
+  # gilding (Wikipedia: 104 m in the infobox). `parts`: the other domes (positions, sizes,
+  # heights) and the reflecting pools come from OSM's building:part / natural=water areas;
+  # the roof at OSM's height tag on the mosque (33 m).
+  - {name: Sheikh Zayed Grand Mosque, kind: grand_mosque, osm: relation/1635169, replace: true, parts: true,
+     dome_top_m: 84, dome_diameter_m: 32.6, minaret_m: 107, roof_m: 33}
   # Capital Gate: 160 m, leaning 18 degrees west.
   - {name: Capital Gate, kind: leaning_tower, osm: way/103779658, replace: true, height_m: 160, lean_deg: 18, lean_toward_deg: 270}
   # Louvre Abu Dhabi: a 180 m dome on four piers 110 m apart (architecture press: archeyes,

@@ -141,6 +141,7 @@ Wikipedia, "Universal Transverse Mercator coordinate system", section "Simplifie
 
 Retrieved 2026-10-09. Positions and footprints from OSM (the region's pinned extract).
 - **Sheikh Zayed Grand Mosque** (Wikipedia): 420 x 290 m, 82 domes, outer dome 85 m high and 32.2 m in diameter, four minarets 104 m (infobox; the text says about 107 m), white marble.
+  Official site (https://szgmc.gov.ae/en/islamic-architecture/the-domes and /the-minarets, retrieved 2026-10-10): 82 domes, the largest about 32.6 m across and 84 m high, white marble cladding, onion-shaped crowns, crescent finials in gold-glass mosaic; minarets about 107 m at the four corners of the courtyard, of square, octagonal and circular layers with balconies and gilding. Courtyard about 17,000 m2 with floral marble mosaic (Wikipedia). Layout (other domes and their heights, pools, courtyard): OSM `building:part=dome`, `natural=water` and the mosque's inner ring.
 - **Capital Gate** (Wikipedia): 160 m to the roof, 35 floors, leaning 18 deg west.
 - **Louvre Abu Dhabi**: dome 180 m in diameter on four piers 110 m apart (archeyes.com, architecturelab.net; Wikipedia gives only the 7,000 t weight). Height not published.
 - **Emirates Palace** (Wikipedia): central dome plus 114 smaller domes, desert-sand colour; no dome dimensions.

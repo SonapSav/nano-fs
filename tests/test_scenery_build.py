@@ -200,7 +200,7 @@ def test_landmarks(tmp_path):
     assert _inside(200, 50, ring) and not _inside(500, 50, ring)
     tiles = {(0, 0): {"buildings": [[33, "height", [190, 40, 210, 40, 210, 60, 190, 60]], [9, "estimate", [600, 600, 610, 600, 610, 610, 600, 610]]]}}
     marks = [{"name": "M", "kind": "grand_mosque", "osm": "relation/1", "replace": True}, {"name": "X", "kind": "flat_dome", "osm": "way/9"}]
-    _landmarks(SPEC, marks, {"relation/1": ring}, tiles, tmp_path, log=lambda *_: None)
+    _landmarks(SPEC, marks, {"relation/1": {"outer": ring, "inner": []}}, tiles, tmp_path, log=lambda *_: None)
     (m,) = json.loads((tmp_path / "landmarks.json").read_text())  # the missing one is left out
     assert m["centre"] == [200.0, 50.0] and m["axis_deg"] == 90.0 and m["ground_m"] == 7.0
     assert 255 < m["qibla_deg"] < 265  # Mecca from Abu Dhabi: west by south

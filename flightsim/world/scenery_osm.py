@@ -265,19 +265,61 @@ def _ring_area(ring: list[tuple[float, float]]) -> float:
     return 0.5 * abs(sum(x0 * z1 - x1 * z0 for (x0, z0), (x1, z1) in zip(ring, ring[1:] + ring[:1])))
 
 
+def extract_parts(pbf_path, geodesy: geo.Geodesy, sites: dict[str, tuple[float, float, float]]) -> dict:
+    """OSM's 3D parts near landmarks (sites: {key: (x, z, radius_m)} in world metres):
+    {key: {"domes": [[x, z, diameter_m, top_m], ...], "pools": [ring, ...]}}. Domes are
+    `building:part=dome` areas with a height (Simple 3D Buildings: the top above the
+    ground), their diameter the mean of the footprint's extents; pools are
+    `natural=water` areas. Sorted by position so builds are reproducible."""
+    import osmium
+
+    out = {k: {"domes": [], "pools": []} for k in sites}
+    fp = osmium.FileProcessor(str(pbf_path)).with_areas(osmium.filter.KeyFilter("building:part", "natural")).with_locations()
+    fp = fp.with_filter(osmium.filter.KeyFilter("building:part", "natural"))
+    for o in fp:
+        if not o.is_area():
+            continue
+        tags = o.tags
+        dome, pool = tags.get("building:part") == "dome", tags.get("natural") == "water"
+        if not (dome or pool):
+            continue
+        for outer in o.outer_rings():
+            try:
+                pts = [_map(geodesy, nd.lat, nd.lon) for nd in outer][:-1]
+            except osmium.InvalidLocationError:
+                break
+            xs, zs = [e for _, e in pts], [-n for n, _ in pts]
+            cx, cz = sum(xs) / len(xs), sum(zs) / len(zs)
+            for key, (sx, sz, r) in sites.items():
+                if math.hypot(cx - sx, cz - sz) > r:
+                    continue
+                if dome:
+                    top = _metres(tags.get("height"))
+                    if top:
+                        d = ((max(xs) - min(xs)) + (max(zs) - min(zs))) / 2
+                        out[key]["domes"].append([round(cx, 1), round(cz, 1), round(d, 1), top])
+                else:
+                    out[key]["pools"].append([round(c, 1) for p in zip(xs, zs) for c in p])
+            break
+    for v in out.values():
+        v["domes"].sort()
+        v["pools"].sort()
+    return out
+
+
 def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: float, tile_m: float, capture: set | None = None) -> dict:
     """{(ix, iz): {"roads": {class: [polyline, ...]}, "rail": [...], "taxiway": [...],
     "apron": [ring, ...], "buildings": [[height_m, source, ring], ...]}} in world x (east),
     z (south) metres rounded to 0.1, for the tiles of the region. Lines are cut at tile
     edges; areas go to the tile of their centroid (outer rings only). `capture`: OSM
-    objects ("way/<id>", "relation/<id>") whose outer ring is also returned under the key
-    "captured" ({object: ring})."""
+    objects ("way/<id>", "relation/<id>") whose first outer ring and its inner rings are
+    also returned under the key "captured" ({object: {"outer": ring, "inner": [ring, ...]}})."""
     import osmium
 
     s, w, n, e = bounds_deg
     inside_deg = lambda lat, lon: s <= lat <= n and w <= lon <= e  # noqa: E731
     tiles: dict = {}
-    captured: dict[str, list[float]] = {}
+    captured: dict[str, dict] = {}
 
     def tile(key):
         return tiles.setdefault(key, {"roads": {}, "rail": [], "taxiway": [], "apron": [], "buildings": []})
@@ -319,7 +361,8 @@ def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: fl
                     break
                 obj = f"{'way' if o.from_way() else 'relation'}/{o.orig_id()}"
                 if capture and obj in capture and obj not in captured:
-                    captured[obj] = [c for p in ring for c in p]
+                    inner = [[c for nd in list(r)[:-1] for c in xz(nd.lat, nd.lon)] for r in o.inner_rings(outer)]
+                    captured[obj] = {"outer": [c for p in ring for c in p], "inner": inner}
                 if kind == "apron":
                     add_area("apron", ring)
                 else:
