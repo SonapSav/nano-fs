@@ -1187,6 +1187,13 @@ landmarks; later night lighting, shadows, haze.
     11.9 m, max 67 m; houses and villas at most 12 m); tagged heights (1,539, up to 342 m)
     and floors (4,329) stay. Averages over 100 m cells understate single towers; the
     tagged ones carry the skyline.
+  - [x] 4c Airfield details (2026-10-09): the build adds OSM hangars and terminals mapped
+    without a building tag as buildings, and to `airfields.json` the stands (469 in the
+    region: lead-in lines' end and direction, or nodes facing the nearest taxiway),
+    holding positions (25, with the taxiway's direction) and windsocks (2). Viewer: yellow
+    taxiway centrelines on every taxiway; at the home airport parked C172s on every third
+    stand within 3 km (at most 8: each model has many parts) and hold-short bars (two
+    solid, two dashed); the windsock at OSM's position. Sizes project choices.
 
 ### Licence and documentation
 

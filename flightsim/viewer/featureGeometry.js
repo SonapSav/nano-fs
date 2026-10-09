@@ -16,6 +16,7 @@ const PAVED_LIFT_M = 0.25;
 export const ROAD_WIDTH_M = { motorway: 24, trunk: 20, primary: 14, secondary: 11, tertiary: 9, unclassified: 7, residential: 7 };
 const RAIL_WIDTH_M = 4;
 const TAXIWAY_WIDTH_M = 23;
+const TAXILINE_WIDTH_M = 0.45; // taxiway centreline marking (project choice; about 15 cm in reality, wider so it shows)
 
 class Mesh {
   constructor(colours = false, uvs = false) {
@@ -108,12 +109,15 @@ function polygon(mesh, flat, lift, tiles) {
 
 // Roads, railways (one mesh) and taxiways and aprons (another), or null where none.
 export function featureGroundData(f, tiles) {
-  const roads = new Mesh(), rail = new Mesh(), paved = new Mesh();
+  const roads = new Mesh(), rail = new Mesh(), paved = new Mesh(), taxilines = new Mesh();
   for (const [cls, lines] of Object.entries(f.roads ?? {})) for (const line of lines) ribbon(roads, line, ROAD_WIDTH_M[cls] ?? 7, ROAD_LIFT_M, tiles);
   for (const line of f.rail ?? []) ribbon(rail, line, RAIL_WIDTH_M, ROAD_LIFT_M, tiles);
-  for (const line of f.taxiway ?? []) ribbon(paved, line, TAXIWAY_WIDTH_M, PAVED_LIFT_M, tiles);
+  for (const line of f.taxiway ?? []) {
+    ribbon(paved, line, TAXIWAY_WIDTH_M, PAVED_LIFT_M, tiles);
+    ribbon(taxilines, line, TAXILINE_WIDTH_M, PAVED_LIFT_M + 0.04, tiles); // the yellow centreline
+  }
   for (const ring of f.apron ?? []) polygon(paved, ring, PAVED_LIFT_M - 0.05, tiles);
-  return { roads: roads.arrays(), rail: rail.arrays(), paved: paved.arrays() };
+  return { roads: roads.arrays(), rail: rail.arrays(), paved: paved.arrays(), taxilines: taxilines.arrays() };
 }
 
 const srgbToLinear = (c) => (c < 0.04045 ? c * 0.0773993808 : Math.pow(c * 0.9478672986 + 0.0521327014, 2.4));

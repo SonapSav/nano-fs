@@ -411,6 +411,7 @@ export class Terrain {
       rail: new THREE.MeshLambertMaterial({ color: 0x5b4a3e, side: THREE.DoubleSide, ...pulled }),
       paved: addGroundDetail(new THREE.MeshLambertMaterial({ color: 0x7d7f80, side: THREE.DoubleSide, ...pulled }), { strength: 0.25, tint: 0, fadeEndM: 250 }),
       buildings: facadeMaterial(),
+      taxilines: new THREE.MeshBasicMaterial({ color: 0xd9a92b, side: THREE.DoubleSide, ...pulled, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }),
     };
     this.shared = {
       crown: new THREE.ConeGeometry(4, 14, 6),

@@ -102,7 +102,7 @@ const PARKED_PITCH_DEG = 2.4;
 export const BASE_TURN_MAST = { x: AIRFIELD.x - AIRFIELD.lengthM / 2 - 1852, z: AIRFIELD.z - 1852 }; // 45 deg, 1 nm north of the 09 threshold
 
 // Body axes (x forward, y right, z down) to the world frame (x east, y up, z south).
-function parkedMatrix(x, z, headingDeg, groundY) {
+export function parkedMatrix(x, z, headingDeg, groundY) {
   const psi = THREE.MathUtils.degToRad(headingDeg), th = THREE.MathUtils.degToRad(PARKED_PITCH_DEG);
   const ned = (n, e, d) => new THREE.Vector3(e, -d, -n);
   const xb = ned(Math.cos(th) * Math.cos(psi), Math.cos(th) * Math.sin(psi), -Math.sin(th));

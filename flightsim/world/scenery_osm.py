@@ -36,16 +36,35 @@ def _bearing(a, b) -> float:
 
 
 def extract_airfields(pbf_path, geodesy: geo.Geodesy, half_size_m: float) -> dict:
-    """{"aerodromes": [...], "runways": [...]} inside the square of half_size_m around the
-    origin, in map metres (north, east)."""
+    """{"aerodromes", "runways", "stands", "holds", "windsocks"} inside the square of
+    half_size_m around the origin, in map metres (north, east). Stands: aeroway=
+    parking_position (nodes, or lead-in lines whose last node is the stand, the nose along
+    the line), heading the direction a parked aircraft points (map degrees; nodes: toward
+    the nearest taxiway); holds: aeroway=holding_position with the direction of the nearest
+    taxiway; windsocks: aeroway=windsock."""
     import osmium
 
     inside = lambda p: abs(p[0]) <= half_size_m and abs(p[1]) <= half_size_m  # noqa: E731
     aerodromes, ways = [], []
+    points = {"parking_position": [], "holding_position": [], "windsock": []}
+    stand_lines, taxiways = [], []
     fp = osmium.FileProcessor(str(pbf_path)).with_locations().with_filter(osmium.filter.KeyFilter("aeroway"))
     for o in fp:
         tags = dict(o.tags)
         kind = tags.get("aeroway")
+        if o.is_node() and kind in points:
+            p = _map(geodesy, o.location.lat, o.location.lon)
+            if inside(p):
+                points[kind].append(p)
+            continue
+        if o.is_way() and kind in ("parking_position", "taxiway"):
+            try:
+                pts = [_map(geodesy, n.lat, n.lon) for n in o.nodes]
+            except osmium.InvalidLocationError:
+                continue
+            if inside(pts[0]) and len(pts) >= 2:
+                (stand_lines if kind == "parking_position" else taxiways).append(pts)
+            continue
         if o.is_node() and kind == "aerodrome":
             pts = [_map(geodesy, o.location.lat, o.location.lon)]
         elif o.is_way() and kind in ("aerodrome", "runway"):
@@ -68,7 +87,35 @@ def extract_airfields(pbf_path, geodesy: geo.Geodesy, half_size_m: float) -> dic
         else:
             ways.append({"id": o.id, "tags": tags, "pts": pts, "ids": ids})
     aerodromes.sort(key=lambda a: a["osm"])
-    return {"aerodromes": aerodromes, "runways": _runways(ways, aerodromes)}
+    segments = [(a, b) for line in taxiways for a, b in zip(line, line[1:])]
+    stands = [{"north": b[0], "east": b[1], "heading_deg": _bearing(a, b)} for a, b in ((line[-2], line[-1]) for line in stand_lines)]
+    for p in points["parking_position"]:
+        near = _nearest_point(p, segments)
+        stands.append({"north": p[0], "east": p[1], "heading_deg": _bearing(p, near) if near else None})
+    holds = []
+    for p in points["holding_position"]:
+        seg = _nearest_segment(p, segments)
+        holds.append({"north": p[0], "east": p[1], "taxiway_deg": _bearing(*seg) if seg else None})
+    windsocks = [{"north": p[0], "east": p[1]} for p in points["windsock"]]
+    key = lambda d: (round(d["north"], 1), round(d["east"], 1))  # noqa: E731
+    return {"aerodromes": aerodromes, "runways": _runways(ways, aerodromes), "stands": sorted(stands, key=key),
+            "holds": sorted(holds, key=key), "windsocks": sorted(windsocks, key=key)}  # fmt: skip
+
+
+def _closest_on(p, a, b):
+    dn, de = b[0] - a[0], b[1] - a[1]
+    t = max(0.0, min(1.0, ((p[0] - a[0]) * dn + (p[1] - a[1]) * de) / (dn * dn + de * de or 1.0)))
+    return (a[0] + t * dn, a[1] + t * de)
+
+
+def _nearest_segment(p, segments, reach_m: float = 200.0):
+    best = min(segments, key=lambda s: math.dist(p, _closest_on(p, *s)), default=None)
+    return best if best is not None and math.dist(p, _closest_on(p, *best)) <= reach_m else None
+
+
+def _nearest_point(p, segments, reach_m: float = 200.0):
+    s = _nearest_segment(p, segments, reach_m)
+    return _closest_on(p, *s) if s else None
 
 
 def _join(mains: list[dict]) -> list[dict]:
@@ -255,7 +302,8 @@ def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: fl
     for o in fp:
         tags = o.tags
         if o.is_area():
-            kind = "building" if "building" in tags else "apron" if tags.get("aeroway") == "apron" else None
+            aeroway = tags.get("aeroway")
+            kind = "building" if "building" in tags or aeroway in ("hangar", "terminal") else "apron" if aeroway == "apron" else None
             if kind is None:
                 continue
             for outer in o.outer_rings():

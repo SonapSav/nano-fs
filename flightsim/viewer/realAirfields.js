@@ -1,11 +1,17 @@
 // The runways of a real-world region (its airfields.json, from OpenStreetMap; see
 // flightsim/world/scenery_osm.py): asphalt with markings, edge, threshold and approach
 // lights, on the ground the build flattened for them (a straight slope along each runway).
-// Taxiways, aprons and buildings come from the region's other features. Visual only.
+// Taxiways, aprons and buildings come from the region's other features; hold-short bars at
+// OSM's holding positions; parked aircraft on some of the home airport's stands. Visual only.
+
+const PARKED_MAX = 8; // aircraft parked at the home airport (project choice: each is a model of many parts)
+const PARKED_RADIUS_M = 3000; // stands this close to the home runway's middle
+const HOLD_BAR_M = 23; // across the taxiway
 
 import * as THREE from "three";
 import { addGroundDetail } from "./groundDetail.js";
-import { addRunwayLights } from "./scenery.js";
+import { addRunwayLights, parkedMatrix } from "./scenery.js";
+import { buildC172 } from "./aircraft.js";
 import { runwayDescriptor } from "./runwayGeometry.js";
 
 export { runwayDescriptor };
@@ -94,6 +100,59 @@ export class RealAirfields {
     }
   }
 
+  // Around the home runway: aircraft on some of its stands (every third, at most PARKED_MAX;
+  // the same stands each time) and hold-short bars, at the runway's elevation (a flat
+  // airfield; the region's ground tiles may still be loading).
+  furnish(airfields, home) {
+    this.clearFurniture();
+    if (!home) return;
+    this.furniture = new THREE.Group();
+    const [[ax, az], [bx, bz]] = home.pavement, cx = (ax + bx) / 2, cz = (az + bz) / 2;
+    const y = (home.ends[0].y + home.ends[1].y) / 2;
+    const near = (p) => Math.hypot(p.east - cx, -p.north - cz) < PARKED_RADIUS_M;
+    const stands = (airfields?.stands ?? []).filter((s) => near(s) && s.heading_deg !== null);
+    const regs = ["A6-FLY", "A6-SKY", "A6-ABD", "A6-GUL", "A6-OMD", "A6-FAL", "A6-SND", "A6-PAL"];
+    stands.filter((_, i) => i % 3 === 0).slice(0, PARKED_MAX).forEach((s, i) => {
+      const model = buildC172({ registration: regs[i % regs.length] });
+      model.update({});
+      model.group.matrixAutoUpdate = false;
+      model.group.matrix.copy(parkedMatrix(s.east, -s.north, s.heading_deg, y + 0.15));
+      this.furniture.add(model.group);
+    });
+    // Hold-short bars (FAA style: two solid and two dashed yellow lines across the taxiway).
+    const yellow = new THREE.MeshBasicMaterial({ color: 0xd9a92b, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+    for (const h of airfields?.holds ?? []) {
+      if (!near(h) || h.taxiway_deg === null) continue;
+      const bar = new THREE.Group();
+      for (const [off, dashed] of [[-0.9, false], [-0.3, false], [0.3, true], [0.9, true]]) {
+        for (let k = dashed ? -5 : 0; k <= (dashed ? 5 : 0); k += 2) {
+          const m = new THREE.Mesh(new THREE.PlaneGeometry(dashed ? 2 : HOLD_BAR_M, 0.3).rotateX(-Math.PI / 2), yellow);
+          m.position.set(dashed ? k * 2 : 0, 0, off);
+          bar.add(m);
+        }
+      }
+      bar.position.set(h.east, y + 0.3, -h.north);
+      bar.rotation.y = -((h.taxiway_deg * Math.PI) / 180); // bars across the taxiway (map bearing, clockwise from north)
+      this.furniture.add(bar);
+    }
+    this.group.add(this.furniture);
+  }
+
+  clearFurniture() {
+    if (!this.furniture) return;
+    this.group.remove(this.furniture);
+    this.furniture.traverse((o) => o.geometry?.dispose());
+    this.furniture = null;
+  }
+
+  // The windsock nearest the home runway (OSM), within 2 km of its middle; null if none.
+  windsockNear(airfields, home) {
+    if (!home) return null;
+    const [[ax, az], [bx, bz]] = home.pavement, cx = (ax + bx) / 2, cz = (az + bz) / 2;
+    const best = (airfields?.windsocks ?? []).map((w) => [Math.hypot(w.east - cx, -w.north - cz), w]).sort((a, b) => a[0] - b[0])[0];
+    return best && best[0] < 2000 ? { x: best[1].east, z: -best[1].north } : null;
+  }
+
   // The runway nearest a world point (x, z): where the PAPI and windsock go.
   nearest(x, z) {
     let best = null, dist = Infinity;
@@ -106,6 +165,7 @@ export class RealAirfields {
   }
 
   clear() {
+    this.furniture = null; // disposed with the rest
     this.group.traverse((o) => {
       o.geometry?.dispose();
       if (o.material?.map) o.material.map.dispose();

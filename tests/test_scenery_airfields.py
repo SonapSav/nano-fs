@@ -31,13 +31,20 @@ def _osm(path):
     (one without an ICAO code, nearer); a 07/25 strip 7 km north with no aerodrome."""
     nodes = {1: (0, -800), 2: (0, 0), 3: (0, 800), 4: (0, -1000), 5: (100, 0), 6: (100, 30),
              7: (7000, -300), 8: (7000 + 600 * math.sin(math.radians(20)), -300 + 600 * math.cos(math.radians(20))),
-             10: (10, 10), 11: (300, 300)}  # fmt: skip
+             10: (10, 10), 11: (300, 300),
+             20: (200, -400), 21: (200, 400), 22: (150, 0), 23: (190, 0), 24: (230, 100), 25: (200, 200), 26: (-50, 300)}  # fmt: skip
     xml = ['<?xml version="1.0" encoding="UTF-8"?>', '<osm version="0.6">']
     for i, (n, e) in nodes.items():
         lat, lon = _ll(n, e)
         tags = ""
         if i == 10:
             tags = '<tag k="aeroway" v="aerodrome"/><tag k="name" v="Duplicate"/>'
+        if i == 24:
+            tags = '<tag k="aeroway" v="parking_position"/>'
+        if i == 25:
+            tags = '<tag k="aeroway" v="holding_position"/>'
+        if i == 26:
+            tags = '<tag k="aeroway" v="windsock"/>'
         if i == 11:
             tags = '<tag k="aeroway" v="aerodrome"/><tag k="icao" v="TEST"/><tag k="name:en" v="Test Field"/>'
         xml.append(f'<node id="{i}" version="1" lat="{lat:.9f}" lon="{lon:.9f}">{tags}</node>')
@@ -45,7 +52,8 @@ def _osm(path):
             (101, [2, 3], {"aeroway": "runway", "ref": "09/27", "surface": "asphalt"}),
             (102, [4, 1], {"aeroway": "runway", "ref": "09/27", "runway": "displaced_threshold"}),
             (103, [5, 6], {"aeroway": "runway", "ref": "H1/H2"}),
-            (104, [7, 8], {"aeroway": "runway", "ref": "07/25", "width": "18 m"})]  # fmt: skip
+            (104, [7, 8], {"aeroway": "runway", "ref": "07/25", "width": "18 m"}),
+            (105, [20, 21], {"aeroway": "taxiway"}), (106, [22, 23], {"aeroway": "parking_position"})]  # fmt: skip
     for wid, nds, tags in ways:
         xml.append(f'<way id="{wid}" version="1">' + "".join(f'<nd ref="{n}"/>' for n in nds)
                    + "".join(f'<tag k="{k}" v="{v}"/>' for k, v in tags.items()) + "</way>")  # fmt: skip
@@ -70,6 +78,13 @@ def test_runways_from_osm(tmp_path):  # (OSM keeps positions to 1e-7 deg, about 
     assert e09["pavement"] == pytest.approx((0, -1000), abs=0.02)  # displaced section beyond it
     assert e27["threshold"] == pytest.approx((0, 800), abs=0.02) and e27["pavement"] == e27["threshold"]
     assert r["length_m"] == pytest.approx(1800, abs=0.02)
+    # A taxiway east-west at north 200: the stand's lead-in line ends heading north (0); the
+    # stand node (north of the taxiway) faces it, south (180); the hold lies on the
+    # east-west taxiway; the windsock where mapped.
+    stands = {(round(x["north"]), round(x["east"])): round(x["heading_deg"]) % 360 for x in f["stands"]}
+    assert stands == {(190, 0): 0, (230, 100): 180}
+    assert [round(h["taxiway_deg"]) % 180 for h in f["holds"]] == [90]
+    assert [(round(w["north"]), round(w["east"])) for w in f["windsocks"]] == [(-50, 300)]
     s = rws["07/25"]
     assert s["airport"] is None and s["width_m"] == 18.0
     assert s["ends"][0]["ident"] == "07" and s["ends"][0]["threshold"] == pytest.approx((7000, -300), abs=0.02)

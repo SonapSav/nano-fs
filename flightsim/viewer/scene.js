@@ -293,6 +293,9 @@ export class FlightScene {
     if (home) {
       this.papi = new Papi(this.scene, home);
       this.windsock = new Windsock(this.scene, home);
+      const sock = this.realAirfields.windsockNear(w.airfields, home); // OSM's windsock, where mapped
+      if (sock) this.windsock.group.position.set(sock.x, home.ends[0].y, sock.z);
+      this.realAirfields.furnish(w.airfields, home);
     }
     this.windsock.setWind(...this.wind);
     this.terrain.setWorld(w);
