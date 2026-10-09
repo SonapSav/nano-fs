@@ -20,6 +20,8 @@ Server -> client messages (JSON):
             "scenery": {"name", "hash"}, whose files the server serves under
             /scenery/<name>/ (manifest.json, airfields.json, tiles/...), and "airport":
             the ICAO code of the airport at the origin, or null),
+   "atmosphere" ({"sea_level_temperature_c", "sea_level_pressure_hpa"}: a non-standard day,
+                 the ISA profile shifted to that temperature; null: the standard day),
    "route" (navigation task: {"name", "start": {north_m, east_m}, "waypoints": [{name, north_m,
             east_m, fly_over}], "turn_bank_deg", "geodesy"}, envs.navigation; the viewer
             sequences it with nav.js; else null)}

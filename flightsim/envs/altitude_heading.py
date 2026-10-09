@@ -54,6 +54,11 @@ OBS_SCALES = {
 OBS_NAMES = (*OBS_SCALES, *(f"prev_{a}" for a in ACTION_NAMES))
 
 
+def isa_density_ratio(alt_m: float) -> float:
+    """Density / sea-level density in the ISA troposphere."""
+    return (1.0 - 2.25577e-5 * alt_m) ** 4.25588
+
+
 def load_factor(s: State) -> float:
     """Normal load factor in g (1 in level flight), from the body z specific force."""
     return -s.az_mps2 / G0
@@ -106,6 +111,8 @@ class AltitudeHeadingHoldEnv(gym.Env):
         # A fresh core per episode: a reused JSBSim instance is not bit-reproducible
         # (state survives run_ic), and construction costs only a few milliseconds.
         self._core = JSBSimCore(cfg.aircraft, 1.0 / cfg.sim_rate_hz)
+        if cfg.atmosphere is not None:
+            self._core.set_atmosphere(cfg.atmosphere)
         self.trim, self.trim_state = self._start_core(ic)
         self.targets = Targets(alt_msl_m=target_alt, heading_rad=target_heading, tas_mps=self.trim_state.tas_mps)
         self._turbulence = None
@@ -183,6 +190,10 @@ class AltitudeHeadingHoldEnv(gym.Env):
         info["comfort_terms"] = dict(self.last_comfort_terms)
         return self._observation(), reward, bool(reason), truncated, info
 
+    def density_ratio(self, alt_msl_m: float) -> float:
+        """Air density / ISA sea-level density at an altitude on this task's day."""
+        return self.cfg.atmosphere.density_ratio(alt_msl_m) if self.cfg.atmosphere is not None else isa_density_ratio(alt_msl_m)
+
     def _ground_m(self, lat_rad: float, lon_rad: float) -> float:
         return self.ground.elevation_m(lat_rad, lon_rad)
 
@@ -205,7 +216,8 @@ class AltitudeHeadingHoldEnv(gym.Env):
             return {"north_mps": 0.0, "east_mps": 0.0, "speed_mps": 0.0, "from_deg": 0.0,
                     "turbulence": "none", "turbulence_sigma_mps": 0.0, "turbulence_seed": 0}  # fmt: skip
         speed = rng.uniform(*w.steady_speed_mps)
-        from_rad = rng.uniform(0.0, 2.0 * math.pi)
+        # Same number of draws either way: configs without a prevailing wind are unchanged.
+        from_rad = rng.uniform(0.0, 2.0 * math.pi) if w.from_deg is None else math.radians(rng.uniform(*w.from_deg)) % (2.0 * math.pi)
         levels = sorted(w.turbulence_probability)
         level = levels[int(rng.choice(len(levels), p=[w.turbulence_probability[k] for k in levels]))]
         return {

@@ -1100,6 +1100,54 @@ water, mangroves and irrigated green: classes the procedural generator does not 
   a scenario ignored its region (Abu Dhabi and procedural approaches shared a preview).
   Pending: the owner's run of the performance test on their graphics.
 
+### Realism (after the real-world scenery)
+
+Plan agreed 2026-10-09 (owner: "go ahead with your order, summer day, look into
+Sentinel-2"), after comparing with how Microsoft Flight Simulator builds its world (Bing
+imagery and photogrammetry, machine-learned buildings, hand-made airports, cloud
+streaming: the near-ground photo realism needs licensed imagery we cannot use offline; the
+method can be copied at our scale). Order: 1 physical realism, 2 sea and coast, 3 Sentinel-2
+imagery from altitude, 4 buildings (facades, heights) and hand-made airport and
+landmarks; later night lighting, shadows, haze.
+
+- [x] **1. A summer day and the prevailing wind at Abu Dhabi** (2026-10-09): env configs take
+  `atmosphere: {sea_level_temperature_c, sea_level_pressure_hpa}` (`core.Atmosphere`,
+  `JSBSimCore.set_atmosphere`: JSBSim's `atmosphere/delta-T` and `atmosphere/P-sl-psf`;
+  `Atmosphere.density_ratio` matches JSBSim, which runs the pressure through the shifted
+  temperature, and replaces the ISA density in the tasks' indicated-to-true airspeed
+  conversions). Every Abu Dhabi config flies a summer day: 42.5 C (Zayed International's
+  July mean daily maximum, 1991-2020) and 996 hPa (July observations 994-997 hPa); density
+  altitude near sea level ~3700 ft. Winds there come from the prevailing north-west
+  (`from_deg: [290, 340]` for the cruise wind and the runway tasks' low-altitude wind; the
+  range a project choice; configs without it draw exactly as before). The panel shows the
+  outside air temperature and QNH on non-standard days (the stream's `atmosphere`).
+  Checked against the POH as hot/standard ratios (40 C vs 15 C at sea level, 2400 lb):
+  takeoff ground roll model +27.5 % against POH +19.3 % (known deviation: the model is
+  more sensitive to heat; tolerance 0.10), maximum climb -13.2 % against -10.7 %
+  (tolerance 0.05) (`tests/test_atmosphere.py`). Autopilots at Al Bateen, hot day,
+  north-westerly winds, 200 seeds: approaches 200/200 landed (before: 196, the wind is now
+  mostly down the runway); takeoffs 200/200, ground roll 255 m (standard day 219 m), to
+  50 ft 607 m (508 m); circuits 200/200 climbed, 196/200 landed (4 nose first); routes
+  200/200 (cross-track max mean 46.6 m, worst 141.5 m). Procedural results unchanged
+  (12 crosswind circuits and 12 routes in wind identical before and after).
+- [ ] **2. Sea and coast:** waves, sun glint, sky reflection, shallow turquoise by distance
+  to the shore.
+- [ ] **3. Sentinel-2 imagery from altitude** (researched 2026-10-09, needs the owner's
+  go-ahead and a decision on size): Copernicus Sentinel data, free and open, commercial
+  use too; attribution "Contains modified Copernicus Sentinel data [year]". AWS Earth
+  Search (no account; STAC `https://earth-search.aws.element84.com/v1`, collection
+  `sentinel-2-l2a`, COGs on `sentinel-cogs`, anonymous HTTP range requests work): the
+  region needs six UTM 39N tiles from two passes 10 minutes apart on one day (39QYG, 39QZG,
+  39RYH, 39RZH from relative orbit 63; 39QZG, 39RZH from orbit 20), e.g. 2025-10-24
+  (cloud 0.06-0.32 %; also 2025-11-13, 2025-10-04); item ids pinned exactly (their
+  _0_/_1_ suffixes differ). TCI (8-bit RGB) or B02/B03/B04 (16-bit, own stretch): about
+  150-300 MB by windowed reads (about 890 MB as whole TCI files). Expect a seam between
+  the passes and some desert haze. EOX cloudless: 2016 CC BY 4.0, later years
+  CC BY-NC-SA 4.0 with share-alike on the derived scenery; offline harvesting not
+  confirmed: not chosen.
+- [ ] **4. City and airport:** shader facades and better heights; Al Bateen's terminal,
+  hangars, apron markings and parked aircraft; about six landmarks.
+
 ### Licence and documentation
 
 - [x] **Licence and README** (2026-10-07): MIT (`LICENSE`, copyright Panos Vasilopoulos;

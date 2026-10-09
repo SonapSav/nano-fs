@@ -30,7 +30,7 @@ from flightsim.atmosphere.turbulence import wind_at_height_mps
 from flightsim.control.heading_hold import wrap_angle_rad
 from flightsim.core import Controls, InitialConditions, JSBSimCore, State
 from flightsim.envs.altitude_heading import load_factor
-from flightsim.envs.approach import ApproachLandingEnv, isa_density_ratio
+from flightsim.envs.approach import ApproachLandingEnv
 from flightsim.envs.config import KT_TO_MPS, EnvConfig
 from flightsim.envs.runway import STRIKES, WHEELS, LowAltitudeGusts, draw_low_altitude_wind
 from flightsim.envs.takeoff import FIFTY_FT_M, SANK_BACK_M
@@ -87,7 +87,9 @@ class CircuitEnv(ApproachLandingEnv):
         cfg, a = self.cfg, self.cfg.approach
         alt = self.runway_elevation_m + 150.0
         core = JSBSimCore(cfg.aircraft, 1.0 / cfg.sim_rate_hz)
-        tas = a.start_kias * KT_TO_MPS / math.sqrt(isa_density_ratio(alt))
+        if cfg.atmosphere is not None:
+            core.set_atmosphere(cfg.atmosphere)
+        tas = a.start_kias * KT_TO_MPS / math.sqrt(self.density_ratio(alt))
         core.reset(InitialConditions(alt, tas, a.runway_heading_rad, flight_path_rad=-a.glide_path_rad), cfg.loading, Controls(flaps=a.start_flaps))
         return core.trim(), core.state()
 

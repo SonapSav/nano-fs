@@ -51,15 +51,19 @@ class Runway:
 
 
 def draw_low_altitude_wind(cfg: dict | None, runway_heading_rad: float, rng: np.random.Generator) -> dict | None:
-    """Wind at 20 ft and its direction: uniform speed and direction, redrawn while the
-    crosswind or tailwind component exceeds its limit (MIL-F-8785C 3.7.3.3 allows
-    leaving those out). None (and no draws) when the task has no wind."""
+    """Wind at 20 ft and its direction: uniform speed and direction (over 360 deg, or over
+    `from_deg`, a prevailing wind's range, true), redrawn while the crosswind or tailwind
+    component exceeds its limit (MIL-F-8785C 3.7.3.3 allows leaving those out). None (and
+    no draws) when the task has no wind."""
     if cfg is None:
         return None
     lo, hi = (v * KT_TO_MPS for v in cfg["u20_kt"])
     for _ in range(1000):
         u20 = rng.uniform(lo, hi)
-        rel = rng.uniform(-math.pi, math.pi)  # wind FROM, relative to the runway heading
+        if cfg.get("from_deg") is None:
+            rel = rng.uniform(-math.pi, math.pi)  # wind FROM, relative to the runway heading
+        else:
+            rel = math.remainder(math.radians(rng.uniform(*cfg["from_deg"])) - runway_heading_rad, 2 * math.pi)
         head, cross = u20 * math.cos(rel), u20 * math.sin(rel)
         if abs(cross) <= cfg["max_crosswind_kt"] * KT_TO_MPS and -head <= cfg["max_tailwind_kt"] * KT_TO_MPS:
             break

@@ -42,6 +42,7 @@ class Source:
     visual: dict | None = None  # viewer conditions (envs: visual_conditions); None: viewer defaults
     pilot_name: str | None = None  # who flies a live flight: "pid", "lqr" or "human"
     world: dict | None = None  # the geodesy (world/geo.py) for the viewer's map; None: the original sphere
+    atmosphere: dict | None = None  # a non-standard day (sea-level temperature and pressure); None: standard
     route: dict | None = None  # navigation task: the route (envs.navigation.NavigationEnv.route_info)
 
     def frames(self) -> Iterator[tuple[float, dict]]:
@@ -50,6 +51,12 @@ class Source:
     def first_frame(self) -> dict:
         """The state the flight starts from, without running it (previews)."""
         raise NotImplementedError
+
+
+def _atmosphere(cfg) -> dict | None:
+    """The stream's `atmosphere`: the day's sea-level temperature and pressure, or None."""
+    a = cfg.atmosphere
+    return None if a is None else {"sea_level_temperature_c": 15.0 + a.temperature_offset_k, "sea_level_pressure_hpa": a.sea_level_pressure_pa / 100.0}
 
 
 def _world(env) -> dict:
@@ -108,6 +115,7 @@ class ReplaySource(Source):
             self.world = _world(env)
             self.route = env.route_info() if hasattr(env, "route_info") else None
             self.visual = env.visual_conditions()
+            self.atmosphere = _atmosphere(env.cfg)
             t = env.targets
             self.targets = {"alt_msl_m": t.alt_msl_m, "heading_rad": t.heading_rad, "tas_mps": t.tas_mps}
         else:  # e.g. a real-world region that is not built here: the map from the config alone
@@ -153,6 +161,7 @@ class LiveSource(Source):
         self.approach = self._env.approach_info() if hasattr(self._env, "approach_info") else None
         self.takeoff = self._env.runway_info() if hasattr(self._env, "runway_info") else None
         self.visual = self._env.visual_conditions()
+        self.atmosphere = _atmosphere(env_cfg)
         self.world = _world(self._env)
         self.route = self._env.route_info() if hasattr(self._env, "route_info") else None
         self._config_hash = env_cfg.config_hash

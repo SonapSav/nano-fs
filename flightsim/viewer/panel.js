@@ -45,6 +45,7 @@ const PANEL_HTML = `
       <dt>Flaps</dt><dd data-r="flaps">–</dd>
       <dt>Pitch trim</dt><dd data-r="trim">–</dd>
       <dt>Brakes</dt><dd data-r="brake">–</dd>
+      <dt data-l="oat" hidden title="Outside air temperature: the day's sea-level temperature less 6.5 C per 1000 m">Outside air</dt><dd data-r="oat" hidden>–</dd>
     </dl>
     <div class="run"></div>
   </div>`;
@@ -181,6 +182,10 @@ function updateReadout(p, row) {
     put($("r-wind"), !nav ? "–" : nav.done ? "route complete" : `${nav.waypoint} (${nav.leg + 1} of ${nav.legs})${nav.turning ? ", turning" : ""}`);
   }
   const t = a ? null : session?.targets;
+  // A non-standard day: the outside air temperature at this height (the ISA lapse rate).
+  const atm = session?.atmosphere;
+  $("l-oat").hidden = readout.oat.hidden = !atm;
+  if (atm) put(readout.oat, row ? `${Math.round(atm.sea_level_temperature_c - 0.0065 * row.alt_msl_m)} °C, QNH ${Math.round(atm.sea_level_pressure_hpa)}` : "–");
   put(readout.alt, row ? `${Math.round(row.alt_msl_m * units.M_TO_FT).toLocaleString("en-US")} ft` : "–");
   if (!a) put(readout.talt, t ? `${Math.round(t.alt_msl_m * units.M_TO_FT).toLocaleString("en-US")} ft` : "–");
   put(readout.hdg, row ? `${String(Math.round(deg360(row.psi_rad)) % 360).padStart(3, "0")}°` : "–");

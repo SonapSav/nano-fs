@@ -34,7 +34,7 @@ import numpy as np
 from flightsim.atmosphere.turbulence import wind_at_height_mps
 from flightsim.control.heading_hold import wrap_angle_rad
 from flightsim.core import Controls, InitialConditions, State
-from flightsim.envs.altitude_heading import AltitudeHeadingHoldEnv, load_factor
+from flightsim.envs.altitude_heading import AltitudeHeadingHoldEnv, isa_density_ratio, load_factor  # noqa: F401 (isa_density_ratio re-exported)
 from flightsim.envs.config import FPM_TO_MPS, KT_TO_MPS, EnvConfig
 from flightsim.envs.runway import STRIKES, WHEELS, LowAltitudeGusts, Runway, draw_low_altitude_wind, wind_report
 from flightsim.world.ground import ground_of
@@ -79,11 +79,6 @@ def approach_geometry(cfg: EnvConfig) -> dict | None:
     }  # fmt: skip
 
 
-def isa_density_ratio(alt_m: float) -> float:
-    """Density / sea-level density in the ISA troposphere."""
-    return (1.0 - 2.25577e-5 * alt_m) ** 4.25588
-
-
 class ApproachLandingEnv(AltitudeHeadingHoldEnv):
     def __init__(self, cfg: EnvConfig, record: bool = False):
         if cfg.approach is None:
@@ -125,7 +120,7 @@ class ApproachLandingEnv(AltitudeHeadingHoldEnv):
         east = a.threshold_east_m + back * self._along[1] + lateral * self._right[1]
         start_lat, start_lon = self.cfg.geodesy.to_geodetic(north, east)
         alt = self.runway_elevation_m + a.start_distance_m * self._tan_gp + vertical
-        tas = kias * KT_TO_MPS / math.sqrt(isa_density_ratio(alt))  # the model has no position error: IAS = CAS
+        tas = kias * KT_TO_MPS / math.sqrt(self.density_ratio(alt))  # the model has no position error: IAS = CAS
         # Wind (drawn last, and only when configured, so calm episodes keep their draws).
         self.approach_wind = draw_low_altitude_wind(a.wind, a.runway_heading_rad, rng)
         w = self.approach_wind

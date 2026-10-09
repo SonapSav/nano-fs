@@ -6,3 +6,13 @@ world:                       # Abu Dhabi (configs/scenery/abu_dhabi.yaml; see ab
   origin_lon_deg: 54.4580337
   scenery: abu_dhabi
 terrain: dem
+
+# A summer day at Abu Dhabi: Zayed International Airport's July mean daily maximum (42.5 C,
+# 1991-2020 normals, NCM via Wikipedia "Abu Dhabi") and a typical July sea-level pressure
+# (994-997 hPa observed July 2024, Met Office; 996). Density altitude near sea level ~3700 ft.
+atmosphere:
+  sea_level_temperature_c: 42.5
+  sea_level_pressure_hpa: 996
+
+wind:
+  from_deg: [290, 340]       # the prevailing north-westerly (summer shamal), project choice of range

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from flightsim.config import canonical_json, config_hash, load_raw, parse_loading
-from flightsim.core import InitialConditions, Loading
+from flightsim.core import Atmosphere, InitialConditions, Loading
 from flightsim.world.geo import Geodesy
 
 
@@ -67,13 +67,15 @@ class TerminationConfig:
 
 @dataclass(frozen=True)
 class WindConfig:
-    """Per-episode wind: steady speed uniform in a range, direction uniform over 360 deg,
-    turbulence level drawn with the given probabilities (Dryden, MIL-F-8785C)."""
+    """Per-episode wind: steady speed uniform in a range, direction uniform over 360 deg (or
+    over `from_deg`, a prevailing wind), turbulence level drawn with the given
+    probabilities (Dryden, MIL-F-8785C)."""
 
     steady_speed_mps: tuple[float, float]
     turbulence_sigma_mps: dict[str, float]  # level name -> RMS intensity
     turbulence_probability: dict[str, float]  # level name -> probability (sums to 1)
     scale_length_m: float
+    from_deg: tuple[float, float] | None = None  # the direction the wind comes FROM (true), uniform in this range
 
 
 KT_TO_MPS = 1852.0 / 3600.0
@@ -149,6 +151,8 @@ class EnvConfig:
     geodesy: Geodesy = Geodesy()
     # A built real-world region (world/scenery.py) for terrain "dem": the config's world.scenery.
     scenery: str | None = None
+    # A non-standard day (the config's `atmosphere`), or None: the ISA standard day.
+    atmosphere: Atmosphere | None = None
 
     @property
     def sim_steps_per_action(self) -> int:
@@ -173,6 +177,20 @@ def _parse_terrain(name) -> str:
     if name not in TERRAIN_MODELS:
         raise ValueError(f"terrain must be one of {TERRAIN_MODELS}, got {name!r}")
     return name
+
+
+def _parse_atmosphere(a: dict | None) -> Atmosphere | None:
+    """`atmosphere: {sea_level_temperature_c, sea_level_pressure_hpa}` (either may be left
+    out: standard): the ISA temperature profile shifted to that sea-level temperature."""
+    if not a:
+        return None
+    unknown = set(a) - {"sea_level_temperature_c", "sea_level_pressure_hpa"}
+    if unknown:
+        raise ValueError(f"unknown atmosphere keys {sorted(unknown)}")
+    return Atmosphere(
+        temperature_offset_k=float(a.get("sea_level_temperature_c", 15.0)) - 15.0,
+        sea_level_pressure_pa=float(a.get("sea_level_pressure_hpa", 1013.25)) * 100.0,
+    )
 
 
 def _parse_scenery(raw: dict) -> str | None:
@@ -233,6 +251,7 @@ def env_config_from_raw(raw: dict) -> EnvConfig:
         terrain=_parse_terrain(raw.get("terrain", "flat")),
         geodesy=geodesy,
         scenery=_parse_scenery(raw),
+        atmosphere=_parse_atmosphere(raw.get("atmosphere")),
         approach=_parse_approach(raw.get("approach")),
         takeoff=_parse_takeoff(raw.get("takeoff")),
         circuit=_parse_circuit(raw.get("circuit")),
@@ -460,4 +479,5 @@ def _parse_wind(w: dict | None) -> WindConfig | None:
     if abs(sum(prob.values()) - 1.0) > 1e-9:
         raise ValueError("turbulence probabilities must sum to 1")
     lo, hi = (float(x) for x in w["steady_speed_mps"])
-    return WindConfig((lo, hi), sigma, prob, float(turb["scale_length_m"]))
+    from_deg = tuple(float(x) for x in w["from_deg"]) if "from_deg" in w else None
+    return WindConfig((lo, hi), sigma, prob, float(turb["scale_length_m"]), from_deg)

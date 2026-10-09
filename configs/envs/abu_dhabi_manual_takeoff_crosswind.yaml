@@ -1,6 +1,6 @@
 # Manual takeoff from runway 31 at Al Bateen, wind.
 # Runway 31 at Al Bateen (OMAD): threshold, map heading and length to the far pavement end from
-# data/scenery/abu_dhabi/airfields.json (OSM, 3202 x 45 m published; tests/test_scenery_tasks.py checks them).
+# data/scenery/abu_dhabi/airfields.json (OSM, 3202 x 45 m published; tests/test_scenery_airfields.py checks them).
 base: manual_takeoff_crosswind.yaml
 world:                       # Abu Dhabi (configs/scenery/abu_dhabi.yaml; see abu_dhabi.yaml)
   geodesy: wgs84
@@ -10,4 +10,13 @@ world:                       # Abu Dhabi (configs/scenery/abu_dhabi.yaml; see ab
 terrain: dem
 
 takeoff:
+  wind:
+    from_deg: [290, 340]       # the prevailing north-westerly (summer shamal), project choice of range
   runway: {threshold_north_m: -724.0, threshold_east_m: 926.5, heading_deg: 307.95, length_m: 2776.9, width_m: 45}
+
+# A summer day at Abu Dhabi: Zayed International Airport's July mean daily maximum (42.5 C,
+# 1991-2020 normals, NCM via Wikipedia "Abu Dhabi") and a typical July sea-level pressure
+# (994-997 hPa observed July 2024, Met Office; 996). Density altitude near sea level ~3700 ft.
+atmosphere:
+  sea_level_temperature_c: 42.5
+  sea_level_pressure_hpa: 996

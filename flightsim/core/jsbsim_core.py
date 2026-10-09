@@ -23,6 +23,7 @@ SLUG_TO_KG = 14.593902937
 LBF_TO_N = 4.4482216152605
 LBM_TO_KG = 0.45359237
 HP_TO_W = 745.69987158227
+PSF_TO_PA = LBF_TO_N / FT_TO_M**2  # pound-force per square foot
 SLUGFT3_TO_KGM3 = SLUG_TO_KG / FT_TO_M**3
 
 # Controls field -> JSBSim command property. All are normalized, so no unit conversion.
@@ -77,6 +78,27 @@ class InitialConditions:
     # Steady horizontal wind: velocity of the air mass (the direction it blows TOWARD), NED.
     wind_north_mps: float = 0.0
     wind_east_mps: float = 0.0
+
+
+@dataclass(frozen=True)
+class Atmosphere:
+    """A non-standard day: the ISA temperature profile shifted by `temperature_offset_k` at
+    every altitude, and the sea-level pressure (what JSBSim's standard atmosphere takes:
+    `atmosphere/delta-T`, `atmosphere/P-sl-psf`). The default is the standard day."""
+
+    temperature_offset_k: float = 0.0
+    sea_level_pressure_pa: float = 101325.0
+
+    def density_ratio(self, alt_msl_m: float) -> float:
+        """Air density / ISA sea-level density at an altitude (troposphere), as JSBSim's
+        standard atmosphere computes it (tests/test_atmosphere.py compares them): the
+        temperature shifted at every geopotential height, and the pressure falling from
+        this sea-level pressure through that warmer (or colder) air."""
+        h = 6356766.0 * alt_msl_m / (6356766.0 + alt_msl_m)  # geopotential height
+        t0 = 288.15 + self.temperature_offset_k
+        t = t0 - 0.0065 * h
+        p = self.sea_level_pressure_pa * (t / t0) ** (9.80665 / (287.053 * 0.0065))
+        return (p / (287.053 * t)) / 1.225
 
 
 @dataclass(frozen=True)
@@ -170,6 +192,12 @@ class JSBSimCore:
             raise ValueError(f"JSBSim could not load aircraft {aircraft!r}")
         self._fdm.set_dt(dt_s)
         self._step_count = 0
+
+    def set_atmosphere(self, atmosphere: Atmosphere) -> None:
+        """A non-standard day (temperature offset, sea-level pressure) from now on; call it
+        before `reset`. It survives run_ic (verified 2026-10-09)."""
+        self._fdm["atmosphere/delta-T"] = atmosphere.temperature_offset_k * 1.8  # Rankine
+        self._fdm["atmosphere/P-sl-psf"] = atmosphere.sea_level_pressure_pa / PSF_TO_PA
 
     def reset(
         self, ic: InitialConditions, loading: Loading = Loading(), controls: Controls = Controls(), ground_elevation_m: float = 0.0

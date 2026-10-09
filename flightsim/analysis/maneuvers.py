@@ -9,7 +9,7 @@ from dataclasses import dataclass, replace
 import numpy as np
 
 from flightsim.analysis.modes import Oscillation, oscillation_from_response
-from flightsim.core import Controls, InitialConditions, JSBSimCore, Loading, State
+from flightsim.core import Atmosphere, Controls, InitialConditions, JSBSimCore, Loading, State
 
 KT_TO_MPS = 1852.0 / 3600.0
 _NOMINAL_IC = InitialConditions(alt_msl_m=1524.0, tas_mps=50.0, heading_rad=0.0)
@@ -53,10 +53,14 @@ def loading_for(
 
 
 def trim_at_cas(
-    aircraft: str, alt_msl_m: float, cas_mps: float, loading: Loading, controls: Controls = Controls()
+    aircraft: str, alt_msl_m: float, cas_mps: float, loading: Loading, controls: Controls = Controls(),
+    atmosphere: Atmosphere | None = None,
 ) -> tuple[JSBSimCore, InitialConditions, Controls]:
-    """Trim in level flight at a calibrated airspeed (the core takes true airspeed)."""
+    """Trim in level flight at a calibrated airspeed (the core takes true airspeed), on a
+    standard day unless `atmosphere` is given."""
     core = JSBSimCore(aircraft, 1 / 120)
+    if atmosphere is not None:
+        core.set_atmosphere(atmosphere)
     tas = cas_mps
     for _ in range(6):
         core.reset(InitialConditions(alt_msl_m, tas, 0.0), loading, controls)
@@ -271,7 +275,7 @@ K_PITCH_LIMIT_RATE = 4.0  # elevator per rad/s pitch rate in the limiter (the ro
 
 def takeoff_roll(
     aircraft: str, loading: Loading, flaps: float, elevator: float, max_pitch_rad: float, hold_s: float = 10.0,
-    reference_cas_mps: float | None = None,
+    reference_cas_mps: float | None = None, atmosphere: Atmosphere | None = None,
 ) -> TakeoffRoll:
     """Short-field takeoff (POH Section 4): brakes set, full throttle (held `hold_s` until
     the RPM settles), brakes released, back pressure `elevator` (negative, "slightly tail
@@ -280,6 +284,8 @@ def takeoff_roll(
     until the aircraft lifts off.
     Raises if anything but the wheels touches the ground."""
     core = JSBSimCore(aircraft, GROUND_DT_S)
+    if atmosphere is not None:
+        core.set_atmosphere(atmosphere)
     u = Controls(throttle=1.0, flaps=flaps, brake=1.0, elevator=elevator)
     s = core.reset_on_ground(0.0, loading, u)
     for _ in range(round(hold_s / GROUND_DT_S)):
@@ -302,12 +308,13 @@ def takeoff_roll(
 
 
 def max_climb_rate_mps(
-    aircraft: str, loading: Loading, cas_mps: float, alt_msl_m: float = 30.0, settle_s: float = 20.0, measure_s: float = 20.0
+    aircraft: str, loading: Loading, cas_mps: float, alt_msl_m: float = 30.0, settle_s: float = 20.0, measure_s: float = 20.0,
+    atmosphere: Atmosphere | None = None,
 ) -> float:
     """Full-throttle climb at a held calibrated airspeed, flaps up (POH Figure 5-5): trimmed
     level at `alt_msl_m`, then full throttle with the pitch attitude holding the speed
     (speed on pitch, pitch on elevator). Mean climb rate over `measure_s` after `settle_s`."""
-    core, _, trim = trim_at_cas(aircraft, alt_msl_m, cas_mps, loading)
+    core, _, trim = trim_at_cas(aircraft, alt_msl_m, cas_mps, loading, atmosphere=atmosphere)
     s, i_err, dt = core.state(), 0.0, core.dt_s
     theta_ref, alt0 = s.theta_rad, None
     for k in range(round((settle_s + measure_s) / dt)):

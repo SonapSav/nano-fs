@@ -315,6 +315,7 @@ class Session:
             "duration_s": source.duration_s, "targets": source.targets, "meta": source.meta,
             "pilot": source.pilot_name, "approach": source.approach, "takeoff": source.takeoff, "visual": source.visual,
             "world": source.world, "route": source.route,
+            "atmosphere": source.atmosphere,
             "pattern": self.cfg.pattern_info() if (source.approach or {}).get("task") == "circuit" else None,
         }  # fmt: skip
 
