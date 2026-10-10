@@ -15,7 +15,7 @@ import { SkyController, TIMES } from "./sky.js";
 import { CloudField } from "./clouds.js";
 import { RoadNetwork } from "./roads.js";
 import { QUALITY, Terrain, waterUniforms } from "./terrain.js";
-import { RealAirfields } from "./realAirfields.js";
+import { LIFT_M as RUNWAY_LIFT_M, RealAirfields } from "./realAirfields.js";
 import { Landmarks } from "./landmarks.js";
 import { world } from "./world.js";
 import { groundDetailStrength } from "./groundDetail.js";
@@ -401,6 +401,9 @@ export class FlightScene {
     const dt = this.lastT === null || row.t_s < this.lastT || row.t_s - this.lastT > 1 ? 0 : row.t_s - this.lastT;
     this.lastT = row.t_s;
     this.model.update(row, dt);
+    // Tyres on the drawn runway (a few cm above the physics' ground; on grass they float
+    // as much, unseen).
+    this.model.settle(this.aircraft.matrix, (x, z) => world.groundAt(x, z) + RUNWAY_LIFT_M);
 
     // Trail: a point every 1/30 s of flight time at most (the view is drawn at the screen's
     // rate, between frames), so it keeps covering the same stretch of flight.

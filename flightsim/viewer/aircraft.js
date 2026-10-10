@@ -356,7 +356,10 @@ function wheel(center, radius, width, material) {
 
 // --- The aircraft -----------------------------------------------------------------------
 
+const MAX_GEAR_RISE_M = 0.3; // beyond this the aircraft is on its belly, not its gear
+
 export function buildC172({ registration = REGISTRATION } = {}) {
+  const gears = []; // { group, contact (body metres) }
   const group = new THREE.Group();
   const white = new THREE.MeshLambertMaterial({ color: WHITE, side: THREE.DoubleSide });
   const grey = new THREE.MeshLambertMaterial({ color: 0x5c6166 });
@@ -439,11 +442,15 @@ export function buildC172({ registration = REGISTRATION } = {}) {
     group.add(flap, aileron);
     pivots[side > 0 ? "flapR" : "flapL"] = flap;
     pivots[side > 0 ? "aileronR" : "aileronL"] = aileron;
-    // Strut, main gear leg, wheel and fairing.
+    // Strut, main gear leg, wheel and fairing (the leg, wheel and fairing compress
+    // together: settle()).
     group.add(beam([48, yy(20), 7], [45, yy(102), wingZ(102) - 3], 4.5, 1.6, white));
-    group.add(beam([58, yy(18), 5], [58, yy(41), -7], 4, 1.2, grey));
-    group.add(wheel([58.2, yy(43), -8], 7.5, 5, tyre));
-    group.add(ellipsoid([60, yy(43), -6], 16, 5, 8.5, white));
+    const main = new THREE.Group();
+    main.add(beam([58, yy(18), 5], [58, yy(41), -7], 4, 1.2, grey));
+    main.add(wheel([58.2, yy(43), -8], 7.5, 5, tyre));
+    main.add(ellipsoid([60, yy(43), -6], 16, 5, 8.5, white));
+    group.add(main);
+    gears.push({ group: main, contact: toBody(58.2, yy(43), -15.5) }); // JSBSim's LEFT_MAIN / RIGHT_MAIN
     // Navigation lights on the wingtips at their thickest point (about 30% chord; the tip
     // is ~5 in thick), facing outward and a little forward: red left, green right.
     group.add(lamp(toBody(43, yy(214), wingZ(214) + 0.7), new THREE.Vector3(0.35, side, 0), side > 0 ? 0x2bff5a : 0xff2a2a, 1.3, 0.35, 1.8));
@@ -475,9 +482,12 @@ export function buildC172({ registration = REGISTRATION } = {}) {
   group.add(lamp(toBody(272.3, 0, 33), new THREE.Vector3(-1, 0, 0), 0xffffff, 0.8, 0.3));
 
   // Nose gear: strut, wheel and fairing.
-  group.add(beam([-4, 0, 10], [-6.8, 0, -13], 3, 3, grey));
-  group.add(wheel([-6.8, 0, -14], 5.5, 4, tyre));
-  group.add(ellipsoid([-5, 0, -12], 12, 4, 7, white));
+  const nose = new THREE.Group();
+  nose.add(beam([-4, 0, 10], [-6.8, 0, -13], 3, 3, grey));
+  nose.add(wheel([-6.8, 0, -14], 5.5, 4, tyre));
+  nose.add(ellipsoid([-5, 0, -12], 12, 4, 7, white));
+  group.add(nose);
+  gears.push({ group: nose, contact: toBody(-6.8, 0, -19.5) }); // JSBSim's NOSE
 
   // Belly camera (camera.js): a ball turret under the cabin floor, its lens at the centre.
   // Hidden while the camera draws its own picture.
@@ -492,6 +502,18 @@ export function buildC172({ registration = REGISTRATION } = {}) {
     group,
     pivots,
     cameraPod,
+    gears,
+    // Rest the tyres on the drawn surface: JSBSim models tyre and strut compression by
+    // letting the gear contact points sink into the ground (~6 cm at rest), so each gear
+    // (leg, wheel, fairing) is raised along the body's up axis by how far its contact
+    // point is under the surface. `matrix`: the aircraft's world matrix (body axes);
+    // `surfaceAt(x, z)`: the drawn surface's height there (world metres).
+    settle(matrix, surfaceAt) {
+      for (const g of gears) {
+        const p = g.contact.clone().applyMatrix4(matrix);
+        g.group.position.z = -Math.min(MAX_GEAR_RISE_M, Math.max(0, surfaceAt(p.x, p.z) - p.y)); // body z is down
+      }
+    },
     update(row, dtS = 0) {
       set(pivots.elevator, row.elevator_pos_rad ?? 0);
       set(pivots.aileronL, row.aileron_left_pos_rad ?? 0);

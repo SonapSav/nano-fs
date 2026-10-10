@@ -141,6 +141,7 @@ export function addAirfieldDetail(scene) {
     model.update({});
     model.group.matrixAutoUpdate = false;
     model.group.matrix.copy(parkedMatrix(x + dx, z - 185, 180, 0.02));
+    model.settle(model.group.matrix, () => 0.02); // tyres on the apron
     group.add(model.group);
   });
   // Fuel truck by the east end of the apron.

@@ -1265,7 +1265,12 @@ landmarks; later night lighting, shadows, haze.
     and strut compression), so the tyres were ~20 cm deep. Runway and paved surfaces now
     2-5 cm above the ground (real runway 0.03, taxiways 0.05, aprons 0.03; procedural
     0.015-0.03; markings and hold bars just above); the logarithmic depth buffer keeps
-    them clear of the terrain (checked at 2.5 and 8 km). Roads keep 0.35 m.
+    them clear of the terrain (checked at 2.5 and 8 km). Roads keep 0.35 m. Then the
+    tyres' bottoms were still cut (the owner's second photo): the model's gear now
+    compresses as JSBSim's does: `settle()` (aircraft.js) raises each gear (leg, wheel,
+    fairing) by how far its contact point is under the drawn surface, every frame for the
+    flown aircraft, once for parked ones (at rest: mains 4.3 cm, nose 7.4 cm with the
+    runway 3 cm up). Physics and logs unchanged.
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the
     flown aircraft's static parts (45 meshes), palms and bushes across tiles (~50).
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings

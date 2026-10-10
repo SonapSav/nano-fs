@@ -121,6 +121,7 @@ export class RealAirfields {
     // from the air).
     const model = buildC172({ registration: "A6-ABD" });
     model.update({});
+    model.settle(parkedMatrix(0, 0, 0, 0), () => 0); // tyres on the surface (placed at y + LIFT_M below)
     const parked = stands.filter((_, i) => i % 3 === 0).slice(0, PARKED_MAX);
     for (const mesh of mergeByMaterial(parked.map((s) => ({ object: model.group, matrix: parkedMatrix(s.east, -s.north, s.heading_deg, y + LIFT_M) })))) {
       this.furniture.add(mesh);

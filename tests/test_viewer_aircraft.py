@@ -54,6 +54,20 @@ m.group.traverse((o) => {
   }
 });
 out.worstSpanwiseNormal = worst;
+// Gear settling: at JSBSim's rest (CG 1.3276 m above the ground, pitch 2.45 deg; flightsim
+// reset_on_ground), heading north, on a surface 3 cm up: every tyre bottom on it.
+const pose = (h, thDeg) => {
+  const th = (thDeg * Math.PI) / 180;
+  return new THREE.Matrix4().makeBasis(new THREE.Vector3(0, Math.sin(th), -Math.cos(th)), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, -Math.cos(th), -Math.sin(th))).setPosition(0, h, 0);
+};
+const bottoms = (mat) => m.gears.map((g) => g.contact.clone().add(g.group.position).applyMatrix4(mat).y);
+const rest = pose(1.3276, 2.45);
+out.unsettled = bottoms(rest);
+m.settle(rest, () => 0.03);
+out.settled = bottoms(rest);
+out.rise = m.gears.map((g) => -g.group.position.z);
+m.settle(pose(10, 2.45), () => 0.03);
+out.airborne = m.gears.map((g) => -g.group.position.z);
 console.log(JSON.stringify(out));
 """
 
@@ -89,3 +103,10 @@ def test_surfaces_deflect_the_way_logged_positions_mean(model):
 
 def test_tip_shading_is_not_bent_by_end_caps(model):
     assert model["worstSpanwiseNormal"] < 0.35
+
+
+def test_gear_settles_on_the_surface(model):
+    assert all(y < 0.03 for y in model["unsettled"])  # JSBSim's contacts sit in the ground at rest
+    assert model["settled"] == pytest.approx([0.03] * len(model["settled"]), abs=0.003)  # tyres on the surface
+    assert all(0 < r < 0.3 for r in model["rise"])
+    assert model["airborne"] == [0] * len(model["airborne"])  # nothing moves in the air
