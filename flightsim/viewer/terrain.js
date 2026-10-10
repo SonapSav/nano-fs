@@ -9,6 +9,7 @@
 import * as THREE from "three";
 import { addGroundDetail } from "./groundDetail.js";
 import { CLIP_FRAGMENT, CLIP_GLSL, clipUniforms, hideUnderImagery } from "./imageryClip.js";
+import { DETAIL_GLSL, detailTexture, detailUniforms } from "./groundTextures.js";
 import { TILE_SIZE_M, WATER_LEVEL_M, tileGeometryData, tileObjectsData } from "./terrainCore.js";
 import { SEA_SURFACE_M, demTileGeometryData, demTileObjectsData } from "./demTiles.js";
 import { world } from "./world.js";
@@ -172,12 +173,13 @@ function regionMaterial(data) {
   const material = new THREE.MeshLambertMaterial({ map: tex });
   material.userData.shore = shore;
   material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, waterUniforms, clipUniforms, { shoreMap: { value: shore }, waterTint: { value: data.imagery ? 0.3 : 1.0 }, imageryGain: { value: data.imagery ? 1.4 : 1.0 } });
+    if (data.imagery) detailUniforms.detailMap.value = detailTexture();
+    Object.assign(shader.uniforms, waterUniforms, clipUniforms, data.imagery ? detailUniforms : {}, { shoreMap: { value: shore }, waterTint: { value: data.imagery ? 0.3 : 1.0 }, imageryGain: { value: data.imagery ? 1.4 : 1.0 } });
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nvarying vec3 vWaterPos;")
       .replace("#include <begin_vertex>", "#include <begin_vertex>\nvWaterPos = (modelMatrix * vec4(position, 1.0)).xyz;");
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", `#include <common>\n${WATER_GLSL}\n${CLIP_GLSL}`)
+      .replace("#include <common>", `#include <common>\n${WATER_GLSL}\n${CLIP_GLSL}${data.imagery ? `\n${DETAIL_GLSL}` : ""}`)
       .replace("#include <map_fragment>", `#include <map_fragment>\n${CLIP_FRAGMENT}`)
       .replace(
         "#include <color_fragment>",
@@ -185,6 +187,7 @@ function regionMaterial(data) {
 diffuseColor.rgb *= imageryGain; // imagery as an albedo reads dark under the scene's light (project choice, by eye)
 float shoreCode = texture2D(shoreMap, vMapUv).r * 255.0;
 float water = smoothstep(0.3, 0.9, shoreCode);
+${data.imagery ? "diffuseColor.rgb = groundDetail(diffuseColor.rgb, vWaterPos.xz, length(vViewPosition), 1.0 - water); // close-up texture by what the imagery shows (groundTextures.js)" : ""}
 float waterDistM = max(0.0, shoreCode - 1.0) * 8.0;
 vec3 waterColour = mix(vec3(0.075, 0.36, 0.33), vec3(0.012, 0.10, 0.17), smoothstep(15.0, 1200.0, waterDistM));
 // Over imagery: its own colours near the shore (the real shallows), ours offshore, where the
@@ -211,8 +214,8 @@ if (water > 0.01) normal = normalize(mix(normal, normalize((viewMatrix * vec4(-w
 #include <opaque_fragment>`,
       );
   };
-  material.customProgramCacheKey = () => "regionWater";
-  return addGroundDetail(material);
+  material.customProgramCacheKey = () => (data.imagery ? "regionWaterDetail" : "regionWater");
+  return data.imagery ? material : addGroundDetail(material); // imagery: its own detail (groundTextures.js)
 }
 
 // Building facades (featureGeometry.js `facade`: metres along the wall, up from the base,

@@ -1397,8 +1397,20 @@ landmarks; later night lighting, shadows, haze.
     centrelines stay (aircraft use them). Frame time unchanged within noise. The dark
     areas inside the interchanges near the Grand Mosque are real: dense dark green
     planting in the imagery, not drawn roads.
-  - [ ] Next in the owner's scenery plan (2026-10-10): detail textures, lighting
-    (shadows, haze), night lighting.
+  - [x] Detail textures (2026-10-10, the owner: "go ahead with the detail textures"):
+    below a metre the imagery is a smooth blur, so a region's imagery tiles get fine
+    detail by what the imagery shows, judged per pixel from its colour (green over red
+    and blue: plants; grey and dark: asphalt, concrete half way; otherwise sand)
+    (`viewer/groundTextures.js`). One seeded, tileable 512 px texture made at start-up
+    (no image files): sand grain with faint wind ripples in patches, asphalt aggregate
+    with light stones and stains, clumps of foliage, and a slow variation; sampled at 6 m
+    and 41 m repeats (crossed axes), relative to the camera for precision far from the
+    origin; land only, fading out from 60 to 900 m; the quality setting's ground detail
+    switch turns it off. It replaces the plain noise on imagery tiles (the land cover
+    fallback keeps it). Strengths and sizes by eye; the first ripples were too regular
+    (corduroy lines) and were weakened. Frame time unchanged within noise.
+  - [ ] Next in the owner's scenery plan (2026-10-10): buildings coloured from the
+    imagery, lighting (shadows, haze), night lighting.
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the
     flown aircraft's static parts (45 meshes), palms and bushes across tiles (~50).
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings

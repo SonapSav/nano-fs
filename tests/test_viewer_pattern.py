@@ -78,7 +78,7 @@ def test_radio_mast_marks_the_circuit_base_turn(tmp_path):
         shutil.copy(VIEWER / "vendor" / f, three / f)
     shutil.copytree(VIEWER / "vendor" / "addons", three / "addons")
     (three / "package.json").write_text('{"name":"three","type":"module","exports":{".":"./three.module.js","./addons/*":"./addons/*"}}')
-    for f in ("scenery.js", "terrain.js", "terrainCore.js", "demTiles.js", "demCore.js", "world.js", "groundDetail.js", "imageryClip.js", "aircraft.js", "camera.js"):
+    for f in ("scenery.js", "terrain.js", "terrainCore.js", "demTiles.js", "demCore.js", "world.js", "groundDetail.js", "imageryClip.js", "groundTextures.js", "aircraft.js", "camera.js"):
         shutil.copy(VIEWER / f, d / f)
     script = 'const s = await import("./scenery.js"); console.log(JSON.stringify(s.BASE_TURN_MAST));'
     res = subprocess.run([NODE, "--input-type=module", "-e", script], cwd=d, capture_output=True, text=True, timeout=60)
