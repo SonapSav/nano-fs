@@ -112,6 +112,7 @@ flightsim/          # installable package (uv_build backend)
                     #     their materials and sun shadows; ?debug in the URL exposes the scene for screenshots),
                     #     staticMerge.js (static objects baked into one mesh per material: fewer draw calls),
                     #     bridges.js (every OSM bridge's deck and piers, the landmark bridges' arches and girders)
+                    #     imageryClip.js (a region's 1 m / 4 m imagery streamed around the camera: two fixed clipmap textures)
   analysis/         # mode identification, validation maneuvers, validation checks
   atmosphere/       # Dryden turbulence (MIL-F-8785C)
   world/            # terrain height shared with the viewer (bit-identical port of viewer/terrainCore.js);
@@ -119,6 +120,7 @@ flightsim/          # installable package (uv_build backend)
                     #   scenery.py: built real-world regions (tile grid, files, manifest); scenery_build.py: the build
                     #   dem.py: a region's height and water (viewer/demCore.js the same); ground.py: the ground of a config
                     #   scenery_osm.py: the build's OpenStreetMap runways and features; scenery_bridges.py: bridge decks
+                    #   scenery_hires.py: the build's 1 m imagery (Satellogic EarthView), colour-matched to Sentinel-2
   batch.py          # parallel seeded episode batches
   config.py         # YAML loading (base: inheritance, overrides) + config hash
   runner.py         # headless run loop
@@ -160,7 +162,7 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 ## Decisions
 - **Aircraft:** JSBSim `c172p`. Validation reference values in step 2 must come from a source matching this model.
 - **Validation deviations accepted (2026-10-04):** the 4 known deviations from step 2 (stall speeds 3.4-4.7 kt fast in 3 cases, phugoid period ~21% short) are accepted for now. A tuned copy of the aircraft model is a possible later, separate step. Controllers tuned on this model should be expected to meet a slower phugoid on the real aircraft.
-- **Real-world scenery (2026-10-09):** option B, built offline from open data for one region at a time, non-commercial for now, nothing fetched while flying. First region: about 100 x 100 km around Al Bateen Executive Airport (OMAD), Abu Dhabi. Ground from FABDEM (bare-earth Copernicus GLO-30, buildings and trees removed; non-commercial licence), land cover from ESA WorldCover (CC BY 4.0), features and buildings from OpenStreetMap (ODbL, Geofabrik extracts). The same height tiles feed the physics and the viewer (bit-identical, as the procedural terrain); logs record the scenery's hash; `procedural` stays. Downloads and built tiles live in `data/scenery/` (never committed: the tiles are an ODbL derived database); the repository holds the build script and the region definitions. The build script's libraries (`rasterio`, `osmium`) are in the `scenery` dependency group only (`uv run --group scenery ...`). A commercial use would switch the ground to Copernicus GLO-30 (free with attribution) and re-check every licence.
+- **Real-world scenery (2026-10-09):** option B, built offline from open data for one region at a time, non-commercial for now, nothing fetched while flying. First region: about 100 x 100 km around Al Bateen Executive Airport (OMAD), Abu Dhabi. Ground from FABDEM (bare-earth Copernicus GLO-30, buildings and trees removed; non-commercial licence), land cover from ESA WorldCover (CC BY 4.0), features and buildings from OpenStreetMap (ODbL, Geofabrik extracts). The same height tiles feed the physics and the viewer (bit-identical, as the procedural terrain); logs record the scenery's hash; `procedural` stays. Downloads and built tiles live in `data/scenery/` (never committed: the tiles are an ODbL derived database); the repository holds the build script and the region definitions. The build script's libraries (`rasterio`, `osmium`) are in the `scenery` dependency group only (`uv run --group scenery ...`). Imagery: Sentinel-2 (10 m) over the region, and 1 m Satellogic EarthView (CC BY 4.0, 2022) within 25 km of the origin (2026-10-10). A commercial use would switch the ground to Copernicus GLO-30 (free with attribution) and re-check every licence.
 - **Research priority:** autopilot / control design first. The log schema should favor what control work needs: full state, control surface commands and positions, trim condition, and enough precision to fit dynamic modes. RL and pilot training come later.
 
 ## Environment (checked 2026-10-04)
@@ -181,7 +183,7 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - Seeds: tune controllers on 1000-1999. Report on 0-999 and 2000-2999 (both were used while debugging the LQR retune, 2026-10-04) and on 3000-3999 (untouched; use only for final numbers). RL training draws its episodes from its own seeded streams, never these ranges. LQR gain schedules are cached in `data/cache/lqr/` (keyed by aircraft, JSBSim version, loading, LQR config, rate and flightsim source hash).
 - RL: `uv run python scripts/train_rl.py configs/rl/ppo_comfort.yaml [--set wall_clock_limit_min=5]` writes `data/rl/<run_id>/`; evaluate with `scripts/batch_run.py --policy rl --rl-model data/rl/<run_id>/best`. Long runs: start them in the background and write the console log to a file, so an interrupted session leaves the saved models and log behind.
 - Batch ids hash everything that determines results, including the flightsim source hash, but not the git fields (the same code committed or not is the same batch). Manifests record the full code version.
-- Real-world scenery: `uv run --group scenery python scripts/build_scenery.py configs/scenery/abu_dhabi.yaml` (downloads into and builds `data/scenery/abu_dhabi/`; `--pin` records the sources' sha256 in the region file)
+- Real-world scenery: `uv run --group scenery python scripts/build_scenery.py configs/scenery/abu_dhabi.yaml` (downloads into and builds `data/scenery/abu_dhabi/`; `--pin` records the sources' sha256 in the region file; `--hires-only` rebuilds only the 1 m imagery of a built region)
 - Logs go to `data/` (gitignored; `data/.gitkeep` is committed so Docker never creates it as root).
 - Viewer: `uv run python -m flightsim.stream` then open http://localhost:8686/ ; in Docker `docker compose up -d viewer` (published on all host interfaces)
 - Docker: `uv run python scripts/docker.py build` (passes the git commit into the image; any `docker compose` arguments work, e.g. `up -d --build viewer`), `docker compose run --rm sim pytest`, `docker compose run --rm sim python scripts/<script>.py`

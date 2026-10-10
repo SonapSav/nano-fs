@@ -16,6 +16,7 @@ and the viewer read the built files through scenery.py. Steps, each repeatable:
    onto a straight slope fitted to the terrain under its centreline (`airfields.json`).
 4b. shore distance: from each water cell to the nearest land (the viewer's shallow water).
 5. features (OpenStreetMap): roads, railways, taxiways, aprons and buildings per tile.
+5b. high-resolution imagery (scenery_hires.py), where the region file asks for it.
 6. manifest.json: the region, its sources, every file's sha256.
 
 The same sources and code give byte-identical files.
@@ -763,7 +764,26 @@ def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print) -> dict:
     build_airfields(spec, pbf, out, log)
     bh = next((src / f["name"] for f in sources if f["kind"] == "building_height"), None)
     build_features(spec, pbf, out, log, building_height=bh)
+    if spec.sources.get("hires_imagery"):
+        sources.append(build_hires(spec, out, log))
     return write_manifest(spec, sources, out)
+
+
+def build_hires(spec: RegionSpec, out: Path, log=print) -> dict:
+    """Only the high-resolution imagery (scenery_hires.py) of a built region; returns its
+    listing as a source entry (pinned like the others)."""
+    from flightsim.world import scenery_hires
+
+    hi = spec.sources["hires_imagery"]
+    listing = out / "sources" / "satellogic" / "listing.json"
+    listing.parent.mkdir(parents=True, exist_ok=True)
+    scenery_hires.listing(spec, hi, listing)
+    entry = {"kind": "hires_imagery", "name": "satellogic/listing.json", "url": spec.sources["hires_imagery"]["bucket"], "sha256": sha256_file(listing)}
+    pin = spec.pinned.get(entry["name"])
+    if pin and pin != entry["sha256"]:
+        raise ValueError(f"{entry['name']}: sha256 {entry['sha256']} differs from the pinned {pin}; delete it to list again")
+    scenery_hires.build_hires(spec, out, log)
+    return entry
 
 
 def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_height: Path | None = None) -> None:

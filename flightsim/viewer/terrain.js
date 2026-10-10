@@ -8,6 +8,7 @@
 
 import * as THREE from "three";
 import { addGroundDetail } from "./groundDetail.js";
+import { CLIP_FRAGMENT, CLIP_GLSL, clipUniforms } from "./imageryClip.js";
 import { TILE_SIZE_M, WATER_LEVEL_M, tileGeometryData, tileObjectsData } from "./terrainCore.js";
 import { SEA_SURFACE_M, demTileGeometryData, demTileObjectsData } from "./demTiles.js";
 import { world } from "./world.js";
@@ -171,12 +172,13 @@ function regionMaterial(data) {
   const material = new THREE.MeshLambertMaterial({ map: tex });
   material.userData.shore = shore;
   material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, waterUniforms, { shoreMap: { value: shore }, waterTint: { value: data.imagery ? 0.3 : 1.0 }, imageryGain: { value: data.imagery ? 1.4 : 1.0 } });
+    Object.assign(shader.uniforms, waterUniforms, clipUniforms, { shoreMap: { value: shore }, waterTint: { value: data.imagery ? 0.3 : 1.0 }, imageryGain: { value: data.imagery ? 1.4 : 1.0 } });
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nvarying vec3 vWaterPos;")
       .replace("#include <begin_vertex>", "#include <begin_vertex>\nvWaterPos = (modelMatrix * vec4(position, 1.0)).xyz;");
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", `#include <common>\n${WATER_GLSL}`)
+      .replace("#include <common>", `#include <common>\n${WATER_GLSL}\n${CLIP_GLSL}`)
+      .replace("#include <map_fragment>", `#include <map_fragment>\n${CLIP_FRAGMENT}`)
       .replace(
         "#include <color_fragment>",
         `#include <color_fragment>

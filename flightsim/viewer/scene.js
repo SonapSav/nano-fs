@@ -18,6 +18,7 @@ import { QUALITY, Terrain, waterUniforms } from "./terrain.js";
 import { LIFT_M as RUNWAY_LIFT_M, RealAirfields } from "./realAirfields.js";
 import { Landmarks } from "./landmarks.js";
 import { Bridges } from "./bridges.js";
+import { ImageryClip } from "./imageryClip.js";
 import { world } from "./world.js";
 import { groundDetailStrength } from "./groundDetail.js";
 import { buildC172 } from "./aircraft.js";
@@ -128,6 +129,7 @@ export class FlightScene {
     this.realAirfields = new RealAirfields(this.scene);
     this.landmarks = new Landmarks(this.scene);
     this.bridges = new Bridges(this.scene);
+    this.imageryClip = new ImageryClip(this.renderer); // a region's 1 m and 4 m imagery around the camera
     this.wind = [0, 0]; // the windsock's wind (from deg, kt), kept across a world change
     this.terrain = new Terrain(this.scene, quality);
     this._applyQuality(quality);
@@ -233,6 +235,7 @@ export class FlightScene {
     old.forceContextLoss();
     this.renderer = r;
     this.skyLight.renderer = r;
+    this.imageryClip.setRenderer(r); // its textures lived in the old context
     this.shadowMaskDirty = true; // the mask texture lived in the old context
     this._environment();
     this._bindPointer();
@@ -315,6 +318,7 @@ export class FlightScene {
     this.realAirfields.build(real ? w.airfields : null);
     this.landmarks.build(real ? w.landmarks : null);
     this.bridges.build(real ? w.bridges : null);
+    this.imageryClip.set(w.scenery, real ? w.hires : null);
     this._environment();
     const home = real ? this.realAirfields.nearest(near.x, near.z) : null;
     if (home) {
@@ -535,6 +539,7 @@ export class FlightScene {
   render() {
     this._followGround();
     this.bridges.update(this.camera.position);
+    this.imageryClip.update(this.camera.position.x, this.camera.position.z); // last frame's camera
     waterUniforms.waterTime.value = (performance.now() / 1000) % 10000;
     this._stepRecentre();
     this._renderShadowMask();

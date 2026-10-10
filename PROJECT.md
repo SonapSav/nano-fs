@@ -1362,6 +1362,36 @@ landmarks; later night lighting, shadows, haze.
     in docs/REFERENCES.md; side arches, Maqta's rise and the clearances of Maqta and
     Mussafah are project choices. Visual only (the physics flies through them). Approach
     view: +40 draw calls, +150k triangles.
+  - [x] 1 m imagery within 25 km of Al Bateen (2026-10-10, the owner: "go ahead with 25 km
+    around Al Bateen first"). Search: OpenAerialMap (nothing here), Maxar Open Data (no
+    Gulf events), Abu Dhabi's geospatial portal (no licence found); chosen: Satellogic
+    EarthView (AWS open data, CC BY 4.0, commercial use allowed): 1 m true colour, 384 m
+    UTM tiles per satellite pass, Aug-Nov 2022. Build (`world/scenery_hires.py`, region
+    file `hires_imagery`, `scripts/build_scenery.py --hires-only`): lists the bucket over
+    the square (12,604 tiles of 12 passes, 5.1 GB; the listing pinned, every file checked
+    against its MD5 ETag), composites in a pass order (afternoon passes first, by view
+    angle off nadir; project choice), matches colours to our Sentinel imagery (per tile a
+    quantile curve per band: EarthView stretches each tile on its own; then a per-tile
+    smooth gain, 60 m blur, so tiles and passes meet without steps), feathers the covered
+    area's edges (60 m) into Sentinel, and writes 512 px JPEG chunks: 5,249 at 1 m (512 m)
+    and 398 at 4 m (2 km), 219 MB, `hires.json` (in the manifest). 45 % of the 52 km
+    square is covered (north-south strips; Al Bateen and the Grand Mosque seen covered);
+    elsewhere Sentinel's 10 m as before. 14 min on 12 cores. Viewer
+    (`viewer/imageryClip.js`): a clipmap per level, one fixed 4096 px texture of 8 x 8
+    chunk slots (4 km at 1 m, 16 km at 4 m, ~180 MB with mipmaps made per chunk), chunks
+    streamed around the camera (nearest first, 2 uploads a frame), an index texture says
+    which chunk each slot holds; the region ground shader blends 4 m then 1 m over the
+    tile imagery, fading out before each window's edge (1.3-1.7 km, 5.5-7 km), with the
+    GPU's full anisotropic filtering. Frame time on this iGPU (headless Chromium, 5 views
+    over Al Bateen, the mosque, Saadiyat): unchanged within noise (3.0-4.2 ms on vs
+    2.6-4.7 ms off). Credit "Satellogic EarthView (CC BY 4.0)" in the view and README.
+    Known limits: faint seams between some EarthView tiles on plain sand; 2022 imagery
+    (newer buildings stand on bare ground); towers lean in the imagery (off nadir up to
+    ~23 deg); OSM's drawn roads and paving still cover the imagery's real ones.
+  - [ ] With 1 m imagery: hide or thin OSM's drawn roads and paving where it covers
+    (the imagery shows them; dark interchange areas near the mosque), keeping runways
+    and taxiways; then detail textures, lighting (shadows, haze) and night lighting
+    (the owner's scenery plan, 2026-10-10).
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the
     flown aircraft's static parts (45 meshes), palms and bushes across tiles (~50).
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings

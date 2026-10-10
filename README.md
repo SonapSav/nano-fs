@@ -34,7 +34,8 @@ you can fly with a keyboard, gamepad or joystick.
   simulated world.
 - **Real-world scenery:** Abu Dhabi around Al Bateen Executive Airport (OMAD), 104 km
   square, built offline from open data: bare-earth elevation (FABDEM) under the wheels
-  and in the view, Sentinel-2 satellite imagery and ESA WorldCover land cover, a sea
+  and in the view, Sentinel-2 satellite imagery (10 m) with 1 m Satellogic EarthView
+  imagery within 25 km of the airport, ESA WorldCover land cover, a sea
   with waves, reflections and turquoise shallows, a 42 °C summer day with the
   prevailing north-westerly wind, and OpenStreetMap runways, roads,
   taxiways, aprons and 110,000 buildings, with date palms and mangroves. The physics
@@ -60,8 +61,9 @@ you can fly with a keyboard, gamepad or joystick.
 The model is checked against published data by automated tests, mainly the 1985 Cessna
 172P Pilot's Operating Handbook: cruise RPM, power and fuel flow, stall speeds, climb
 rate, takeoff and landing distances, and the phugoid against an AAIB flight trial.
-The tuned model passes 32 checks with 6 known deviations, among them stall speeds 3-5 kt
-fast in three configurations and a phugoid about 20 % short. See
+The tuned model passes 37 of 38 checks, stall speeds and takeoff roll included; the known
+deviation is the phugoid, 28 s against the flight trial's ~35 s (about 20 % short; it
+follows Lanchester's theory, 26 s). See
 [`docs/VALIDATION_c172p_tuned.md`](docs/VALIDATION_c172p_tuned.md) (and
 [`docs/VALIDATION.md`](docs/VALIDATION.md) for the stock model) with sources in
 [`docs/REFERENCES.md`](docs/REFERENCES.md).
@@ -88,8 +90,8 @@ uv run python scripts/docker.py up -d --build viewer   # or: docker compose up -
 
 The first start designs the LQR gain schedule (about 15 s) and caches it in `data/`.
 
-The Abu Dhabi scenery is built once from its open data sources (downloads about 1 GB
-into `data/scenery/`, then about five minutes):
+The Abu Dhabi scenery is built once from its open data sources (downloads about 6 GB
+into `data/scenery/`, 5 GB of it the 1 m imagery, then about 20 minutes):
 
 ```sh
 uv run --group scenery python scripts/build_scenery.py configs/scenery/abu_dhabi.yaml
@@ -193,7 +195,7 @@ physics only as policy actions through the environment, at the fixed decision ra
 uv run pytest
 ```
 
-About 330 tests: physics validation against the POH with stated tolerances,
+About 430 tests: physics validation against the POH with stated tolerances,
 reproducibility of logs, the tasks and autopilots, the stream protocol, and the viewer's
 JavaScript (run with Node when it is installed).
 
@@ -228,6 +230,9 @@ downloads and builds it on your machine, for non-commercial use, under these ter
   AWS Earth Search).
 - GHS-BUILT-H R2023A building heights (Pesaresi and Politis 2023), European Commission,
   Joint Research Centre (CC BY 4.0).
+- Satellogic EarthView (1 m imagery, 2022), Satellogic, CC BY 4.0; accessed on 2026-10-10
+  from https://registry.opendata.aws/satellogic-earthview. Modified: resampled,
+  colour-matched to the Sentinel-2 imagery and blended into it.
 Reference data from the Cessna 172P Pilot's Operating Handbook, FAA handbooks and
 advisory circulars, MIL-F-8785C and the AAIB, cited in `docs/REFERENCES.md`.
 

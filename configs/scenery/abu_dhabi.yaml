@@ -50,6 +50,36 @@ sources:
       - {id: S2A_39RZH_20251024_1_L2A, url: https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/39/R/ZH/2025/10/S2A_39RZH_20251024_1_L2A/}
       - {id: S2B_39QZG_20251024_0_L2A, url: https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/39/Q/ZG/2025/10/S2B_39QZG_20251024_0_L2A/}
       - {id: S2B_39RZH_20251024_0_L2A, url: https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/39/R/ZH/2025/10/S2B_39RZH_20251024_0_L2A/}
+  hires_imagery:
+    # Satellogic EarthView (CC BY 4.0; registry.opendata.aws/satellogic-earthview, retrieved
+    # 2026-10-10): 1 m true colour (VISUAL), 384 m tiles in UTM 40N (EPSG:32640), one per
+    # satellite pass, August-November 2022. Within `radius_m` of the origin (a square), over the
+    # Sentinel imagery (world/scenery_hires.py). About 12,000 tiles, 4.9 GB.
+    bucket: https://satellogic-earthview.s3.us-west-2.amazonaws.com
+    zone: 40N
+    epsg: 32640
+    radius_m: 25000
+    # Pass order where passes overlap (first wins), project choice: afternoon passes first
+    # (sun azimuth 213-251 deg, the side the viewer's afternoon sun lights), each group by its
+    # view angle off nadir (less building lean), from one tile's metadata per pass; the three
+    # morning passes (sun 121-150 deg, shadows the other way) last.
+    passes:
+      - 20220905_SN20   # off nadir 1.8 deg, sun elevation 48
+      - 20220909_SN28   # 2.0, 62
+      - 20221118_SN20   # 6.8, 29
+      - 20221025_SN28   # 12.2, 46
+      - 20220919_SN30   # 16.5, 58
+      - 20221021_SN22   # 17.0, 34
+      - 20221024_SN22   # 17.8, 33
+      - 20220912_SN29   # 18.5, 59
+      - 20221119_SN29   # 22.6, 39
+      - 20220902_SN25   # morning: 4.1, 70
+      - 20220831_SN9    # 7.0, 62
+      - 20221023_SN9    # 18.0, 50
+    # Colour matching to the Sentinel imagery (project choices): the smooth gain's blur and
+    # the feathering of the covered area's edge.
+    match_blur_m: 60
+    feather_m: 60
   building_height:
     # GHS-BUILT-H R2023A, average net building height 2018, 100 m (Pesaresi & Politis 2023,
     # European Commission JRC, doi 10.2905/85005901-3A49-48DD-9D19-6261354F56FE; CC BY 4.0;
@@ -58,16 +88,18 @@ sources:
     url: https://jrc-ghsl.s3.eu-central-1.amazonaws.com/ghs-built-h-anbh/r2023a/54009/100m/2018/GHS_BUILT_H_ANBH_E2018_GLOBE_R2023A_54009_100_V1_0.tif
     small_kinds_max_m: 12
   # Credits shown with the scenery (the viewer's corners; full text as their tooltip and in
-  # the README). Wording checked 2026-10-09: FABDEM's required Copernicus statement (Earth
+  # the README). EarthView's: the registry's citation (accessed on DATE from its page),
+  # 2026-10-10. Wording checked 2026-10-09: FABDEM's required Copernicus statement (Earth
   # Engine community catalogue, FABDEM); WorldCover's attribution (Planet public data
   # docs); OpenStreetMap's notice and licence (openstreetmap.org/copyright).
-  credit_short: "© OpenStreetMap contributors (ODbL) · ESA WorldCover 2021 · FABDEM (Copernicus WorldDEM-30) · Contains modified Copernicus Sentinel data 2025"
+  credit_short: "© OpenStreetMap contributors (ODbL) · ESA WorldCover 2021 · FABDEM (Copernicus WorldDEM-30) · Contains modified Copernicus Sentinel data 2025 · Satellogic EarthView (CC BY 4.0)"
   credits:
     - "FABDEM V1-2 (Hawker et al. 2022, A 30m global map of elevation with forests and buildings removed, Environmental Research Letters; University of Bristol), CC BY-NC-SA 4.0. FABDEM is produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved. The organizations in charge of the Copernicus program by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30."
     - "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium (CC BY 4.0)."
     - "© OpenStreetMap contributors. The data is available under the Open Database License (ODbL)."
     - "Contains modified Copernicus Sentinel data 2025 (Sentinel-2 L2A, 24 October 2025)."
     - "GHS-BUILT-H R2023A (building heights), European Commission, Joint Research Centre (CC BY 4.0)."
+    - "Satellogic EarthView (1 m imagery, 2022), Satellogic, CC BY 4.0; accessed on 2026-10-10 from https://registry.opendata.aws/satellogic-earthview. Modified: resampled, colour-matched to the Sentinel-2 imagery and blended into it."
 
 # Landmarks modelled in the viewer (viewer/landmarks.js) on their OSM footprints; `replace`
 # drops OSM's plain box there. Dimensions from Wikipedia (retrieved 2026-10-09) unless
@@ -167,3 +199,4 @@ pinned:
   S2B_39RZH_20251024_0_L2A_window.tif: 54e077bf716c4e94e557866caba3bdef53f889ef656e265ef48ef2684ca5feed
   building_height_window.tif: b4f1426d4df42c9b562e50a9d7a908b85120ca565d5e6281fe337540ee1de6a2
   gcc-states-261008.osm.pbf: 37ddf4a1c62bf695297173744a9ff7524ae51cd4c421a75cfa5de110b80166eb
+  satellogic/listing.json: 5b51b359395a96ab9555137612b0c0b068f47e01a267536c0d530e4e5b0885b9
