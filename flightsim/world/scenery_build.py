@@ -14,6 +14,7 @@ and the viewer read the built files through scenery.py. Steps, each repeatable:
 4. airfields (OpenStreetMap, scenery_osm.py, with the region file's published data):
    every runway's ends, width and elevation; the ground along each runway is flattened
    onto a straight slope fitted to the terrain under its centreline (`airfields.json`).
+4a. water the land cover misses, from Sentinel-2's water index at sea level (build_water).
 4b. shore distance: from each water cell to the nearest land (the viewer's shallow water).
 5. features (OpenStreetMap): roads, railways, taxiways, aprons and buildings per tile.
 5b. high-resolution imagery (scenery_hires.py), where the region file asks for it.
@@ -97,6 +98,22 @@ def to_geodetic_arrays(geodesy: geo.Geodesy, north_m: np.ndarray, east_m: np.nda
     lat = chi + sum(d * np.sin(2 * j * chi) for j, d in enumerate(geo._DELTA, start=1))
     dlon = np.arctan2(np.sinh(eta_p), np.cos(xi_p))
     return np.degrees(lat), np.degrees(dlon + geodesy._lon0)
+
+
+def to_map_arrays(geodesy: geo.Geodesy, lat_deg: np.ndarray, lon_deg: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """(north, east) in metres of positions in degrees: geo.Geodesy.to_map on numpy arrays."""
+    if geodesy.model != "wgs84":
+        raise ValueError("real scenery uses the wgs84 map")
+    lat, dlon = np.radians(lat_deg), np.radians(lon_deg) - geodesy._lon0
+    s = np.sin(lat)
+    t = np.sinh(np.arctanh(s) - geo._C * np.arctanh(geo._C * s))
+    xi_p = np.arctan2(t, np.cos(dlon))
+    eta_p = np.arctanh(np.sin(dlon) / np.sqrt(1.0 + t * t))
+    north, east = xi_p.copy(), eta_p.copy()
+    for j, a in enumerate(geo._ALPHA, start=1):
+        north += a * np.sin(2 * j * xi_p) * np.cosh(2 * j * eta_p)
+        east += a * np.cos(2 * j * xi_p) * np.sinh(2 * j * eta_p)
+    return geo._A * north - geodesy._north0, geo._A * east
 
 
 def region_bounds_deg(spec: RegionSpec, margin_m: float = 2000.0) -> tuple[float, float, float, float]:
@@ -251,9 +268,19 @@ def source_files(spec: RegionSpec) -> list[dict]:
     bh = spec.sources.get("building_height")
     if bh:
         out.append({"kind": "building_height", "name": "building_height_window.tif", "url": bh["url"]})
+    chm = spec.sources.get("canopy_height")
+    if chm:
+        for t in chm["tiles"]:
+            out.append({"kind": "canopy_height", "name": f"chm_{t}.tif", "url": chm["url"].format(tile=t)})
+    gba = spec.sources.get("gba_heights")
+    if gba:
+        for f in gba["files"]:
+            out.append({"kind": "gba_heights" if f["name"].endswith(".json") else "gba_polygons", "name": f["name"], "url": f["url"]})
     # Imagery: the window of each scene that covers the region (in priority order).
     for item in (spec.sources.get("imagery") or {}).get("items", []):
         out.append({"kind": "imagery", "name": f"{item['id']}_window.tif", "url": item["url"]})
+        if (spec.sources.get("imagery") or {}).get("water_index"):  # green and near infrared (water)
+            out.append({"kind": "water_index", "name": f"{item['id']}_b03b08_window.tif", "url": item["url"]})
     return out
 
 
@@ -273,6 +300,8 @@ def download(spec: RegionSpec, root: Path = SCENERY_DIR, log=print) -> list[dict
             elif f["kind"] == "imagery":
                 bands = spec.sources["imagery"]["bands"]
                 _imagery_window([f["url"] + f"{b}.tif" for b in bands], region_bounds_deg(spec), dest)
+            elif f["kind"] == "water_index":
+                _imagery_window([f["url"] + f"{b}.tif" for b in ("B03", "B08")], region_bounds_deg(spec), dest)
             else:
                 _download(f["url"], dest)
         f["sha256"] = sha256_file(dest)
@@ -378,6 +407,60 @@ def build_landcover(spec: RegionSpec, lc_paths: list[Path], out: Path, log=print
         log(f"land cover: row {iz - lo + 1} of {hi - lo + 1}")
     total = (hi - lo + 1) ** 2 * LANDCOVER_CELLS**2
     log(f"land cover: {no_data / total:.1%} of the cells without data (open sea), set to water")
+
+
+def build_water(spec: RegionSpec, paths: list[Path], out: Path, log=print) -> None:
+    """Water WorldCover misses (tidal flats, new shorelines, channels it maps as land): a
+    land cover cell becomes water where Sentinel-2's water index (NDWI, green vs near
+    infrared; the first scene with data) is at least `ndwi_min` and the bare-earth ground
+    at most `max_height_m` above sea level (so no inland dark roof or shadow turns into
+    water). The physics' water too (touching it ends a flight)."""
+    import rasterio
+    from rasterio.warp import transform
+    from scipy.ndimage import binary_opening
+
+    wi = spec.sources["imagery"]["water_index"]
+    ndwi_min, max_h = float(wi["ndwi_min"]), float(wi["max_height_m"])
+    scenes = []
+    for p in paths:
+        with rasterio.open(p) as ds:
+            scenes.append((ds.read().astype(np.float32), ~ds.transform, ds.crs))
+    g = geo.Geodesy("wgs84", spec.origin_lat_deg, spec.origin_lon_deg)
+    lo, hi = spec.ix_range
+    k = (np.arange(LANDCOVER_CELLS, dtype=np.float64) + 0.5) * (TILE_SIZE_M / LANDCOVER_CELLS)
+    post = (np.arange(LANDCOVER_CELLS) + 0.5) * (HEIGHT_CELLS / LANDCOVER_CELLS)
+    added = 0
+    for iz in range(lo, hi + 1):
+        for ix in range(lo, hi + 1):
+            path = out / landcover_name(ix, iz)
+            cls = np.frombuffer(path.read_bytes(), np.uint8).reshape(LANDCOVER_CELLS, LANDCOVER_CELLS).copy()
+            if (cls == WATER).all():
+                continue
+            hts = np.frombuffer((out / heights_name(ix, iz)).read_bytes(), "<f4").reshape(HEIGHT_CELLS + 1, HEIGHT_CELLS + 1)
+            ground = hts[np.round(post).astype(int)][:, np.round(post).astype(int)]
+            x = np.broadcast_to(ix * TILE_SIZE_M + k[None, :], (k.size, k.size)).ravel()
+            z = np.broadcast_to(iz * TILE_SIZE_M + k[:, None], (k.size, k.size)).ravel()
+            lat, lon = to_geodetic_arrays(g, -z, x)
+            ndwi = np.full(lat.size, np.nan, np.float32)
+            projected = {}
+            for data, inv, crs in scenes:
+                if crs not in projected:
+                    projected[crs] = tuple(np.asarray(v) for v in transform("EPSG:4326", crs, lon.tolist(), lat.tolist()))
+                c, r = inv * projected[crs]
+                c, r = np.floor(c).astype(int), np.floor(r).astype(int)
+                ok = np.isnan(ndwi) & (c >= 0) & (r >= 0) & (c < data.shape[2]) & (r < data.shape[1])
+                gr, nir = data[0, r[ok], c[ok]], data[1, r[ok], c[ok]]
+                valid = (gr > 0) & (nir > 0)
+                idx = np.nonzero(ok)[0][valid]
+                ndwi[idx] = (gr[valid] - nir[valid]) / (gr[valid] + nir[valid])
+            wet = (np.nan_to_num(ndwi, nan=-1.0).reshape(cls.shape) >= ndwi_min) & (ground <= max_h) & (cls != WATER)
+            wet = binary_opening(wet, iterations=1)  # no single-cell specks
+            if wet.any():
+                cls[wet] = WATER
+                added += int(wet.sum())
+                path.write_bytes(cls.tobytes())
+        log(f"water: row {iz - lo + 1} of {hi - lo + 1}")
+    log(f"water: {added} land cover cells ({added * (TILE_SIZE_M / LANDCOVER_CELLS) ** 2 / 1e6:.1f} km2) turned to water by the water index")
 
 
 def build_shore(spec: RegionSpec, out: Path, log=print) -> None:
@@ -757,6 +840,9 @@ def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print) -> dict:
     src = out / "sources"
     build_heights(spec, [src / f["name"] for f in sources if f["kind"] == "dem"], out, log)
     build_landcover(spec, [src / f["name"] for f in sources if f["kind"] == "landcover"], out, log)
+    water = [src / f["name"] for f in sources if f["kind"] == "water_index"]
+    if water:
+        build_water(spec, water, out, log)
     build_shore(spec, out, log)
     imagery = [src / f["name"] for f in sources if f["kind"] == "imagery"]
     if imagery:
@@ -804,6 +890,10 @@ def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_h
     tiles = extract_features(pbf, g, region_bounds_deg(spec, 0.0), half, TILE_SIZE_M, capture={o for m in marks for o in _osm_ids(m)})
     captured = tiles.pop("captured", {})
     _bridges(spec, tiles.pop("bridges", []), out, log)
+    if spec.sources.get("gba_heights"):  # first: per building; GHS's cell averages for the rest
+        from flightsim.world.scenery_heights import gba_heights
+
+        gba_heights(spec, g, tiles, out / "sources", log)
     if building_height is not None:
         _measured_heights(spec, g, tiles, building_height, log)
     sites = {}
@@ -826,3 +916,7 @@ def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_h
             counts["roads"] += sum(len(v) for v in t["roads"].values())
             (out / features_name(ix, iz)).write_text(json.dumps(t, separators=(",", ":"), sort_keys=True))
     log(f"features: {counts['buildings']} buildings, {counts['roads']} road pieces")
+    if spec.sources.get("canopy_height"):
+        from flightsim.world.scenery_trees import build_trees
+
+        build_trees(spec, out, log)

@@ -49,7 +49,7 @@ def terrain(tmp_path_factory):
     for f in ("three.module.js", "three.core.js"):
         shutil.copy(VIEWER / "vendor" / f, three / f)
     (three / "package.json").write_text('{"name":"three","type":"module","exports":{".":"./three.module.js"}}')
-    for f in ("terrain.js", "terrainCore.js", "demTiles.js", "demCore.js", "world.js", "groundDetail.js", "imageryClip.js", "groundTextures.js", "nightLights.js"):
+    for f in ("terrain.js", "terrainCore.js", "demTiles.js", "demCore.js", "world.js", "groundDetail.js", "imageryClip.js", "groundTextures.js", "nightLights.js", "trees.js"):
         shutil.copy(VIEWER / f, d / f)
     out = subprocess.run([NODE, "--input-type=module", "-e", SCRIPT], cwd=d, capture_output=True, text=True, timeout=120)
     assert out.returncode == 0, out.stderr

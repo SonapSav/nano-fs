@@ -1483,13 +1483,50 @@ landmarks; later night lighting, shadows, haze.
     ball). Walls and fences from OSM (barrier=wall / fence, extracted per tile):
     upright strips on the drawn ground, walls 3 m (render), fences 2.4 m (chain-link
     pattern, see-through); Al Bateen's perimeter walls among them.
-  - [ ] Building heights per building (the owner, 2026-10-11: "all buildings look the
-    same at height"). 9 in 10 buildings take GHS-BUILT-H's 100 m cell average (55
-    distinct values region-wide). Dataset search under way: 3D-GloBFP (CC BY 4.0, 2020,
-    per footprint, grid 1639 covers Abu Dhabi) checked against OSM's tagged heights and
-    levels: unusable here (towers of 254-342 m given 23-56 m, 3-4 m buildings given
-    15-30 m; correlation ~0.6). Next: GlobalBuildingAtlas (TUM, 3 m height raster,
-    2019, ~6 m RMSE in Asia), then our own shadow measurement in the 1 m imagery.
+  - [x] Building heights per building (2026-10-11, the owner: "all buildings look the same
+    at height"; "go ahead ... and then do the optional step as well"). Before, 9 in 10
+    buildings took GHS-BUILT-H's 100 m cell average (55 distinct values region-wide).
+    Searched and checked against OSM's tagged heights and levels (docs/REFERENCES.md,
+    "Building heights"): GlobalBuildingAtlas is used (`world/scenery_heights.py`, region
+    file `gba_heights`, three pinned files, ~200 MB): for buildings without OSM height
+    or levels, the GBA footprint's height under their centre + 2.0 m (its median
+    shortfall here), at least 3 m, houses capped at 12 m; GHS fills what GBA lacks.
+    98,225 buildings from GBA, 134 distinct heights. Against OSM's levels: 50 % within
+    3 m (GHS 33 %), mean error 5.8 m (8.1). CC BY-NC 4.0 (credit added; non-commercial,
+    as FABDEM). The optional own measurement from shadows in the 1 m imagery was
+    prototyped (scratch script) and is not used: correlation 0.15 against OSM's levels
+    (GBA 0.75); the shadow direction checks out, the footprints do not sit on the
+    photographed buildings (roofs lean, up to 23 deg off nadir), shadows fall on
+    neighbours. A refinement would need footprint-to-image registration first.
+  - [x] "Water mapped as land" (2026-10-11, the owner: "proceed with the fix"). Checked
+    first: the black patches near the city (west of Al Bateen) are not water but dense
+    mangroves: WorldCover's class 95 is right there (water index NDWI -0.55, strong near
+    infrared; ground 3-4 m); mangrove forest is near black from above. They now carry the
+    canopy map's low trees. The fix itself was still made for real misses: the build adds
+    Sentinel-2's B03/B08 windows (same scenes) and turns land cover cells into water
+    where NDWI >= 0.1 and the bare earth is at most 1 m above sea level (`build_water`,
+    region file `imagery.water_index`), with the shore distance after it: 2,079 cells
+    (0.5 km2); no runway point changed; the physics' water includes them. The 1 m
+    imagery's colour match is now fitted and applied on land and on water apart.
+  - [x] Trees from a canopy height map (2026-10-11, the owner's photo: palms like black
+    umbrellas; "go ahead with option B and the canopy height map"). Meta and WRI 2024
+    global canopy height (CC BY 4.0, ~1.2 m, Maxar imagery mostly 2018-2020; six tiles,
+    ~220 MB, pinned): checked on the 1 m imagery at the Grand Mosque (lawns and gardens
+    0 m, groves and car-park rows found; younger palms missed). The build
+    (`world/scenery_trees.py`) samples it on the 1 m map grid per tile; trees are local
+    maxima of 3 m and up, 2.5 m apart: [x, z, height] in the features files (Al Bateen's
+    tile ~7,900). Viewer (`viewer/trees.js`): from 5 m a date palm (ringed, leaning,
+    tapering trunk; 9 drooping fronds folded along the midrib, a pinnate leaf texture
+    drawn in code, alpha-tested; no image files), lower a lumpy round tree (gardens,
+    mangroves), scaled to the measured height, tinted per tree. One BatchedMesh per tile
+    (one draw call); each tree switches between the detailed shape (within 1.2 km, ~140
+    triangles) and a simple one (to 3 km, ~18), hidden beyond. They replace the land
+    cover's scattered palms. No sun shadows of their own (the 1 m imagery shows the
+    real ones; casting cost 10-45 ms per shadow redraw). Frame time (this iGPU, city
+    view, ~58,000 trees loaded): normal frames as without trees (2.6 vs 2.9 ms).
+  - [ ] Known: with the trees, a frame that redraws the sun's shadow map costs ~15 ms
+    instead of ~5 ms in the dense city (not the shadow pass itself: the trees are
+    skipped there; cause not found yet); such frames come every few seconds in flight.
   - [ ] Discuss later (the owner, 2026-10-10): surface textures for the Grand Mosque (and
     then other landmarks and ordinary buildings). Options put forward: (1) galleries as
     open arcades in the shader (dark pointed-arch recesses on paired columns, faked

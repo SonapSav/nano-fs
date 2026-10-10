@@ -11,10 +11,9 @@ no data (black). The build:
    the listing's MD5 ETag, so the pinned listing pins every file);
 2. composites them pixel by pixel in the region file's pass order (first with data wins);
 3. matches colours to the Sentinel imagery (`tiles/i_*.jpg`): per tile a brightness
-   curve and a colour balance (quantile matching of the band mean, then a gain per band,
-   over the tile's footprint on land: EarthView stretches each tile's contrast on its
-   own; with water in, asphalt was matched to the deep sea's black, and curves per band
-   turned dark greys maroon), then a smooth gain per band (Sentinel / EarthView, both blurred
+   curve and a colour balance (quantile matching of the band mean, then a gain per band),
+   fitted and applied on land and on water apart (the land cover tells them; together,
+   asphalt was matched to the deep sea's black; curves per band turned dark greys maroon), then a smooth gain per band (Sentinel / EarthView, both blurred
    over `match_blur_m`), so tiles and passes taken on different days, through different
    haze, meet without seams and fade into Sentinel;
 4. feathers the edges of the covered area into the Sentinel imagery (`feather_m`) and
@@ -270,9 +269,10 @@ def _sample(tiles: _Tiles, i: int, e: np.ndarray, n: np.ndarray, data: np.ndarra
     return (r[ok] + win[0].start, c[ok] + win[1].start), v
 
 
-def _composite(tiles: _Tiles, which: np.ndarray, e: np.ndarray, n: np.ndarray, read, luts=None):
+def _composite(tiles: _Tiles, which: np.ndarray, e: np.ndarray, n: np.ndarray, read, luts=None, water=None):
     """Pixel by pixel, the first tile (priority order) with data: (rgb (3, ...) float32,
-    the tile per pixel (-1: none)), through each tile's colour curve (`luts`) if given.
+    the tile per pixel (-1: none)), through each tile's colour match (`luts`: {tile:
+    (land match, water match)}) if given, the water match where `water` (bool, as e).
     `read(i)` -> (rgb, valid) on the tile's grid."""
     rgb = np.zeros((3, *e.shape), np.float32)
     won = np.full(e.shape, -1, np.int32)
@@ -281,7 +281,13 @@ def _composite(tiles: _Tiles, which: np.ndarray, e: np.ndarray, n: np.ndarray, r
         if idx is None:
             continue
         if luts is not None:
-            v = _apply_match(v, luts[i])
+            land, sea = luts[i]
+            raw = v
+            v = _apply_match(raw, land)
+            if water is not None and sea is not None:
+                wet = water[idx]
+                if wet.any():
+                    v[:, wet] = _apply_match(raw[:, wet], sea)
         rgb[(slice(None), *idx)] = v
         won[idx] = i
     return rgb, won
@@ -382,30 +388,33 @@ class _Match:
         land = sentinel.land(x, z)
         read = lambda i: (thumbs[i][0], thumbs[i][1] > 0.9)  # noqa: E731
         which = tiles.overlapping(e, n)
-        # Per tile: its footprint's land with data against Sentinel's colour there. Land
-        # only: with the sea in, the darkest land (asphalt) was matched to deep water and
-        # came out black.
-        self.luts, pooled = {}, {}
+        # Per tile: its footprint's land with data against Sentinel's colour there, and
+        # its water the same way, apart: with both together the darkest land (asphalt)
+        # was matched to deep water and came out black; land-only fits left the sea black.
+        fits = {}
+        pooled = {}
         for i in which:
             idx, v = _sample(tiles, i, e, n, *read(i))
             if idx is None:
                 continue
-            on = land[idx]
-            idx, v = tuple(a[on] for a in idx), v[:, on]
-            if not on.any():
-                continue
-            t = target[(slice(None), *idx)]
-            if v.shape[1] >= self.MIN_CELLS:
-                self.luts[i] = _fit_match(v, t)
-            p = pooled.setdefault(tiles.rank[i], ([], []))
-            p[0].append(v)
-            p[1].append(t)
-        # Slivers (too little data of their own): their pass's curve.
-        by_pass = {p: _fit_match(np.concatenate(v, 1), np.concatenate(t, 1)) for p, (v, t) in pooled.items()}
+            for kind, on in ((0, land[idx]), (1, ~land[idx])):
+                if not on.any():
+                    continue
+                vi, t = v[:, on], target[(slice(None), *(a[on] for a in idx))]
+                if vi.shape[1] >= self.MIN_CELLS:
+                    fits[(i, kind)] = _fit_match(vi, t)
+                p = pooled.setdefault((tiles.rank[i], kind), ([], []))
+                p[0].append(vi)
+                p[1].append(t)
+        # Slivers (too little data of their own): their pass's match.
+        by_pass = {k: _fit_match(np.concatenate(v, 1), np.concatenate(t, 1)) for k, (v, t) in pooled.items() if sum(a.shape[1] for a in v) >= 20}
+        self.luts = {}
         for i in which:
-            if i not in self.luts and tiles.rank[i] in by_pass:
-                self.luts[i] = by_pass[tiles.rank[i]]
-        cur, won = _composite(tiles, which, e, n, read, self.luts)
+            land_fit = fits.get((i, 0)) or by_pass.get((tiles.rank[i], 0))
+            sea_fit = fits.get((i, 1)) or by_pass.get((tiles.rank[i], 1))
+            if land_fit is not None or sea_fit is not None:
+                self.luts[i] = (land_fit or sea_fit, sea_fit)
+        cur, won = _composite(tiles, which, e, n, read, self.luts, water=~land)
         covered = won >= 0
         # Smooth gains (Sentinel / EarthView, each blurred), per tile from its own pixels
         # only (normalized convolution), so tiles meet without a step; and one over all
@@ -507,7 +516,7 @@ def _block(cx1: int, cz1: int) -> list[tuple[int, int, int]]:
     kk = x0 + (np.arange(size) + 0.5) * LEVELS[0]
     x, z = np.meshgrid(kk, z0 + (np.arange(size) + 0.5) * LEVELS[0])
     e, nn = _utm_grid(g, int(hi["epsg"]), x0, z0, LEVELS[0], size)
-    rgb, won = _composite(tiles, tiles.overlapping(e, nn), e, nn, lambda i: _read_tile(tiles.path[i]), match.luts)
+    rgb, won = _composite(tiles, tiles.overlapping(e, nn), e, nn, lambda i: _read_tile(tiles.path[i]), match.luts, water=~sentinel.land(x, z))
     match.apply_gain(rgb, won, x, z)
     alpha = np.where(won >= 0, match.at(match.alpha, x, z), 0.0).astype(np.float32)
     base = sentinel.sample(x, z)

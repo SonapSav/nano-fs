@@ -231,6 +231,10 @@ downloads and builds it on your machine, for non-commercial use, under these ter
   AWS Earth Search).
 - GHS-BUILT-H R2023A building heights (Pesaresi and Politis 2023), European Commission,
   Joint Research Centre (CC BY 4.0).
+- GlobalBuildingAtlas building heights (Zhu et al. 2025, Technical University of Munich),
+  CC BY-NC 4.0.
+- Trees: Meta and World Resources Institute (WRI) 2024, high resolution canopy height
+  maps, CC BY 4.0. Source imagery for CHM © 2016 Maxar.
 - Satellogic EarthView (1 m imagery, 2022), Satellogic, CC BY 4.0; accessed on 2026-10-10
   from https://registry.opendata.aws/satellogic-earthview. Modified: resampled,
   colour-matched to the Sentinel-2 imagery and blended into it.

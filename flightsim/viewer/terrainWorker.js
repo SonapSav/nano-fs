@@ -7,7 +7,7 @@
 
 import { tileGeometryData, tileObjectsData } from "./terrainCore.js";
 import { demTileGeometryData, demTileObjectsData, neededTiles } from "./demTiles.js";
-import { heightsName, landcoverName, shoreName } from "./demCore.js";
+import { heightAt, heightsName, landcoverName, shoreName } from "./demCore.js";
 import { barrierData, buildingData, featureGroundData, lightData } from "./featureGeometry.js";
 
 const featuresName = (ix, iz) => `tiles/f_${ix}_${iz}.json`;
@@ -66,9 +66,16 @@ async function demBuild(r) {
   let features = null;
   if (geometry && r.buildingsMinM !== null) {
     const f = await fetchTile(region.features, featuresName, "json", r.tx, r.tz);
-    if (f) features = { ...(r.ground ? featureGroundData(f, tiles, r.segments) : {}), buildings: buildingData(f, tiles, r.buildingsMinM), lights: lightData(f, tiles), ...(r.ground ? barrierData(f, tiles, r.segments) : {}) }; // ground features draped on this tile's own mesh; lights for the night
+    if (f) features = { ...(r.ground ? featureGroundData(f, tiles, r.segments) : {}), buildings: buildingData(f, tiles, r.buildingsMinM), lights: lightData(f, tiles), ...(r.ground ? barrierData(f, tiles, r.segments) : {}), trees: (r.objects || r.farTrees) && f.trees?.length ? treeData(f.trees, tiles) : null }; // ground features draped on this tile's own mesh; lights for the night
   }
   return { geometry, objects, features };
+}
+
+// A tile's measured trees (the features file's [x, z, height]) on the ground: [x, groundY, z, height] x n.
+function treeData(trees, tiles) {
+  const out = new Float32Array(trees.length * 4);
+  trees.forEach(([x, z, h], i) => out.set([x, heightAt(tiles, x, z), z, h], 4 * i));
+  return { data: out };
 }
 
 const featureBuffers = (f) => Object.values(f ?? {}).filter(Boolean).flatMap((m) => Object.values(m).map((a) => a.buffer));

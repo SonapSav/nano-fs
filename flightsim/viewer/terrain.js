@@ -11,6 +11,7 @@ import { addGroundDetail } from "./groundDetail.js";
 import { CLIP_FRAGMENT, CLIP_GLSL, clipUniforms, hideUnderImagery } from "./imageryClip.js";
 import { DETAIL_GLSL, detailTexture, detailUniforms } from "./groundTextures.js";
 import { glintLevel, glowAtNight, lightMaterial, lightPoints, nightLevel } from "./nightLights.js";
+import { treeBatch, updateTreeBatch } from "./trees.js";
 import { TILE_SIZE_M, WATER_LEVEL_M, tileGeometryData, tileObjectsData } from "./terrainCore.js";
 import { SEA_SURFACE_M, demTileGeometryData, demTileObjectsData } from "./demTiles.js";
 import { world } from "./world.js";
@@ -578,6 +579,7 @@ export class Terrain {
   // without one, builds tiles here until about `budgetMs` of this frame is used, at least
   // one (a near tile takes ~15 ms, a far one < 1 ms).
   update(x, z, budgetMs = 8) {
+    for (const t of this.tiles.values()) if (t.trees) updateTreeBatch(t.trees, x, z); // trees' detail by distance
     const cx = Math.floor(x / TILE_SIZE_M), cz = Math.floor(z / TILE_SIZE_M);
     if (!this.centre || this.centre[0] !== cx || this.centre[1] !== cz) {
       this.centre = [cx, cz];
@@ -658,10 +660,18 @@ export class Terrain {
     mesh.receiveShadow = Boolean(this.scenery); // a region's ground takes the sun's shadows
     this.scene.add(mesh);
     this.onChange?.(); // new casters or receivers (the sun's shadow map is drawn again)
-    const objects = objectsData ? tileObjects(objectsData, this.shared, !w.objects) : null;
+    // Measured trees (the canopy height map) replace the land cover's scattered palms.
+    const measured = featuresData?.trees?.data;
+    const objects = objectsData ? tileObjects(measured ? { ...objectsData, palms: null, bushes: null } : objectsData, this.shared, !w.objects) : null;
+    let trees = null;
+    if (measured?.length) {
+      trees = treeBatch(measured);
+      this.scene.add(trees);
+      this.onChange?.(); // casters for the sun's shadow map
+    }
     if (objects) this.scene.add(objects);
-    if (featuresData) mesh.add(featureMeshes(featuresData, this.featureMats)); // the tile's own geometries (disposed with it)
-    this.tiles.set(`${w.tx},${w.tz}`, { mesh, objects, segments: w.segments, near: Boolean(w.objects), far: Boolean(w.farTrees) });
+    if (featuresData) mesh.add(featureMeshes({ ...featuresData, trees: null }, this.featureMats)); // the tile's own geometries (disposed with it)
+    this.tiles.set(`${w.tx},${w.tz}`, { mesh, objects, trees, segments: w.segments, near: Boolean(w.objects), far: Boolean(w.farTrees) });
   }
 
   get pending() {
@@ -679,6 +689,10 @@ export class Terrain {
         if (t.mesh.material.userData.shore !== NO_SHORE) t.mesh.material.userData.shore?.dispose();
         t.mesh.material.dispose();
       }
+    }
+    if (t.trees) {
+      this.scene.remove(t.trees);
+      t.trees.dispose(); // its own buffers (the source geometries and material are shared)
     }
     if (t.objects) {
       this.scene.remove(t.objects);

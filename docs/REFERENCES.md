@@ -174,6 +174,19 @@ Retrieved 2026-10-10. Routes, lanes and extents from OSM; FABDEM has no bridges 
 - **Mussafah Bridge** (1976-78): 480 m, six lanes, prestressed concrete girder (Wikipedia, Mussafah; Structurae). OSM: Al Khaleej Al Arabi Street, ways 24151136/24151139. No clearance published.
 - **Sheikh Khalifa Bridge** (= the Saadiyat Island bridge, 2009, Al Mina to Saadiyat): 1,455 m, box girder 3.5-10.25 m deep, largest span 200 m, main unit 110-200-135-70-45 m, solid piers and V-piers (main unit), at most 35 m above ground (Strabag project sheet, "Sheikh Khalifa Bridge (Saadiyat Bridge project)"); two sets of triple piers inclined 27.45 deg (Bridge Design & Engineering via search); 2 x 5 lanes and two light-rail tracks (IABSE 2009).
 
+## Building heights (world/scenery_heights.py, configs/scenery/abu_dhabi.yaml `gba_heights`)
+
+Checked 2026-10-11 against OSM's tagged heights (1,409 buildings, mostly towers) and levels (3,929; levels x 3.3 m + 1 m), matched by footprint:
+
+| Source | vs OSM levels: within 3 m | mean abs. error | correlation | towers |
+|---|---|---|---|---|
+| GlobalBuildingAtlas (Zhu et al. 2025, TUM; github.com/zhu-xlab/GlobalBuildingAtlas; GBA.LoD1 CC BY-NC 4.0, 2019 PlanetScope imagery) | 50 % | 5.8 m (2.0 m low) | 0.75 | far too low (254 m -> 1-41 m) |
+| GHS-BUILT-H R2023A 100 m cell average (before) | 33 % | 8.1 m | 0.57 | far too low |
+| 3D-GloBFP (Che et al. 2024, ESSD 16, 5357; CC BY 4.0, 2020; Zenodo 10.5281/zenodo.15487037, grid 1639) | 3 % | 19.6 m (17.8 m high) | 0.64 | far too low |
+| Shadows in the 1 m imagery (prototype, scratch) | 25 % | 11.8 m | 0.15 | - |
+
+GlobalBuildingAtlas is used (plus its 2.0 m median shortfall, at least 3 m); OSM's own heights and levels stay first (they cover the towers). Not used: 3D-GloBFP (heights squeezed toward the middle here), the shadow measurement (OSM footprints do not sit on the buildings as photographed up to 23 deg off nadir, shadows fall on neighbours, passes mixed; the shadow direction itself checked: darkest 0-30 deg off the computed one), Google Open Buildings 2.5D (no Gulf coverage: Africa, South and South-East Asia, Latin America), Overture (heights mostly US lidar).
+
 ## Sentinel-2 imagery (world/scenery_build.py build_imagery, configs/scenery/abu_dhabi.yaml)
 
 - **Licence:** Copernicus Sentinel data legal notice (https://sentinels.copernicus.eu/documents/247904/690755/Sentinel_Data_Legal_Notice): free, full and open access, reproduction, distribution, adaptation and combination allowed; notice for modified data "Contains modified Copernicus Sentinel data [Year]".

@@ -35,6 +35,12 @@ sources:
     # Copernicus Sentinel data: free and open. Only each scene's window over the region is
     # downloaded (sources/<id>_window.tif). First listed wins where scenes overlap.
     bands: [B04, B03, B02]
+    # Water WorldCover maps as land (tidal flats, new shores; near the city it showed the
+    # imagery's black water without the water shading, and the physics flew over it as
+    # ground): Sentinel-2's water index NDWI = (B03 - B08) / (B03 + B08) of the same scenes,
+    # water at sea level only (world/scenery_build.py build_water; thresholds project
+    # choices, the owner's decision 2026-10-11).
+    water_index: {ndwi_min: 0.1, max_height_m: 1.0}
     scale: 0.0001
     offset: -0.1
     # Our brightness curve: 255 x (gain x reflectance)^(1/gamma), gain per band (red, green,
@@ -87,18 +93,49 @@ sources:
     # buildings OpenStreetMap gives no height or floors (houses and villas at most 12 m).
     url: https://jrc-ghsl.s3.eu-central-1.amazonaws.com/ghs-built-h-anbh/r2023a/54009/100m/2018/GHS_BUILT_H_ANBH_E2018_GLOBE_R2023A_54009_100_V1_0.tif
     small_kinds_max_m: 12
+  gba_heights:
+    # GlobalBuildingAtlas (Zhu et al. 2025, Technical University of Munich; github.com/zhu-xlab/
+    # GlobalBuildingAtlas, retrieved 2026-10-11): building heights per footprint, machine
+    # learned from 2019 PlanetScope imagery; heights (GBA.LoD1) and the non-OSM footprints
+    # CC BY-NC 4.0, OSM-derived footprints ODbL. Tile e050_n25_e055_n20 (filed under
+    # "africa"). For buildings without an OSM height or levels tag, replacing GHS-BUILT-H's
+    # 100 m cell averages: against OSM's levels here (3,929 buildings) 50 % within 3 m, mean
+    # error 5.8 m, correlation 0.75 (GHS: 33 %, 8.1 m, 0.57); 2.0 m low (median), corrected
+    # by `bias_m`; some structures at 0.5 m, so `min_m`. Towers are far too low in both
+    # (OSM's own heights cover them). The key per footprint: source + id + region.
+    files:
+      - {name: gba_lod1_e050_n25_e055_n20.json, url: "https://huggingface.co/datasets/zhu-xlab/GBA.LoD1/resolve/main/LoD1/africa/e050_n25_e055_n20.json"}
+      - {name: gba_polygon_e050_n25_e055_n20.geojson, url: "https://huggingface.co/datasets/zhu-xlab/GBA.LoD1/resolve/main/Polygon/africa/e050_n25_e055_n20.geojson"}
+      - {name: gba_odbl_polygon_e050_n25_e055_n20.geojson, url: "https://huggingface.co/datasets/zhu-xlab/GBA.ODbLPolygon/resolve/main/africa/e050_n25_e055_n20.geojson"}
+    bias_m: 2.0
+    min_m: 3.0
+  canopy_height:
+    # Meta and World Resources Institute (WRI) 2024, global canopy height map (Tolan et al.
+    # 2024, Remote Sensing of Environment 300, 113888): canopy height in whole metres at
+    # ~1.2 m (EPSG:3857), from Maxar imagery (mostly 2018-2020) trained on aerial lidar; CC BY
+    # 4.0, AWS Open Data dataforgood-fb-data (registry.opendata.aws/dataforgood-fb-forests,
+    # retrieved 2026-10-11). Tiles over the region from tiles.geojson. Checked on the 1 m
+    # imagery at the Grand Mosque: lawns and gardens 0 m, groves and car-park tree rows
+    # found; misses some smaller palms (younger than its imagery). Trees: local maxima of at
+    # least `min_tree_m`, `spacing_m` apart (world/scenery_trees.py).
+    url: "https://dataforgood-fb-data.s3.us-east-1.amazonaws.com/forests/v1/alsgedi_global_v6_float/chm/{tile}.tif"
+    tiles: ["123023122", "123023123", "123023132", "123023300", "123023301", "123023310"]
+    min_tree_m: 3
+    spacing_m: 2.5
   # Credits shown with the scenery (the viewer's corners; full text as their tooltip and in
   # the README). EarthView's: the registry's citation (accessed on DATE from its page),
   # 2026-10-10. Wording checked 2026-10-09: FABDEM's required Copernicus statement (Earth
   # Engine community catalogue, FABDEM); WorldCover's attribution (Planet public data
   # docs); OpenStreetMap's notice and licence (openstreetmap.org/copyright).
-  credit_short: "© OpenStreetMap contributors (ODbL) · ESA WorldCover 2021 · FABDEM (Copernicus WorldDEM-30) · Contains modified Copernicus Sentinel data 2025 · Satellogic EarthView (CC BY 4.0)"
+  credit_short: "© OpenStreetMap contributors (ODbL) · ESA WorldCover 2021 · FABDEM (Copernicus WorldDEM-30) · Contains modified Copernicus Sentinel data 2025 · Satellogic EarthView (CC BY 4.0) · GlobalBuildingAtlas (CC BY-NC 4.0) · Canopy height: Meta and WRI 2024 (CC BY 4.0), imagery © 2016 Maxar"
   credits:
     - "FABDEM V1-2 (Hawker et al. 2022, A 30m global map of elevation with forests and buildings removed, Environmental Research Letters; University of Bristol), CC BY-NC-SA 4.0. FABDEM is produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved. The organizations in charge of the Copernicus program by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30."
     - "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium (CC BY 4.0)."
     - "© OpenStreetMap contributors. The data is available under the Open Database License (ODbL)."
     - "Contains modified Copernicus Sentinel data 2025 (Sentinel-2 L2A, 24 October 2025)."
     - "GHS-BUILT-H R2023A (building heights), European Commission, Joint Research Centre (CC BY 4.0)."
+    - "GlobalBuildingAtlas (building heights), Zhu et al. 2025, Technical University of Munich, CC BY-NC 4.0."
+    - "Trees: Meta and World Resources Institute (WRI) 2024, high resolution canopy height maps, CC BY 4.0. Source imagery for CHM © 2016 Maxar."
     - "Satellogic EarthView (1 m imagery, 2022), Satellogic, CC BY 4.0; accessed on 2026-10-10 from https://registry.opendata.aws/satellogic-earthview. Modified: resampled, colour-matched to the Sentinel-2 imagery and blended into it."
 
 # Landmarks modelled in the viewer (viewer/landmarks.js) on their OSM footprints; `replace`
