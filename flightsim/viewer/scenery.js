@@ -75,11 +75,12 @@ export function addAirfield(scene) {
   // Runway 09/27 along x (east-west); markings texture u runs west -> east.
   // Asphalt grain close up (the runway is the main height reference in the flare).
   const grain = { strength: 0.25, tint: 0, fadeEndM: 250 };
-  flat(widthM, lengthM, addGroundDetail(new THREE.MeshLambertMaterial({ map: runwayTexture() }), grain), x, z, 0.15);
+  // Heights above the ground (0 m, the physics'): a few cm, so the wheels stay on them.
+  flat(widthM, lengthM, addGroundDetail(new THREE.MeshLambertMaterial({ map: runwayTexture() }), grain), x, z, 0.03);
   const asphalt = addGroundDetail(new THREE.MeshLambertMaterial({ color: 0x45474a }), grain);
-  flat(15, lengthM, asphalt, x, z - 120, 0.12); // parallel taxiway, north side
-  for (const dx of [-lengthM / 2 + 40, 0, lengthM / 2 - 40]) flat(105, 15, asphalt, x + dx, z - 67, 0.11); // connectors
-  flat(80, 220, asphalt, x, z - 175, 0.12); // apron
+  flat(15, lengthM, asphalt, x, z - 120, 0.02); // parallel taxiway, north side
+  for (const dx of [-lengthM / 2 + 40, 0, lengthM / 2 - 40]) flat(105, 15, asphalt, x + dx, z - 67, 0.015); // connectors
+  flat(80, 220, asphalt, x, z - 175, 0.02); // apron
   const hangar = new THREE.MeshLambertMaterial({ color: 0xa9adb1 });
   for (const dx of [-80, 0, 80]) {
     const h = new THREE.Mesh(new THREE.BoxGeometry(50, 12, 35), hangar);
@@ -115,7 +116,7 @@ export function addAirfieldDetail(scene) {
   const group = new THREE.Group();
   const { x, z, lengthM } = AIRFIELD;
   const yellow = new THREE.MeshLambertMaterial({ color: TAXI_YELLOW });
-  const stripe = (cx, cz, alongX, length, width, y = 0.14) => {
+  const stripe = (cx, cz, alongX, length, width, y = 0.035) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(alongX ? length : width, alongX ? width : length), yellow);
     m.rotation.x = -Math.PI / 2;
     m.position.set(cx, y, cz);
@@ -139,7 +140,7 @@ export function addAirfieldDetail(scene) {
     const model = buildC172({ registration: regs[i] });
     model.update({});
     model.group.matrixAutoUpdate = false;
-    model.group.matrix.copy(parkedMatrix(x + dx, z - 185, 180, 0.12));
+    model.group.matrix.copy(parkedMatrix(x + dx, z - 185, 180, 0.02));
     group.add(model.group);
   });
   // Fuel truck by the east end of the apron.
@@ -151,7 +152,7 @@ export function addAirfieldDetail(scene) {
   const chassis = new THREE.Mesh(new THREE.BoxGeometry(8, 0.6, 2.2), new THREE.MeshLambertMaterial({ color: 0x2c2e30 }));
   chassis.position.set(0.6, 0.6, 0);
   truck.add(cab, tank, chassis);
-  truck.position.set(x + 100, 0.12, z - 205);
+  truck.position.set(x + 100, 0.02, z - 205);
   group.add(truck);
   // Hangar doors (dark panels on the south faces) and the access road between two hangars.
   const door = new THREE.MeshLambertMaterial({ color: 0x5d6166 });

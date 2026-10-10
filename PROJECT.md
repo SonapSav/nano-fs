@@ -1259,6 +1259,13 @@ landmarks; later night lighting, shadows, haze.
   - [x] Edge smoothing switch (2026-10-10): Settings "Edge smoothing" (antialiasing),
     remembered in the browser (`flightsim.antialias`), recreates the renderer; the
     performance test starts from the setting, restores it and reports it.
+  - [x] Wheels sunk into the runway (2026-10-10, the owner's belly-camera photo at Al
+    Bateen): the runway was drawn 0.15 m above the physics' ground (taxiways 0.25 m,
+    procedural runway 0.15 m) and JSBSim's gear contacts sit ~6 cm into the ground (tyre
+    and strut compression), so the tyres were ~20 cm deep. Runway and paved surfaces now
+    2-5 cm above the ground (real runway 0.03, taxiways 0.05, aprons 0.03; procedural
+    0.015-0.03; markings and hold bars just above); the logarithmic depth buffer keeps
+    them clear of the terrain (checked at 2.5 and 8 km). Roads keep 0.35 m.
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the
     flown aircraft's static parts (45 meshes), palms and bushes across tiles (~50).
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings

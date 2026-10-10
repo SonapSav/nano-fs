@@ -12,7 +12,7 @@ import { heightAt } from "./demCore.js";
 
 const DRAPE_M = 25;
 const ROAD_LIFT_M = 0.35;
-const PAVED_LIFT_M = 0.25;
+const PAVED_LIFT_M = 0.05; // taxiways (aprons 2 cm lower): aircraft roll on them, so close to the physics' ground
 export const ROAD_WIDTH_M = { motorway: 24, trunk: 20, primary: 14, secondary: 11, tertiary: 9, unclassified: 7, residential: 7 };
 const RAIL_WIDTH_M = 4;
 const TAXIWAY_WIDTH_M = 23;
@@ -114,9 +114,9 @@ export function featureGroundData(f, tiles) {
   for (const line of f.rail ?? []) ribbon(rail, line, RAIL_WIDTH_M, ROAD_LIFT_M, tiles);
   for (const line of f.taxiway ?? []) {
     ribbon(paved, line, TAXIWAY_WIDTH_M, PAVED_LIFT_M, tiles);
-    ribbon(taxilines, line, TAXILINE_WIDTH_M, PAVED_LIFT_M + 0.04, tiles); // the yellow centreline
+    ribbon(taxilines, line, TAXILINE_WIDTH_M, PAVED_LIFT_M + 0.02, tiles); // the yellow centreline
   }
-  for (const ring of f.apron ?? []) polygon(paved, ring, PAVED_LIFT_M - 0.05, tiles);
+  for (const ring of f.apron ?? []) polygon(paved, ring, PAVED_LIFT_M - 0.02, tiles);
   return { roads: roads.arrays(), rail: rail.arrays(), paved: paved.arrays(), taxilines: taxilines.arrays() };
 }
 

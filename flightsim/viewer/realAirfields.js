@@ -18,7 +18,11 @@ import { runwayDescriptor } from "./runwayGeometry.js";
 export { runwayDescriptor };
 
 const MAX_TEXTURE_PX = 4096; // along the runway (a safe texture size on any WebGL device)
-const LIFT_M = 0.15; // the runway surface above the flattened terrain
+// The runway surface above the flattened terrain (the physics' ground): just enough to
+// stay clear of the terrain in the logarithmic depth buffer (a few cm resolve kilometres
+// away); more would sink the wheels into it (JSBSim's gear contacts already sit ~6 cm into
+// the ground, its tyre and strut compression).
+export const LIFT_M = 0.03;
 
 // Markings (FAA style, simplified; project choices where noted): edge stripes, centreline
 // (30 m stripes, 20 m gaps), threshold bars and "piano keys" (one 1.8 m stripe per 3.75 m
@@ -118,7 +122,7 @@ export class RealAirfields {
     const model = buildC172({ registration: "A6-ABD" });
     model.update({});
     const parked = stands.filter((_, i) => i % 3 === 0).slice(0, PARKED_MAX);
-    for (const mesh of mergeByMaterial(parked.map((s) => ({ object: model.group, matrix: parkedMatrix(s.east, -s.north, s.heading_deg, y + 0.15) })))) {
+    for (const mesh of mergeByMaterial(parked.map((s) => ({ object: model.group, matrix: parkedMatrix(s.east, -s.north, s.heading_deg, y + LIFT_M) })))) {
       this.furniture.add(mesh);
     }
     model.group.traverse((o) => o.geometry?.dispose());
@@ -136,7 +140,7 @@ export class RealAirfields {
           bar.add(m);
         }
       }
-      bar.position.set(h.east, y + 0.3, -h.north);
+      bar.position.set(h.east, y + 0.08, -h.north); // over the taxiway (featureGeometry.js PAVED_LIFT_M) and its centreline
       bar.rotation.y = -((h.taxiway_deg * Math.PI) / 180); // bars across the taxiway (map bearing, clockwise from north)
       bars.add(bar);
     }
