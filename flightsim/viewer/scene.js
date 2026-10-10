@@ -89,11 +89,12 @@ function buildShadow(model) {
 }
 
 export class FlightScene {
-  constructor(container, quality = "high") {
+  constructor(container, quality = "high", { antialias = true } = {}) {
     this.container = container;
     this.quality = quality;
+    this.antialias = antialias; // the viewer's setting (the performance test may switch it for a while)
     // Logarithmic depth: from 0.5 m to 100+ km without distant surfaces flickering.
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias, logarithmicDepthBuffer: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, QUALITY[quality].pixelRatio));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping; // the physical sky is HDR
     this.renderer.toneMappingExposure = 0.55;
@@ -228,6 +229,13 @@ export class FlightScene {
     this.landmarks.setEnvironment(r, this.skyLight.sky);
     this._bindPointer();
     this.resize();
+  }
+
+  // Edge smoothing (the viewer's setting): a new renderer when it changes.
+  setAntialias(on) {
+    if (on === this.antialias) return;
+    this.antialias = on;
+    this.rebuildRenderer({ antialias: on });
   }
 
   // Quality preset (terrain.js QUALITY): low / medium / high.

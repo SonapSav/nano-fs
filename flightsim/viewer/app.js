@@ -133,7 +133,26 @@ const savedQuality = (() => {
   }
 })();
 const initialQuality = ["low", "medium", "high"].includes(savedQuality) ? savedQuality : "high";
-const scene = new FlightScene($("view"), initialQuality);
+// Edge smoothing (antialiasing, Settings), remembered in this browser: on unless switched
+// off; off saves the most frame time in Firefox (performance test).
+const ANTIALIAS_KEY = "flightsim.antialias";
+const initialAntialias = (() => {
+  try {
+    return localStorage.getItem(ANTIALIAS_KEY) !== "off";
+  } catch {
+    return true;
+  }
+})();
+const scene = new FlightScene($("view"), initialQuality, { antialias: initialAntialias });
+$("antialias").checked = initialAntialias;
+$("antialias").addEventListener("change", (e) => {
+  scene.setAntialias(e.target.checked);
+  try {
+    localStorage.setItem(ANTIALIAS_KEY, e.target.checked ? "on" : "off");
+  } catch {
+    // not remembered
+  }
+});
 // Screenshots and checks from a test browser (?debug in the URL): the scene and the frame shown.
 if (new URLSearchParams(location.search).has("debug")) window.flightDebug = { scene, shown: () => shown };
 $("quality").value = initialQuality;
@@ -930,7 +949,7 @@ $("bench").addEventListener("click", async () => {
       setCamera: (on) => setCameraInset(on), cameraOn: !$("camera-inset").hidden,
       setReal: benchWorld,
     });
-    const extra = `HUD ${hudOn ? "on" : "off"} (cockpit view); instruments window ${$("panel").hidden ? "open" : "closed"}; ` +
+    const extra = `Edge smoothing ${scene.antialias ? "on" : "off"}; HUD ${hudOn ? "on" : "off"} (cockpit view); instruments window ${$("panel").hidden ? "open" : "closed"}; ` +
       `belly camera ${CAMERA_WIDTHS[camSettings.size]} px at ${camSettings.fps}/s, ${camSinks.size} picture(s) in view`;
     $("bench-out").textContent = benchReport(result) + "\n" + extra;
     say("Performance test finished.");

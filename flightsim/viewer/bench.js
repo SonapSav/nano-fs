@@ -61,7 +61,7 @@ export async function runBench({ scene, setView, restoreClouds, setHud, setPanel
   const quality = scene.quality, startView = scene.view;
   const ratio = scene.renderer.getPixelRatio();
   const apply = (off, on = {}) => {
-    const ctx = { antialias: !off.antialias, logDepth: !off.logDepth };
+    const ctx = { antialias: scene.antialias && !off.antialias, logDepth: !off.logDepth };
     if (ctx.antialias !== apply.ctx.antialias || ctx.logDepth !== apply.ctx.logDepth) {
       scene.rebuildRenderer(ctx);
       apply.ctx = ctx;
@@ -76,7 +76,7 @@ export async function runBench({ scene, setView, restoreClouds, setHud, setPanel
     setPanel(!off.panel);
     setCamera(on.camera ? true : off.camera ? false : cameraOn);
   };
-  apply.ctx = { antialias: true, logDepth: true };
+  apply.ctx = { antialias: scene.antialias, logDepth: true };
   const results = [];
   const views = ["cockpit", "chase"];
   try {
@@ -84,6 +84,7 @@ export async function runBench({ scene, setView, restoreClouds, setHud, setPanel
     for (const c of BENCH_CASES) {
       if (c.off.pixelRatio1 && ratio <= 1 && Object.keys(c.off).length === 1) continue; // already 1
       if (c.on?.camera && cameraOn) continue; // already in "as set"
+      if (c.off.antialias && !scene.antialias && Object.keys(c.off).length === 1) continue; // already off (Settings)
       if (c.on?.real && !(setReal && (await setReal(true)))) {
         if (setReal) await setReal(false); // no region here: back to the approach start
         continue;

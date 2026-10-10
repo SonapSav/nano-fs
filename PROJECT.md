@@ -1250,7 +1250,17 @@ landmarks; later night lighting, shadows, haze.
     the tile features and thinning distant tiles (planned) left out: measured, they
     were ~30 calls. Left: terrain tiles (~50, one texture each), the flown aircraft (45
     parts), palms and bushes (~50).
-  - [ ] The owner's re-run of the performance test after 4g (and whether 144 Hz holds).
+  - [x] The owner's re-run after 4g (2026-10-10), this laptop's AMD Renoir/Lucienne iGPU,
+    1920 x ~900: Firefox 153: procedural 108-113 fps, Abu Dhabi 91-96 fps (was 66; script
+    7-8 ms, was 11); Chromium 154: procedural 138-144 fps (the display's rate), Abu Dhabi
+    112-121 fps (script 5.7-6.2 ms; 1 frame in 20 misses a refresh). Same chip: Firefox
+    needs ~1.5x the time per frame (its WebGL overhead). Antialiasing is the largest single
+    cost in Firefox (~20 fps).
+  - [x] Edge smoothing switch (2026-10-10): Settings "Edge smoothing" (antialiasing),
+    remembered in the browser (`flightsim.antialias`), recreates the renderer; the
+    performance test starts from the setting, restores it and reports it.
+  - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the
+    flown aircraft's static parts (45 meshes), palms and bushes across tiles (~50).
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings
     (OSM 3D tags, shadows), night lighting, or ready-made models.
 
