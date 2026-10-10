@@ -1,7 +1,7 @@
 """Trees from the canopy height map (flightsim/viewer/trees.js), run with Node when
 available: one batched mesh per tile, palms (5 m and up) or round trees scaled to their
 heights with their bases on the ground; near trees take the detailed shape, farther ones
-the simple one, the farthest are hidden."""
+the simple one, the farthest and those behind the view are hidden."""
 
 import json
 import shutil
@@ -25,7 +25,9 @@ const ids = b.userData.trees.ids, m = new THREE.Matrix4(), p = new THREE.Vector3
 const state = () => [0, 1, 2].map((i) => ({ visible: b.getVisibleAt(i), geometry: Object.keys(ids).find((k) => ids[k] === b.getGeometryIdAt(i)) }));
 const out = { count: b.instanceCount ?? null };
 out.scale = [0, 1].map((i) => { b.getMatrixAt(i, m); m.decompose(p, q, sc); return [p.y, sc.y]; });
-T.updateTreeBatch(b, 0, 0);
+T.updateTreeBatch(b, 0, 0, 1, 0); // looking east, toward all three
+out.behind = (T.updateTreeBatch(b, 0, 0, -1, 0), [0, 1, 2].map((i) => b.getVisibleAt(i))); // looking west: only those within 300 m
+b.userData.trees.key = null; T.updateTreeBatch(b, 0, 0, 1, 0);
 out.near = state();
 T.updateTreeBatch(b, 20000, 0);
 out.gone = state();
@@ -55,3 +57,4 @@ def test_sizes(result):
 def test_detail_by_distance(result):
     assert result["near"] == [{"visible": True, "geometry": "nearPalm"}, {"visible": True, "geometry": "nearRound"}, {"visible": True, "geometry": "farPalm"}]
     assert all(not s["visible"] for s in result["gone"])
+    assert result["behind"] == [True, True, False]  # behind the view: only the nearby ones

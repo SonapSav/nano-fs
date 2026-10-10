@@ -11,8 +11,10 @@
 
 import * as THREE from "three";
 
-export const NEAR_M = 1200; // trees nearer than this: detailed
-export const FAR_M = 3000; // ...then the simple ones; beyond, none (a palm is a pixel or two)
+export const NEAR_M = 800; // trees nearer than this: detailed
+export const FAR_M = 2500; // ...then the simple ones; beyond, none (a palm is a pixel or two)
+const AROUND_M = 300; // always drawn (the view turns quickly close by)
+const CONE_COS = Math.cos((80 * Math.PI) / 180); // drawn within 80 deg of the view's heading
 const PALM_FROM_M = 5;
 const BASE_H = 10; // the geometry's height (scaled per tree)
 
@@ -211,17 +213,23 @@ export function treeBatch(data) {
   return batch;
 }
 
-// Each frame: when the camera has moved to another 250 m step, each tree near it takes
-// the detailed shape, farther ones the simple one, the farthest none.
-export function updateTreeBatch(batch, camX, camZ) {
-  const t = batch.userData.trees, key = `${Math.round(camX / 250)},${Math.round(camZ / 250)}`;
+// Each frame: when the camera has moved to another 250 m step or turned to another 15 deg
+// step, each tree near it takes the detailed shape, farther ones the simple one; those
+// behind the view (beyond AROUND_M) and the farthest are hidden.
+export function updateTreeBatch(batch, camX, camZ, headX = 0, headZ = -1) {
+  const t = batch.userData.trees;
+  const step = Math.round(Math.atan2(headX, -headZ) / (Math.PI / 12));
+  const key = `${Math.round(camX / 250)},${Math.round(camZ / 250)},${step}`;
   if (key === t.key) return;
   t.key = key;
+  const a = (step * Math.PI) / 12, hx = Math.sin(a), hz = -Math.cos(a);
   const { nearPalm, nearRound, farPalm, farRound } = t.ids;
   for (let i = 0; i < t.palm.length; i++) {
-    const d = Math.max(Math.abs(t.xz[2 * i] - camX), Math.abs(t.xz[2 * i + 1] - camZ));
+    const dx = t.xz[2 * i] - camX, dz = t.xz[2 * i + 1] - camZ;
+    const d = Math.max(Math.abs(dx), Math.abs(dz));
+    const ahead = d < AROUND_M || (dx * hx + dz * hz) > CONE_COS * Math.hypot(dx, dz);
     const near = d < NEAR_M;
-    batch.setVisibleAt(i, d < FAR_M);
+    batch.setVisibleAt(i, ahead && d < FAR_M);
     batch.setGeometryIdAt(i, t.palm[i] ? (near ? nearPalm : farPalm) : near ? nearRound : farRound);
   }
 }

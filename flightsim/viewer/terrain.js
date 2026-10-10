@@ -444,6 +444,9 @@ function tileObjects(data, shared, far) {
 // Quality presets: terrain rings (tile mesh resolution and how far tiles reach), trees per
 // near tile, haze distances, pixel ratio and the close-up ground detail. "high" is the
 // original setting.
+// ?notrees in the viewer's URL: no measured trees (performance comparisons).
+const NO_TREES = typeof location !== "undefined" && new URLSearchParams(location.search).has("notrees");
+
 export const QUALITY = {
   low: {
     rings: [{ maxRing: 1, segments: 48, objects: true }, { maxRing: 3, segments: 12, objects: false }],
@@ -578,8 +581,9 @@ export class Terrain {
   // Call every frame with the camera position. Asks the worker for the nearest missing tiles;
   // without one, builds tiles here until about `budgetMs` of this frame is used, at least
   // one (a near tile takes ~15 ms, a far one < 1 ms).
-  update(x, z, budgetMs = 8) {
-    for (const t of this.tiles.values()) if (t.trees) updateTreeBatch(t.trees, x, z); // trees' detail by distance
+  update(x, z, budgetMs = 8, view = null) {
+    // Trees: detail by distance, only those ahead of the view (`view`: its horizontal heading).
+    for (const t of this.tiles.values()) if (t.trees) updateTreeBatch(t.trees, x, z, view?.x ?? 0, view?.z ?? -1);
     const cx = Math.floor(x / TILE_SIZE_M), cz = Math.floor(z / TILE_SIZE_M);
     if (!this.centre || this.centre[0] !== cx || this.centre[1] !== cz) {
       this.centre = [cx, cz];
@@ -661,7 +665,7 @@ export class Terrain {
     this.scene.add(mesh);
     this.onChange?.(); // new casters or receivers (the sun's shadow map is drawn again)
     // Measured trees (the canopy height map) replace the land cover's scattered palms.
-    const measured = featuresData?.trees?.data;
+    const measured = NO_TREES ? null : featuresData?.trees?.data;
     const objects = objectsData ? tileObjects(measured ? { ...objectsData, palms: null, bushes: null } : objectsData, this.shared, !w.objects) : null;
     let trees = null;
     if (measured?.length) {

@@ -564,7 +564,7 @@ export class FlightScene {
       const rot = new THREE.Matrix4().extractRotation(this.aircraft.matrix).multiply(BODY_FROM_CAMERA);
       const head = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(this.head.pitch, this.head.yaw, 0, "YXZ"));
       this.camera.quaternion.setFromRotationMatrix(rot.multiply(head));
-      this.terrain.update(this.camera.position.x, this.camera.position.z);
+      this.terrain.update(this.camera.position.x, this.camera.position.z, 8, this.camera.getWorldDirection(this._viewDir ??= new THREE.Vector3()));
       this.clouds.update(this.camera.position.x, this.camera.position.z);
       if (this.procedural.visible) this.roads.update(this.camera.position.x, this.camera.position.z);
       this.sunShadows.update(this.camera, world.groundAt(this.camera.position.x, this.camera.position.z), this.sunDir);
@@ -578,7 +578,7 @@ export class FlightScene {
     const offset = nedToWorld(Math.cos(az) * Math.cos(el) * d, Math.sin(az) * Math.cos(el) * d, -Math.sin(el) * d);
     this.camera.position.copy(this.position).add(offset);
     this.camera.lookAt(this.position);
-    this.terrain.update(this.camera.position.x, this.camera.position.z);
+    this.terrain.update(this.camera.position.x, this.camera.position.z, 8, this.camera.getWorldDirection(this._viewDir ??= new THREE.Vector3()));
     this.clouds.update(this.camera.position.x, this.camera.position.z);
     if (this.procedural.visible) this.roads.update(this.camera.position.x, this.camera.position.z);
     this.sunShadows.update(this.camera, world.groundAt(this.camera.position.x, this.camera.position.z), this.sunDir);

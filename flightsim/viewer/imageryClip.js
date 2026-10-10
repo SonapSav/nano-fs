@@ -20,6 +20,7 @@ const MIP_LEVELS = 10; // 512 px chunks down to 1 px
 export const FADE_M = [[1300, 1700], [5500, 7000]]; // per level: fade between (Chebyshev distance from the camera; window half-width >= 3.5 chunks)
 const MAX_FETCHES = 6;
 const MAX_UPLOADS_PER_FRAME = 2;
+const UPLOAD_BUDGET_MS = 3;
 
 function placeholder() {
   const t = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1);
@@ -59,7 +60,9 @@ float clipHas(int level, float chunkM, vec2 p) {
 }
 // The level's colour at world (x, z) and whether its slot holds that chunk (a).
 vec4 clipSample(sampler2D tex, int level, float chunkM, vec2 p) {
-  return vec4(texture2D(tex, p / (chunkM * ${SLOTS}.0)).rgb, clipHas(level, chunkM, p));
+  vec3 c = texture2D(tex, p / (chunkM * ${SLOTS}.0)).rgb;
+  c = mix(c * 0.0773993808, pow(c * 0.9478672986 + 0.0521327014, vec3(2.4)), step(0.04045, c)); // sRGB to linear
+  return vec4(c, clipHas(level, chunkM, p));
 }
 // How much the high-resolution imagery shows at world (x, z) from the camera: its levels
 // loaded and not faded out, times the covered area's weight.
@@ -98,14 +101,23 @@ if (clipShown(vClipXZ) * (1.0 - nightLevel) > fract(52.9829189 * fract(dot(gl_Fr
 }
 
 // After three's map_fragment: diffuseColor holds the tile imagery's colour (linear).
+// Only what can show is sampled: level 0 where it is not faded out; level 1 only where
+// level 0 does not fully cover (beyond its fade, or its chunk not loaded).
 export const CLIP_FRAGMENT = `
 if (clipOn > 0.5) {
   vec2 clipP = vWaterPos.xz;
   float clipD = max(abs(clipP.x - cameraPosition.x), abs(clipP.y - cameraPosition.z));
-  vec4 c1 = clipSample(clip1, 1, clipChunk.y, clipP);
-  diffuseColor.rgb = mix(diffuseColor.rgb, c1.rgb, c1.a * (1.0 - smoothstep(${FADE_M[1][0]}.0, ${FADE_M[1][1]}.0, clipD)));
-  vec4 c0 = clipSample(clip0, 0, clipChunk.x, clipP);
-  diffuseColor.rgb = mix(diffuseColor.rgb, c0.rgb, c0.a * (1.0 - smoothstep(${FADE_M[0][0]}.0, ${FADE_M[0][1]}.0, clipD)));
+  float w0 = 1.0 - smoothstep(${FADE_M[0][0]}.0, ${FADE_M[0][1]}.0, clipD);
+  float h0 = w0 > 0.0 ? clipHas(0, clipChunk.x, clipP) : 0.0;
+  float a0 = w0 * h0;
+  if (a0 < 0.999) {
+    float w1 = 1.0 - smoothstep(${FADE_M[1][0]}.0, ${FADE_M[1][1]}.0, clipD);
+    if (w1 > 0.0) {
+      vec4 c1 = clipSample(clip1, 1, clipChunk.y, clipP);
+      diffuseColor.rgb = mix(diffuseColor.rgb, c1.rgb, c1.a * w1);
+    }
+  }
+  if (a0 > 0.0) diffuseColor.rgb = mix(diffuseColor.rgb, clipSample(clip0, 0, clipChunk.x, clipP).rgb, a0);
 }`;
 
 export class ImageryClip {
@@ -174,7 +186,9 @@ export class ImageryClip {
       const size = SLOTS * this.chunkPx;
       const t = gl.createTexture();
       this.renderer.state.bindTexture(gl.TEXTURE_2D, t);
-      gl.texStorage2D(gl.TEXTURE_2D, MIP_LEVELS, gl.SRGB8_ALPHA8, size, size);
+      // Plain RGBA8 (the chunks' sRGB decoded in the shader): an sRGB texture took
+      // Chromium's slow upload path (~170 ms of every second in flight).
+      gl.texStorage2D(gl.TEXTURE_2D, MIP_LEVELS, gl.RGBA8, size, size);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
@@ -225,7 +239,8 @@ export class ImageryClip {
         this._fetch(lv, w);
       }
     }
-    for (let n = 0; n < MAX_UPLOADS_PER_FRAME && this.ready.length; n++) this._upload(this.ready.shift());
+    const t0 = performance.now(); // at most MAX_UPLOADS_PER_FRAME, and stop after UPLOAD_BUDGET_MS
+    for (let n = 0; n < MAX_UPLOADS_PER_FRAME && this.ready.length && performance.now() - t0 < UPLOAD_BUDGET_MS; n++) this._upload(this.ready.shift());
   }
 
   async _fetch(lv, { slot, key, cx, cz }) {
@@ -244,18 +259,20 @@ export class ImageryClip {
       }
       if (levels !== this.levels || slot.want !== key) {
         mips.forEach((b) => b.close());
+        if (slot.loading === key) slot.loading = null;
         return;
       }
-      this.ready.push({ lv, slot, key, cx, cz, mips });
+      this.ready.push({ lv, slot, key, cx, cz, mips }); // still "loading" until uploaded (else asked for again meanwhile)
     } catch (e) {
       console.warn(`hires imagery ${key}: ${e.message}`);
+      if (slot.loading === key) slot.loading = null;
     } finally {
       this.fetches--;
-      if (slot.loading === key) slot.loading = null;
     }
   }
 
   _upload({ lv, slot, key, cx, cz, mips }) {
+    if (slot.loading === key) slot.loading = null;
     if (lv !== this.levels?.[lv.level] || slot.want !== key) {
       mips.forEach((b) => b.close());
       return;

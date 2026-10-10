@@ -1524,6 +1524,20 @@ landmarks; later night lighting, shadows, haze.
     cover's scattered palms. No sun shadows of their own (the 1 m imagery shows the
     real ones; casting cost 10-45 ms per shadow redraw). Frame time (this iGPU, city
     view, ~58,000 trees loaded): normal frames as without trees (2.6 vs 2.9 ms).
+  - [x] Frame rate drop to 43-70 fps (2026-10-11, the owner). Measured flying the camera
+    across the city at 60 m/s in headless Chromium at 1920 px (the frame loop timed per
+    part; 60 Hz, so coarse): 31-33 fps; without trees 42-44. Causes and fixes: (1) a
+    bug in the 1 m imagery streaming: a chunk counted as loading only until fetched, not
+    until uploaded, so while waiting for upload it was fetched again: 1,385 uploads in
+    25 s instead of ~100; 173 of every 1,000 ms went to uploads, now ~20 (the clip
+    textures also plain RGBA8 with the sRGB decode in the shader, and uploads capped at
+    3 ms a frame); (2) trees behind the view were drawn: now only within 80 deg of the
+    view's heading (all within 300 m), detailed to 800 m (was 1.2 km), simple to 2.5 km
+    (was 3 km), recomputed per 250 m or 15 deg of turn (~3 ms); (3) the ground shader
+    sampled both imagery levels everywhere: now only what can show. Result: 42 fps
+    with trees in the same test (as without trees before). Also found: every screenshot
+    run left a ~160 MB Chromium profile in /tmp (a RAM disk): 14 GB of the laptop's
+    memory; deleted, the scripts reuse one profile each.
   - [ ] Known: with the trees, a frame that redraws the sun's shadow map costs ~15 ms
     instead of ~5 ms in the dense city (not the shadow pass itself: the trees are
     skipped there; cause not found yet); such frames come every few seconds in flight.
