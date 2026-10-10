@@ -70,6 +70,8 @@ fast in three configurations and a phugoid about 20 % short. See
 
 Requirements: [uv](https://docs.astral.sh/uv/) (it installs Python 3.14) or Docker, and a
 recent Firefox or Chromium for the viewer. Developed and tested on Linux (Debian 13).
+A Chromium-based browser is recommended for the viewer: on the same machine Firefox needs
+about 1.5 times as long per frame (measured with the viewer's performance test, Settings).
 
 ```sh
 git clone https://github.com/SonapSav/nano-fs.git
