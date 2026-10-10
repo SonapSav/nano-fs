@@ -13,8 +13,8 @@ def test_reset_converts_units_at_boundary(cruise):
     assert s.alt_msl_m == pytest.approx(1524.0, abs=1e-6)
     assert s.tas_mps == pytest.approx(51.44, abs=1e-6)
     assert s.psi_rad == pytest.approx(math.radians(90), abs=1e-9)
-    # 1500 lb empty + 180 lb pilot + 2 x 100 lb fuel
-    assert s.mass_kg == pytest.approx(1880 * LBM_TO_KG, rel=1e-3)
+    # 1467 lb empty (c172p_tuned: the POH's sample basic empty weight) + 180 lb pilot + 2 x 100 lb fuel
+    assert s.mass_kg == pytest.approx(1847 * LBM_TO_KG, rel=1e-3)
 
 
 def test_trim_gives_steady_level_flight(cruise):

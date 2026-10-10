@@ -27,4 +27,8 @@ Changes from JSBSim's `c172p` (2026-10-05/06, documented in `PROJECT.md` and
   51 KCAS, but the POH's 51 KIAS lift-off is 55.7 KCAS (Figure 5-1); the takeoff roll now
   matches (894 ft, POH 892), the climb unchanged.
 
+- `c172p_tuned.xml` (2026-10-10): empty weight and CG of the POH's sample airplane (1467 lb
+  at 39.06 in; was 1500 lb at 41.0), fuel tanks at the POH's fuel arm (47.9 in; was 56),
+  seats at the sample loading's arms (front 37.1 in, rear 72.9 in; were 36 and 70).
+
 Everything else is unchanged from JSBSim's c172p.

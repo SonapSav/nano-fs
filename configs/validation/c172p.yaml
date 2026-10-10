@@ -71,7 +71,12 @@ phugoid_flight_test:
   period_tolerance_pct: 15
   zeta: 0.13
   zeta_tolerance: 0.05
-  period_known_deviation: "model phugoid 27.8 s, about 21% shorter than the ~35 s flight test; damping matches"
+  # The model's controls-fixed phugoid follows Lanchester's theory (pi sqrt2 V/g: 26.3 s at
+  # the trial's 113 KTAS; the model 27.5 s linear, 27.8-27.9 s from this response); the
+  # trial was stick free, on a 172S, at +/-25 kt. A 35 s controls-fixed period would need
+  # the pitching moment with speed (M_u) to change sign (+0.023 to about -0.019 1/(m s)):
+  # no source supports that, so it is not tuned (2026-10-10).
+  period_known_deviation: "model phugoid 27.8 s, about 21% shorter than the ~35 s flight test (stick free, 172S); the model's controls-fixed period follows Lanchester's theory (26.3 s); damping matches"
 
 ground:
   source: poh

@@ -55,16 +55,19 @@
         <ixy unit="SLUG*FT2"> -0 </ixy>
         <ixz unit="SLUG*FT2"> -0 </ixz>
         <iyz unit="SLUG*FT2"> -0 </iyz>
-        <emptywt unit="LBS"> 1500 </emptywt>
+        <!-- nano-fs (2026-10-10): basic empty weight and CG of the POH's sample airplane
+             (Figure 6-5: 1467 lb, moment 57300 lb-in, including unusable fuel and full oil);
+             was 1500 lb at 41.0 in. Seats and tanks below at the POH's loading arms. -->
+        <emptywt unit="LBS"> 1467 </emptywt>
         <location name="CG" unit="IN">
-            <x> 41 </x>
+            <x> 39.06 </x>
             <y> 0 </y>
             <z> 36.5 </z>
         </location>
         <pointmass name="Pilot">
             <weight unit="LBS"> 180 </weight>
             <location unit="IN">
-                <x> 36 </x>
+                <x> 37.1 </x>
                 <y> -14 </y>
                 <z> 24 </z>
             </location>
@@ -72,7 +75,7 @@
         <pointmass name="Co-Pilot">
             <weight unit="LBS"> 0 </weight>
             <location unit="IN">
-                <x> 36 </x>
+                <x> 37.1 </x>
                 <y> 14 </y>
                 <z> 24 </z>
             </location>
@@ -80,7 +83,7 @@
         <pointmass name="Left Passenger">
             <weight unit="LBS"> 0 </weight>
             <location unit="IN">
-                <x> 70 </x>
+                <x> 72.9 </x>
                 <y> -14 </y>
                 <z> 24 </z>
             </location>
@@ -88,7 +91,7 @@
         <pointmass name="Right Passenger">
             <weight unit="LBS"> 0 </weight>
             <location unit="IN">
-                <x> 70 </x>
+                <x> 72.9 </x>
                 <y> 14 </y>
                 <z> 24 </z>
             </location>
@@ -219,7 +222,7 @@
         </engine>
         <tank type="FUEL">    <!-- Tank number 0 -->
             <location unit="IN">
-                <x> 56 </x>
+                <x> 47.9 </x> <!-- nano-fs (2026-10-10): the POH's fuel arm (was 56) -->
                 <y> -112 </y>
                 <z> 59.4 </z>
             </location>
@@ -228,7 +231,7 @@
         </tank>
         <tank type="FUEL">    <!-- Tank number 1 -->
             <location unit="IN">
-                <x> 56 </x>
+                <x> 47.9 </x> <!-- nano-fs (2026-10-10): the POH's fuel arm (was 56) -->
                 <y> 112 </y>
                 <z> 59.4 </z>
             </location>

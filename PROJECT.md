@@ -406,8 +406,17 @@ owner before work can start.
   (1000-1199), before vs after: approach 200/200 both (touchdown sink 93 vs 92 ft/min),
   takeoff 200/200 (autopilot roll 252 -> 220 m), circuit 200/200, LQR and PID altitude/
   heading-hold returns unchanged (-1388 vs -1388, -1396 vs -1392).
-- [ ] Phugoid period 27.8 s vs ~35 s in the AAIB flight test (about 21% short); damping matches.
-- [ ] Spiral mode is stable at mid CG in the model; the AAIB pilot found the real aircraft divergent.
+- [x] Phugoid period 27.8 s vs ~35 s in the AAIB flight test (about 21% short); damping matches.
+  Investigated 2026-10-10, not tuned: the model's controls-fixed phugoid follows
+  Lanchester's theory (26.3 s at 113 KTAS; model 27.5 s linear), the trial was stick free
+  on a 172S at +/-25 kt, and 35 s would need the pitching moment with speed to change
+  sign (+0.023 to about -0.019 1/(m s)), for which there is no source. Kept as an
+  explained known deviation.
+- [x] Spiral mode is stable at mid CG in the model; the AAIB pilot found the real aircraft divergent.
+  Resolved 2026-10-10 as a misreading: the report says hands off the aircraft was
+  "reluctant to depart from wings-level flight", and the spiral dive followed a sustained
+  small right-rudder input (a forced response). The model reproduces both
+  (tests/test_flight_trial.py); its spiral mode is stable at cruise, divergent at 70 KCAS.
 - [ ] Short-period mode: no independent C172 measurement found in open sources; only
   MIL-F-8785C limits are checked. Look for a source.
 - [x] Fuel flow validated leaned (2026-10-05): 8 checks (4 cruise points x RPM and EGT
@@ -416,8 +425,13 @@ owner before work can start.
   (fixed; all earlier runs used full rich, so no results change), and the model's
   tanks use 6.6 lb/gal against the POH's 6 (convert fuel mass). The model's peak RPM
   and peak EGT mixtures are far apart (unlike a real engine); fine for fuel flow.
-- [ ] The model's empty-aircraft CG is aft of a typical 172P: the forward CG limit at
+- [x] The model's empty-aircraft CG is aft of a typical 172P: the forward CG limit at
   2400 lb needs about 40 lb fuel and 860 lb in the front seats.
+  Fixed in c172p_tuned 2026-10-10 from the POH's weight and balance (Section 6): basic
+  empty 1467 lb at 39.06 in (Figure 6-5 sample; was 1500 lb at 41.0), fuel tanks at the
+  fuel arm 47.9 in (was 56: 8 in aft, beyond the ~3 in datum uncertainty), front seats
+  37.1 in, rear 72.9 in (sample arms). The tasks' loading (pilot 180 lb, fuel 200 lb)
+  moves from 1880 lb at 42.12 in to 1847 lb at 39.83 in.
 - [x] Ground checks (added 2026-10-06, POH at 2400 lb, sea level, 15 C), four known
   deviations (all fixed in c172p_tuned by 2026-10-10; the takeoff ones were partly the
   KIAS/KCAS mix-up above):
