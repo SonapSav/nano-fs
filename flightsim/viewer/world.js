@@ -32,6 +32,7 @@ function inRegion(ix, iz) {
 function load(store, name, Type, ix, iz) {
   const key = `${ix},${iz}`;
   if (store.has(key)) return;
+  if (!state.manifest) return; // the region's extent is not known yet: asked again on the next query
   if (!inRegion(ix, iz)) {
     store.set(key, null);
     return;

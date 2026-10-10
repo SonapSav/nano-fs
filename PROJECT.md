@@ -1274,7 +1274,13 @@ landmarks; later night lighting, shadows, haze.
     photo: the aircraft's shadow patch (a semi-transparent sheet) was drawn 0.25 m up (to
     clear the old 0.12-0.15 m surfaces) and sliced across the tyres; now 0.09 m (just
     above the hold bars). Reproduced and checked with the belly camera in the live Al
-    Bateen takeoff (data/shots/belly_live.py).
+    Bateen takeoff (data/shots/belly_live.py). Still cut in the owner's fourth photo;
+    measured in the live page: world.groundAt read 0 m on the runway (3.40 m), so the
+    gear settling did nothing and the shadow patch lay under the runway. Cause
+    (world.js): a tile asked for before the region's manifest arrived (the first frames
+    come first) was remembered as outside the region for the whole flight. Fixed (asked
+    again once the manifest is here; test_viewer_dem.py); the shadow patch is now also
+    drawn before the aircraft (opaque pass, render order), so it never darkens it.
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the
     flown aircraft's static parts (45 meshes), palms and bushes across tiles (~50).
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings

@@ -80,10 +80,14 @@ function buildShadow(model) {
   const target = new THREE.WebGLRenderTarget(SHADOW_MASK_PX, SHADOW_MASK_PX, { depthBuffer: false, samples: 4 });
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000);
   camera.up.set(0, 0, -1); // north up in the mask, as on the ground patch
+  // Drawn with the opaque things, after the ground (renderOrder 1) and before the aircraft
+  // (its group's renderOrder 2): blended onto what is already there, it darkens the ground
+  // and never the aircraft's own tyres, whatever their height above the patch.
   const patch = new THREE.Mesh(
     new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: target.texture, transparent: true, opacity: 0.5, depthWrite: false }),
+    new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: target.texture, transparent: false, blending: THREE.CustomBlending, opacity: 0.5, depthWrite: false }),
   );
+  patch.renderOrder = 1;
   patch.visible = false;
   return { flat, maskScene, target, camera, patch, corners, corner: new THREE.Vector3() };
 }
@@ -159,6 +163,7 @@ export class FlightScene {
     this.scene.add(this.pattern);
 
     this.shadow = buildShadow(this.model);
+    this.aircraft.renderOrder = 2; // after the shadow patch (buildShadow)
     this.scene.add(this.shadow.patch);
     this.shadowFlatten = new THREE.Matrix4();
 

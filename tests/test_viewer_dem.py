@@ -97,3 +97,35 @@ def test_region_map_tiles():
     assert out["land"][0] > out["land"][2] and out["land"] != out["sea"]
     assert out["outside"] == [200, 196, 184]
     assert out["need"] == 9  # the tile and its neighbours (the map tile spills over its edges)
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_ground_asked_before_the_manifest_arrives(tmp_path):
+    """The first flight frames come before the region's manifest: a height asked for then
+    must not be remembered as outside the region (it read as sea level for the whole flight,
+    sinking the gear and hiding the aircraft's shadow at Al Bateen)."""
+    for f in ("world.js", "demCore.js", "terrainCore.js"):
+        shutil.copy(VIEWER / f, tmp_path / f)
+    script = """
+    const n = 129, h = new Float32Array(n * n).fill(3.4);
+    let release;
+    const manifestHere = new Promise((r) => (release = r));
+    globalThis.fetch = async (url) => {
+      const json = (o) => ({ ok: true, json: async () => o });
+      if (url.includes("manifest.json")) { await manifestHere; return json({ tiles: { ix_min: -1, ix_max: 1, iz_min: -1, iz_max: 1 }, files: {} }); }
+      if (url.includes("airfields.json")) return json({ runways: [] });
+      return { ok: true, arrayBuffer: async () => h.buffer.slice(0) };
+    };
+    const { world } = await import("./world.js");
+    const done = world.set({ scenery: { name: "test", hash: "0123456789abcdef0123" } });
+    const early = world.groundAt(100, 100); // before the manifest: sea level for now
+    release();
+    await done;
+    world.groundAt(100, 100); // asks for the tile now that the region is known
+    await new Promise((r) => setTimeout(r, 50));
+    console.log(JSON.stringify({ early, later: world.groundAt(100, 100) }));
+    """
+    out = subprocess.run([NODE, "--input-type=module", "-e", script], cwd=tmp_path, capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr
+    r = json.loads(out.stdout)
+    assert r["early"] == 0 and abs(r["later"] - 3.4) < 1e-5
