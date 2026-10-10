@@ -1297,7 +1297,14 @@ landmarks; later night lighting, shadows, haze.
   - [x] Roads on bends (2026-10-10, the owner's photo: teeth on the outside of curves):
     each straight piece of an OSM line was its own rectangle; roads, rail, taxiways and
     their centrelines are now one continuous strip per line with mitred joins (capped
-    at 2 widths) (featureGeometry.js ribbon; test_scenery_features.py).
+    at 2 widths) (featureGeometry.js ribbon; test_scenery_features.py). Straight roads
+    then showed terrain rising through them (the owner's next photo): they draped on the
+    region's heights every 25 m with both edges at the centreline's height, while the
+    drawn terrain is planar triangles on a coarser grid (41.7 m at high quality). Ground
+    features now drape on the tile's own mesh (drawnGround): a vertex pair wherever the
+    centreline or either edge crosses a grid line or quad diagonal, each vertex at the
+    mesh's height under it; a test checks the road clears a bumpy mesh everywhere.
+    Approach view: 767k -> 883k triangles, same draw calls and frame time.
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the
     flown aircraft's static parts (45 meshes), palms and bushes across tiles (~50).
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings

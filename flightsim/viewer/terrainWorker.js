@@ -66,7 +66,7 @@ async function demBuild(r) {
   let features = null;
   if (geometry && r.buildingsMinM !== null) {
     const f = await fetchTile(region.features, featuresName, "json", r.tx, r.tz);
-    if (f) features = { ...(r.ground ? featureGroundData(f, tiles) : {}), buildings: buildingData(f, tiles, r.buildingsMinM) };
+    if (f) features = { ...(r.ground ? featureGroundData(f, tiles, r.segments) : {}), buildings: buildingData(f, tiles, r.buildingsMinM) }; // ground features draped on this tile's own mesh
   }
   return { geometry, objects, features };
 }

@@ -163,4 +163,41 @@ def test_curved_road_is_one_mitred_strip():
     for k in ("L", "curve"):
         assert out[k]["signs"] == [out[k]["signs"][0]] and out[k]["signs"][0] != 0  # no folded or degenerate triangles
     assert out["L"]["corner"] == pytest.approx(7 * math.sqrt(2), abs=1e-3)  # primary: 14 m wide
-    assert out["L"]["verts"] == 2 * (1 + 4 + 4)  # one strip: start, then 4 drape steps per 100 m segment
+    assert out["L"]["verts"] == 2 * (1 + 4 + 4)  # one strip: start, then 4 drape steps per 100 m segment (no mesh: every 25 m)
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_roads_lie_on_the_drawn_terrain():
+    """The owner's photo: the drawn terrain (a tile mesh of planar triangles, coarser than
+    the heights) rose through straight roads on embankments. On a bumpy tile, a road
+    crossing it diagonally: every road vertex sits exactly ROAD_LIFT_M above the drawn
+    mesh (demTiles.js, same segments), and between vertices the mesh never comes within
+    0.3 m of the road's top (sampled every metre along both edges)."""
+    script = f"""
+    const fg = await import({json.dumps((VIEWER / "featureGeometry.js").as_uri())});
+    const dt = await import({json.dumps((VIEWER / "demTiles.js").as_uri())});
+    const d = await import({json.dumps((VIEWER / "demCore.js").as_uri())});
+    const n = d.HEIGHT_CELLS + 1, h = new Float32Array(n * n);
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) h[r * n + c] = 10 + 4 * Math.sin(c * 0.9) * Math.cos(r * 0.7) + (c % 3 === 0 ? 3 : 0);
+    const lc = new Uint8Array(d.LANDCOVER_CELLS ** 2).fill(60);
+    const tiles = {{ heights: (ix, iz) => (ix === 0 && iz === 0 ? h : null), landcover: (ix, iz) => (ix === 0 && iz === 0 ? lc : null), shore: () => null }};
+    const S = 96, mesh = dt.demTileGeometryData(0, 0, S, tiles);
+    // The mesh's own height at (x, z): find its triangle (same split as demTiles.js).
+    const step = d.TILE_SIZE_M / S, N = S + 1, Y = (i, j) => mesh.position[3 * (i * N + j) + 1];
+    const meshY = (x, z) => {{ const u = x / step, v = z / step, j = Math.floor(u), i = Math.floor(v), fx = u - j, fz = v - i;
+      if (fx + fz <= 1) return Y(i, j) + (Y(i, j + 1) - Y(i, j)) * fx + (Y(i + 1, j) - Y(i, j)) * fz;
+      return Y(i + 1, j + 1) + (Y(i + 1, j) - Y(i + 1, j + 1)) * (1 - fx) + (Y(i, j + 1) - Y(i + 1, j + 1)) * (1 - fz); }};
+    const g = fg.featureGroundData({{ roads: {{ primary: [[300, 410, 2100, 1290, 3500, 1300]] }} }}, tiles, S).roads;
+    let vertexErr = 0, minClear = Infinity;
+    const P = (k) => [g.position[3 * k], g.position[3 * k + 1], g.position[3 * k + 2]];
+    for (let k = 0; k < g.position.length / 3; k++) {{ const [x, y, z] = P(k); vertexErr = Math.max(vertexErr, Math.abs(y - 0.35 - meshY(x, z))); }}
+    for (let k = 0; k + 2 < g.position.length / 3; k++) {{ // along each edge: vertex k to k + 2
+      const a = P(k), b = P(k + 2), len = Math.hypot(b[0] - a[0], b[2] - a[2]);
+      for (let s = 0; s <= len; s += 1) {{ const t = len ? s / len : 0, x = a[0] + (b[0] - a[0]) * t, z = a[2] + (b[2] - a[2]) * t;
+        minClear = Math.min(minClear, a[1] + (b[1] - a[1]) * t - meshY(x, z)); }}
+    }}
+    console.log(JSON.stringify({{ vertexErr, minClear }}));
+    """
+    out = json.loads(subprocess.run([NODE, "--input-type=module"], input=script, capture_output=True, text=True, check=True).stdout)
+    assert out["vertexErr"] < 1e-3
+    assert out["minClear"] > 0.3

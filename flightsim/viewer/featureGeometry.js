@@ -8,7 +8,7 @@
 // Buildings: footprints extruded to their height, flat roofs, one colour each (vertex
 // colours: light stone and render for most, blue-grey glass for towers; project choices).
 
-import { heightAt } from "./demCore.js";
+import { TILE_SIZE_M, heightAt } from "./demCore.js";
 
 const DRAPE_M = 25;
 const ROAD_LIFT_M = 0.35;
@@ -42,12 +42,55 @@ class Mesh {
   }
 }
 
+// The ground as drawn: a tile's terrain mesh (demTiles.js) is `segments` x `segments`
+// quads of two planar triangles (split along the quad's north-east to south-west
+// diagonal), its corners on the region's heights. Ground features drape on it, not on
+// the finer heights between its corners: on an embankment or a ramp the drawn terrain
+// otherwise rose through the road (or the road floated off its low side).
+// `segments` null: the heights themselves, sampled every DRAPE_M (tests, no mesh).
+export function drawnGround(tiles, segments) {
+  if (!segments) {
+    return {
+      height: (x, z) => heightAt(tiles, x, z),
+      cuts: (x0, z0, x1, z1) => {
+        const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, z1 - z0) / DRAPE_M));
+        return Array.from({ length: n - 1 }, (_, k) => (k + 1) / n);
+      },
+    };
+  }
+  const step = TILE_SIZE_M / segments;
+  const corner = (gx, gz) => heightAt(tiles, gx * step, gz * step); // grid lines are shared by neighbouring tiles
+  return {
+    height(x, z) {
+      const u = x / step, v = z / step, j = Math.floor(u), i = Math.floor(v), fx = u - j, fz = v - i;
+      const ha = corner(j, i), hb = corner(j + 1, i), hc = corner(j, i + 1);
+      if (fx + fz <= 1) return ha + (hb - ha) * fx + (hc - ha) * fz;
+      const he = corner(j + 1, i + 1);
+      return he + (hc - he) * (1 - fx) + (hb - he) * (1 - fz);
+    },
+    // Where a segment crosses the mesh's grid lines (x, z) and quad diagonals (u + v whole):
+    // its fractions (0..1, exclusive), sorted.
+    cuts(x0, z0, x1, z1) {
+      const ts = [];
+      const across = (a, b) => {
+        if (Math.abs(b - a) < 1e-9) return;
+        const lo = Math.min(a, b), hi = Math.max(a, b);
+        for (let k = Math.floor(lo) + 1; k < hi; k++) ts.push((k - a) / (b - a));
+      };
+      across(x0 / step, x1 / step);
+      across(z0 / step, z1 / step);
+      across((x0 + z0) / step, (x1 + z1) / step);
+      return ts.filter((t) => t > 1e-6 && t < 1 - 1e-6).sort((a, b) => a - b);
+    },
+  };
+}
+
 // A polyline [x0, z0, x1, z1, ...] as one continuous draped ribbon of the given width:
 // at each bend the edges meet along the bisector (a mitre, its length capped at
-// MITRE_MAX widths so hairpins stay tidy); every DRAPE_M along a segment the ribbon
-// follows the ground.
+// MITRE_MAX widths so hairpins stay tidy); a vertex pair wherever the centreline crosses
+// the drawn ground's edges, each vertex at the drawn ground's height under it.
 const MITRE_MAX = 2;
-function ribbon(mesh, line, width, lift, tiles) {
+function ribbon(mesh, line, width, lift, ground) {
   const hw = width / 2;
   // The points (repeated ones dropped) and each segment's unit direction.
   const pts = [];
@@ -75,9 +118,8 @@ function ribbon(mesh, line, width, lift, tiles) {
   };
   let prev = -1;
   const put = (x, z, sx, sz) => {
-    const y = heightAt(tiles, x, z) + lift;
-    const a = mesh.vertex(x + sx, y, z + sz, 0, 1, 0);
-    mesh.vertex(x - sx, y, z - sz, 0, 1, 0);
+    const a = mesh.vertex(x + sx, ground.height(x + sx, z + sz) + lift, z + sz, 0, 1, 0);
+    mesh.vertex(x - sx, ground.height(x - sx, z - sz) + lift, z - sz, 0, 1, 0);
     if (prev >= 0) mesh.idx.push(prev, a, prev + 1, prev + 1, a, a + 1);
     prev = a;
   };
@@ -85,8 +127,11 @@ function ribbon(mesh, line, width, lift, tiles) {
     const [x0, z0] = pts[i], [ux, uz, len] = dirs[i];
     if (i === 0) put(x0, z0, ...side(0));
     // Drape points inside the segment (plain side offset), then its end (a mitre).
-    const n = Math.max(1, Math.ceil(len / DRAPE_M));
-    for (let s = 1; s < n; s++) put(x0 + ux * len * (s / n), z0 + uz * len * (s / n), -uz * hw, ux * hw);
+    // (where the centreline or either edge crosses the drawn ground's edges, so each
+    // stretch of every edge lies on one terrain triangle).
+    const [x1, z1] = pts[i + 1], sx = -uz * hw, sz = ux * hw;
+    const ts = [...new Set([0, 1, -1].flatMap((k) => ground.cuts(x0 + k * sx, z0 + k * sz, x1 + k * sx, z1 + k * sz)))].sort((a, b) => a - b);
+    for (let k = 0; k < ts.length; k++) if (k === 0 || ts[k] - ts[k - 1] > 1e-4) put(x0 + (x1 - x0) * ts[k], z0 + (z1 - z0) * ts[k], sx, sz);
     put(pts[i + 1][0], pts[i + 1][1], ...side(i + 1));
   }
 }
@@ -136,13 +181,14 @@ function polygon(mesh, flat, lift, tiles) {
 }
 
 // Roads, railways (one mesh) and taxiways and aprons (another), or null where none.
-export function featureGroundData(f, tiles) {
+export function featureGroundData(f, tiles, segments = null) {
+  const ground = drawnGround(tiles, segments);
   const roads = new Mesh(), rail = new Mesh(), paved = new Mesh(), taxilines = new Mesh();
-  for (const [cls, lines] of Object.entries(f.roads ?? {})) for (const line of lines) ribbon(roads, line, ROAD_WIDTH_M[cls] ?? 7, ROAD_LIFT_M, tiles);
-  for (const line of f.rail ?? []) ribbon(rail, line, RAIL_WIDTH_M, ROAD_LIFT_M, tiles);
+  for (const [cls, lines] of Object.entries(f.roads ?? {})) for (const line of lines) ribbon(roads, line, ROAD_WIDTH_M[cls] ?? 7, ROAD_LIFT_M, ground);
+  for (const line of f.rail ?? []) ribbon(rail, line, RAIL_WIDTH_M, ROAD_LIFT_M, ground);
   for (const line of f.taxiway ?? []) {
-    ribbon(paved, line, TAXIWAY_WIDTH_M, PAVED_LIFT_M, tiles);
-    ribbon(taxilines, line, TAXILINE_WIDTH_M, PAVED_LIFT_M + 0.02, tiles); // the yellow centreline
+    ribbon(paved, line, TAXIWAY_WIDTH_M, PAVED_LIFT_M, ground);
+    ribbon(taxilines, line, TAXILINE_WIDTH_M, PAVED_LIFT_M + 0.02, ground); // the yellow centreline
   }
   for (const ring of f.apron ?? []) polygon(paved, ring, PAVED_LIFT_M - 0.02, tiles);
   return { roads: roads.arrays(), rail: rail.arrays(), paved: paved.arrays(), taxilines: taxilines.arrays() };
