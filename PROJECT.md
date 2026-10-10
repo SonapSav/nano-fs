@@ -1447,6 +1447,20 @@ landmarks; later night lighting, shadows, haze.
     each bridge is built on its own (a failure leaves out only that bridge, with a console
     warning); Sheikh Zayed's spine and decks are collected aside and fall back to plain
     decks if the structure cannot be drawn (test_viewer_bridges.py).
+  - [x] Bridge decks disconnected from their roads (2026-10-10, the owner's camera view
+    of Sheikh Zayed Bridge's east end). Cause (scenery_bridges.py profile): the deck's
+    ends were pinned to the ground but its ramps capped at 5 %, so where the water (and
+    its clearance) came closer to an end than the ramp could climb, the deck jumped at
+    its first metres (Sheikh Zayed: 1.6 and 3.4 m; the 1 m over-land clearance did the
+    same beside every end). The old test skipped the end segments. Now: the ramp from a
+    road end is as steep as it must be (only there); the over-land clearance gives way
+    to it near the ends; an end over water (OSM splits bridges where ramps branch, e.g.
+    Sheikh Khalifa) keeps the clearance instead of dropping to the water; ordinary
+    bridges lower their assumed 8 m clearance where the approach is too short for an
+    8 % ramp (at least 1 m above the water); landmarks keep their published clearance.
+    Bridges with a step or ramp over 8 %: 651 of 686 -> 65 (over 12 %: 14, all
+    continuous). Sheikh Zayed's ramps 5.8 and 7 %; Sheikh Khalifa's ends 16-18 % (its
+    OSM ways stop short of the long approach viaducts). Tests now include the ends.
   - [x] Lighting (2026-10-10, the owner's go-ahead for lighting and night lighting):
     - Sun shadows over the whole region (`viewer/sunShadows.js`; was: only the landmark
       nearest the camera). One map for the sun framing a square of ground ahead of the

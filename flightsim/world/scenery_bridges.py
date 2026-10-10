@@ -6,7 +6,8 @@ land it crosses. The deck runs from its two ends (where OSM's bridge way meets t
 road on the ground: their ground heights) in a straight line, raised where it must
 clear what is under it: over land 1 m above the ground (an overpass's embankments are in
 the ground model; the deck spans between them), over water `clearance_m` above it, with
-ramps no steeper than `grade`. A landmark bridge (the region file's `bridges`) sets its
+ramps no steeper than `grade` (steeper where a short bridge must reach its clearance
+from its ends: the deck always meets the roads). A landmark bridge (the region file's `bridges`) sets its
 own clearance, grade and structure; the viewer (viewer/bridges.js) builds the decks,
 piers and the landmarks' superstructures. The physics flies through bridges as through
 buildings.
@@ -82,10 +83,17 @@ def width_m(chain: list[dict]) -> float:
     return float(CLASS_WIDTH_M.get(w["cls"], 7))
 
 
-def profile(line: np.ndarray, ground, water, clearance_m: float = WATER_CLEARANCE_M, grade: float = GRADE, depth_m: float = DECK_DEPTH_M) -> dict:
+MAX_GRADE = 0.08  # ordinary bridges: their clearance over water gives way to ramps steeper than this (project choice)
+
+
+def profile(line: np.ndarray, ground, water, clearance_m: float = WATER_CLEARANCE_M, grade: float = GRADE, depth_m: float = DECK_DEPTH_M,
+            strict: bool = False) -> dict:  # fmt: skip
     """The deck along a polyline ([[x, z], ...]): {"pts": [[x, z, road_y, ground_y, water], ...],
     "length_m"}: the road surface's height, `clearance_m` + `depth_m` above water.
-    `ground(x, z)` -> height; `water(x, z)` -> bool."""
+    `ground(x, z)` -> height; `water(x, z)` -> bool. `strict` (landmarks: a published
+    clearance): the clearance holds however steep the ramps; otherwise it is lowered
+    (to the deck's depth + 1 m at least) where reaching it from a road end would take
+    ramps steeper than MAX_GRADE."""
     seg = np.diff(line, axis=0)
     lens = np.hypot(seg[:, 0], seg[:, 1])
     cum = np.concatenate([[0.0], np.cumsum(lens)])
@@ -97,11 +105,35 @@ def profile(line: np.ndarray, ground, water, clearance_m: float = WATER_CLEARANC
     # SEA_BAND_M of sea level; its surface is sea level.
     wet = np.array([water(x, z) for x, z in zip(xs, zs)]) | (g <= SEA_BAND_M)
     need = np.where(wet, clearance_m + depth_m, g + LAND_CLEARANCE_M)
-    need[0] = need[-1] = -np.inf  # the ends are the roads they join, not ground to clear
-    # Raised where needed, ramps no steeper than `grade` (the upper envelope of cones).
+    # An end on land meets the road there (its ground). An end over water is where the
+    # bridge continues as another piece (OSM splits bridges where ramps branch): it keeps
+    # the clearance, as that piece does, so the two meet.
+    road = [not wet[0], not wet[-1]]
+    e0 = g[0] if road[0] else need[0]
+    e1 = g[-1] if road[1] else need[-1]
+    if not strict:
+        reach = np.minimum(e0 + MAX_GRADE * s if road[0] else np.inf, e1 + MAX_GRADE * (L - s) if road[1] else np.inf)
+        need = np.where(wet, np.maximum(depth_m + 1.0, np.minimum(need, reach)), need)
+    # Over land the 1 m is a soft aim: near the ends it gives way to a ramp from the road.
+    need = np.where(wet, need, np.minimum(need, np.minimum(e0 + grade * s, e1 + grade * (L - s))))
+    if road[0]:
+        need[0] = -np.inf
+    if road[1]:
+        need[-1] = -np.inf
+    # Raised where needed, ramps no steeper than `grade` (the upper envelope of cones)...
     raise_ = np.max(need[None, :] - grade * np.abs(s[:, None] - s[None, :]), axis=1)
-    deck = np.maximum(np.interp(s, [0, L], [g[0], g[-1]]), raise_)
-    deck[0], deck[-1] = g[0], g[-1]  # the ends meet the roads on the ground
+    # ... except where an end on land is too close to the water for that: there the ramp
+    # from the road is as steep as it must be to reach the clearance (no step at the end).
+    inner = np.isfinite(need) & wet
+    for on, e, dist in ((road[0], e0, s), (road[1], e1, L - s)):
+        if on and inner.any():
+            steep = max(grade, float(((need[inner] - e) / np.maximum(dist[inner], STEP_M)).max()))
+            raise_ = np.minimum(raise_, e + steep * dist)
+    deck = np.maximum(np.interp(s, [0, L], [e0, e1]), raise_)
+    if road[0]:
+        deck[0] = e0  # the ends meet the roads on the ground
+    if road[1]:
+        deck[-1] = e1
     keep = np.isin(s, cum) | (np.mod(s, SAMPLE_M) < 1e-6) | (s == L)
     pts = [[round(float(x), 1), round(float(z), 1), round(float(d), 2), round(float(h), 2), int(w)]
            for x, z, d, h, w, k in zip(xs, zs, deck, g, wet, keep) if k]  # fmt: skip
@@ -119,7 +151,8 @@ def build_bridges(ways: list[dict], ground, water, landmarks: list[dict] | None 
         names = {w["name"] for w in chain if w["name"]}
         mark = next((m for m in landmarks or [] if set(m.get("ways", [])) & set(ids) or (m.get("osm_name") in names)), None)
         m = mark or {}
-        prof = profile(_polyline(chain), ground, water, m.get("clearance_m", WATER_CLEARANCE_M), m.get("grade", GRADE), m.get("deck_depth_m", DECK_DEPTH_M))
+        prof = profile(_polyline(chain), ground, water, m.get("clearance_m", WATER_CLEARANCE_M), m.get("grade", GRADE), m.get("deck_depth_m", DECK_DEPTH_M),
+                       strict=bool(mark))  # fmt: skip
         entry = {"ids": ids, "kind": chain[0]["kind"], "cls": chain[0]["cls"], "name": next(iter(sorted(names)), None),
                  "width_m": round(width_m(chain), 1), "depth_m": m.get("deck_depth_m", DECK_DEPTH_M), **prof}  # fmt: skip
         if mark:
