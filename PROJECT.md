@@ -1305,6 +1305,12 @@ landmarks; later night lighting, shadows, haze.
     centreline or either edge crosses a grid line or quad diagonal, each vertex at the
     mesh's height under it; a test checks the road clears a bumpy mesh everywhere.
     Approach view: 767k -> 883k triangles, same draw calls and frame time.
+  - [ ] Known limitation (2026-10-10, the owner: "just a few" spots left, not worth the
+    cost for now): terrain can still show through a road where a terrain grid point lies
+    inside the road's width on a sharp bump (the edges are exact, the middle is not), and
+    roads on bridges and overpasses are draped onto the ground below (FABDEM is bare
+    earth; OSM bridge tags are not used yet). Fix if a spot matters: split ribbons at
+    interior grid points; for bridges see the bridges item.
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the
     flown aircraft's static parts (45 meshes), palms and bushes across tiles (~50).
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings
