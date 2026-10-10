@@ -317,7 +317,8 @@ def extract_parts(pbf_path, geodesy: geo.Geodesy, sites: dict[str, tuple[float, 
 
 def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: float, tile_m: float, capture: set | None = None) -> dict:
     """{(ix, iz): {"roads": {class: [polyline, ...]}, "rail": [...], "taxiway": [...],
-    "apron": [ring, ...], "buildings": [[height_m, source, ring], ...]}} in world x (east),
+    "apron": [ring, ...], "buildings": [[height_m, source, ring], ...], "wall": [polyline, ...],
+    "fence": [polyline, ...]}} (barrier=wall / fence: walls and fences) in world x (east),
     z (south) metres rounded to 0.1, for the tiles of the region. Lines are cut at tile
     edges; areas go to the tile of their centroid (outer rings only). `capture`: OSM
     objects ("way/<id>", "relation/<id>") whose first outer ring and its inner rings are
@@ -334,7 +335,7 @@ def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: fl
     bridges: list[dict] = []
 
     def tile(key):
-        return tiles.setdefault(key, {"roads": {}, "rail": [], "taxiway": [], "apron": [], "buildings": []})
+        return tiles.setdefault(key, {"roads": {}, "rail": [], "taxiway": [], "apron": [], "buildings": [], "wall": [], "fence": []})
 
     def xz(lat, lon):
         north, east = geodesy.to_map(math.radians(lat), math.radians(lon))
@@ -355,7 +356,7 @@ def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: fl
         tile((math.floor(cx / tile_m), math.floor(cz / tile_m)))[kind].append(flat if extra is None else [*extra, flat])
 
     fp = (osmium.FileProcessor(str(pbf_path)).with_areas(osmium.filter.KeyFilter("building", "aeroway")).with_locations()
-          .with_filter(osmium.filter.KeyFilter("highway", "railway", "aeroway", "building")))  # fmt: skip
+          .with_filter(osmium.filter.KeyFilter("highway", "railway", "aeroway", "building", "barrier")))  # fmt: skip
     for o in fp:
         tags = o.tags
         if o.is_area():
@@ -385,7 +386,9 @@ def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: fl
             continue
         hw, rw, aw = tags.get("highway"), tags.get("railway"), tags.get("aeroway")
         cls = (hw or "").removesuffix("_link") if hw else None
-        kind = "roads" if cls in ROAD_WIDTH_M else "rail" if rw == "rail" else "taxiway" if aw == "taxiway" else None
+        bar = tags.get("barrier")
+        kind = ("roads" if cls in ROAD_WIDTH_M else "rail" if rw == "rail" else "taxiway" if aw == "taxiway"
+                else bar if bar in ("wall", "fence") else None)  # fmt: skip
         if kind is None:
             continue
         try:

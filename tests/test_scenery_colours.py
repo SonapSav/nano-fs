@@ -23,3 +23,27 @@ def test_roof_colours():
     assert c[0] == (200 << 16) | (100 << 8) | 50
     assert c[1] is None
     assert c[2] == (10 << 16) | (20 << 8) | 30
+
+
+def test_road_samples_and_water():
+    from flightsim.world.scenery_colours import _along, _runs, _samples
+
+    pts = _along([1000.0, 2000.0, 1010.0, 2000.0])  # 10 m east, every 2 m
+    assert len(pts) == 6 and pts[-1].tolist() == [1010.0, 2000.0]
+    img = np.zeros((3, 50, 50), np.uint8)
+    img[:, :, :] = np.array([70, 66, 58], np.uint8)[:, None, None]  # asphalt
+    mask = np.zeros((50, 50), bool)
+    mask[:, :8] = True  # only the first 8 m are 1 m imagery
+    rows = _samples(img, mask, pts, 1000.0, 2000.0)
+    assert len(rows) == 4 and (rows == [70, 66, 58]).all()
+    pts = [[0, 0, 5, 5, 0], [10, 0, 6, 5, 0], [20, 0, 9, 0, 1], [30, 0, 9, 0, 1], [40, 0, 6, 5, 0], [50, 0, 5, 5, 0]]
+    assert _runs(pts) == [pts[:2], pts[4:]]  # the bridge's stretches over land
+
+
+def test_apron_points_inside_only():
+    from flightsim.world.scenery_colours import _apron_points
+
+    L = [0, 0, 40, 0, 40, 20, 20, 20, 20, 40, 0, 40]  # an L shape
+    p = _apron_points(L, 4.0)
+    assert len(p) and not ((p[:, 0] > 20) & (p[:, 1] > 20)).any()  # nothing in the missing corner
+    assert ((p[:, 0] > 20) & (p[:, 1] < 20)).any() and ((p[:, 0] < 20) & (p[:, 1] > 20)).any()

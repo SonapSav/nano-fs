@@ -1463,6 +1463,33 @@ landmarks; later night lighting, shadows, haze.
     (landmarks.js builds it; without one, the old OSM-based build). OSM's dome tops (43 m
     gallery domes, 65 m side domes) disagree with the model and are no longer used.
     Frame time near it ~5 ms (this iGPU). test_viewer_grand_mosque.py.
+  - [x] Roads, paving and bridge decks the imagery's colour (2026-10-11, the owner: "go
+    ahead with B + C and A(b)", and a photo from Al Bateen's tarmac). The colour step
+    (`world/scenery_colours.py colour_features`, after the imagery) measures the 1 m
+    imagery's median colour under OSM's road centrelines per tile and road class, along
+    taxiways, inside aprons, along each bridge's stretches over land (a high deck seen at
+    an angle lies beside its true place) and along runways (a quarter width off the
+    centreline, beside the markings); classes with too few 1 m samples take the region's
+    median. Stored in the features files (`colours`), bridges.json and airfields.json.
+    The viewer draws roads, taxiways, aprons, bridge decks and runway asphalt in those
+    colours, brightened and lit as the ground's imagery (x1.4, Lambert), so drawn and
+    photographed roads match. Found on the way, in the 1 m imagery itself: asphalt was
+    crushed to maroon-black (#24170d), from the colour matching: fitted with the sea in
+    (asphalt matched to deep water) and per band (dark greys turned red); now land only,
+    one brightness curve with a colour balance per tile, darks no darker than the mid
+    tones' gain: asphalt a neutral dark grey (~#313429). The "dark interchanges" near
+    the Grand Mosque I had called real dark planting were largely this artefact.
+    Runway lights by day: a 0.5 m fitting, not a 5 m glow (the owner's photo: a sun-like
+    ball). Walls and fences from OSM (barrier=wall / fence, extracted per tile):
+    upright strips on the drawn ground, walls 3 m (render), fences 2.4 m (chain-link
+    pattern, see-through); Al Bateen's perimeter walls among them.
+  - [ ] Building heights per building (the owner, 2026-10-11: "all buildings look the
+    same at height"). 9 in 10 buildings take GHS-BUILT-H's 100 m cell average (55
+    distinct values region-wide). Dataset search under way: 3D-GloBFP (CC BY 4.0, 2020,
+    per footprint, grid 1639 covers Abu Dhabi) checked against OSM's tagged heights and
+    levels: unusable here (towers of 254-342 m given 23-56 m, 3-4 m buildings given
+    15-30 m; correlation ~0.6). Next: GlobalBuildingAtlas (TUM, 3 m height raster,
+    2019, ~6 m RMSE in Asia), then our own shadow measurement in the 1 m imagery.
   - [ ] Discuss later (the owner, 2026-10-10): surface textures for the Grand Mosque (and
     then other landmarks and ordinary buildings). Options put forward: (1) galleries as
     open arcades in the shader (dark pointed-arch recesses on paired columns, faked

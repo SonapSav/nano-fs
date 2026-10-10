@@ -19,6 +19,7 @@ const MAX_PX = 40;
 const VERTEX = `
 attribute vec3 color;
 uniform float sizeM;
+uniform float daySizeM; // by day the fitting itself, not a glow (lights that shine by day too)
 uniform float scale; // pixels per metre at 1 m distance: viewport height / (2 tan(fov / 2))
 uniform float nightLevel;
 uniform float dayToo;
@@ -32,7 +33,8 @@ void main() {
   vOn = max(nightLevel, dayToo);
   vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
   gl_Position = projectionMatrix * mvPosition;
-  gl_PointSize = vOn > 0.001 ? clamp(sizeM * scale / max(-mvPosition.z, 1.0), ${MIN_PX.toFixed(1)}, ${MAX_PX.toFixed(1)}) : 0.0;
+  float worldM = mix(daySizeM, sizeM, nightLevel);
+  gl_PointSize = vOn > 0.001 ? clamp(worldM * scale / max(-mvPosition.z, 1.0), ${MIN_PX.toFixed(1)}, ${MAX_PX.toFixed(1)}) : 0.0;
   #include <logdepthbuf_vertex>
   #include <fog_vertex>
 }`;
@@ -54,9 +56,9 @@ void main() {
   #include <fog_fragment>
 }`;
 
-export function lightMaterial(sizeM = 6, { dayToo = 0 } = {}) {
+export function lightMaterial(sizeM = 6, { dayToo = 0, daySizeM = 0.5 } = {}) {
   const m = new THREE.ShaderMaterial({
-    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { sizeM: { value: sizeM }, scale: { value: 500 }, dayToo: { value: dayToo } }]),
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { sizeM: { value: sizeM }, daySizeM: { value: dayToo ? daySizeM : sizeM }, scale: { value: 500 }, dayToo: { value: dayToo } }]),
     vertexShader: VERTEX,
     fragmentShader: FRAGMENT,
     blending: THREE.AdditiveBlending,

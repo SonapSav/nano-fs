@@ -242,7 +242,7 @@ export function addRunwayLights(scene, rw = PROCEDURAL_RUNWAY) {
 }
 
 let runwayLights = null;
-const runwayLightMaterial = () => (runwayLights ??= lightMaterial(5, { dayToo: 0.45 })); // a glow larger than the fitting (project choice)
+const runwayLightMaterial = () => (runwayLights ??= lightMaterial(5, { dayToo: 0.3, daySizeM: 0.5 })); // at night a glow larger than the fitting, by day the fitting (project choices)
 
 // PAPI (precision approach path indicator), FAA L-880 4-box siting for a 3 deg glide path
 // (manufacturer manual following FAA AC 150/5345-28 / 150/5340-30): on the left of the

@@ -10,6 +10,7 @@
 import * as THREE from "three";
 import { steel, stone } from "./landmarkKit.js";
 import { lightMaterial, lightPoints } from "./nightLights.js";
+import { imageryColour } from "./featureGeometry.js";
 
 const TILE_M = 4000;
 const VIEW_M = 16000;
@@ -21,9 +22,11 @@ const SEA_FLOOR_M = -4; // piers in water go this far down (out of sight)
 // --- Geometry collection -------------------------------------------------------------------
 
 class Collector {
-  constructor() {
+  constructor(colours = false) {
     this.pos = [];
     this.nrm = [];
+    this.col = colours ? [] : null; // per vertex, the current `paint`
+    this.paint = [1, 1, 1];
   }
   // A triangle, its face normal turned toward `hint` (when given).
   tri(a, b, c, hint) {
@@ -37,6 +40,7 @@ class Collector {
     for (const p of [a, b, c]) {
       this.pos.push(p.x, p.y, p.z);
       this.nrm.push(n.x, n.y, n.z);
+      this.col?.push(...this.paint);
     }
   }
   quad(a, b, c, d, hint) {
@@ -46,12 +50,14 @@ class Collector {
   absorb(other) {
     for (let i = 0; i < other.pos.length; i++) this.pos.push(other.pos[i]);
     for (let i = 0; i < other.nrm.length; i++) this.nrm.push(other.nrm[i]);
+    if (this.col) for (let i = 0; i < other.pos.length / 3; i++) this.col.push(...(other.col ? other.col.slice(3 * i, 3 * i + 3) : this.paint));
   }
   geometry() {
     if (!this.pos.length) return null;
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.Float32BufferAttribute(this.pos, 3));
     g.setAttribute("normal", new THREE.Float32BufferAttribute(this.nrm, 3));
+    if (this.col) g.setAttribute("color", new THREE.Float32BufferAttribute(this.col, 3));
     g.computeBoundingSphere();
     return g;
   }
@@ -129,6 +135,10 @@ function waterRun(p) {
   });
   return best;
 }
+
+// A deck's road colour: the bridge's colour in the imagery, brightened as the ground's
+// imagery (featureGeometry.js imageryColour); older builds dark asphalt.
+const deckPaint = (b) => (b.colour !== undefined ? imageryColour(b.colour) : [0.042, 0.045, 0.048]);
 
 // --- Deck and piers -----------------------------------------------------------------------
 
@@ -403,7 +413,9 @@ export class Bridges {
     this.group = new THREE.Group();
     scene.add(this.group);
     this.materials = {
-      road: new THREE.MeshStandardMaterial({ color: 0x3a3c3f, roughness: 0.95, metalness: 0, envMapIntensity: 0.3 }), // asphalt
+      // The deck's road: each bridge's colour in the imagery (bridges.json `colour`,
+      // scenery_colours.py), lit as the ground's imagery (vertex colours, Lambert).
+      road: new THREE.MeshLambertMaterial({ vertexColors: true }),
       concrete: stone(0xc7c2b6, { roughness: 0.75, key: "bridge-concrete" }),
       steel: steel(),
       paint: new THREE.MeshStandardMaterial({ color: 0x7d888c, roughness: 0.5, metalness: 0.6, envMapIntensity: 0.8 }),
@@ -429,7 +441,10 @@ export class Bridges {
         this._landmark(cols, decks);
       } catch (e) {
         console.warn(`bridge ${name}: ${e.message}; drawn as plain decks`);
-        for (const d of decks) deck(d.b, d.p, d.cols, () => d.b.depth_m, spacedPiers(d.p, PIER_SPACING_M.water));
+        for (const d of decks) {
+          d.cols.road.paint = deckPaint(d.b);
+          deck(d.b, d.p, d.cols, () => d.b.depth_m, spacedPiers(d.p, PIER_SPACING_M.water));
+        }
       }
     }
     this._meshes(tiles);
@@ -453,7 +468,7 @@ export class Bridges {
   _one(b, tiles, landmarks) {
     const p = centreline(b), mid = p[Math.floor(p.length / 2)];
     const key = `${Math.floor(mid.x / TILE_M)},${Math.floor(mid.z / TILE_M)}`;
-    if (!tiles.has(key)) tiles.set(key, { road: new Collector(), concrete: new Collector(), steel: new Collector(), paint: new Collector(), white: new Collector(), tubes: [], x: (Math.floor(mid.x / TILE_M) + 0.5) * TILE_M, z: (Math.floor(mid.z / TILE_M) + 0.5) * TILE_M });
+    if (!tiles.has(key)) tiles.set(key, { road: new Collector(true), concrete: new Collector(), steel: new Collector(), paint: new Collector(), white: new Collector(), tubes: [], x: (Math.floor(mid.x / TILE_M) + 0.5) * TILE_M, z: (Math.floor(mid.z / TILE_M) + 0.5) * TILE_M });
     const cols = { ...tiles.get(key), lamps: this.lamps }, d = { b, p };
     const kind = b.structure?.kind;
     b.depth_m ??= 1.8; // builds before 2026-10-10 did not record it (scenery_bridges.py DECK_DEPTH_M)
@@ -473,6 +488,7 @@ export class Bridges {
       return;
     }
     piers ??= spacedPiers(p, p.some((q) => q.wet) ? PIER_SPACING_M.water : PIER_SPACING_M.land);
+    cols.road.paint = deckPaint(b);
     deck(b, p, cols, depthAt, piers);
   }
 
@@ -483,7 +499,8 @@ export class Bridges {
     const white = new Collector();
     const spine = waveArch(decks, white);
     const parts = decks.map((d) => {
-      const own = { road: new Collector(), white: new Collector() };
+      const own = { road: new Collector(true), white: new Collector() };
+      own.road.paint = deckPaint(d.b);
       const piers = spacedPiers(d.p, d.p.some((q) => q.wet) ? PIER_SPACING_M.water : PIER_SPACING_M.land).filter((s) => {
         const q = at(d.p, s);
         return !spine.onSpine(q.x, q.z);

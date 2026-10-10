@@ -11,6 +11,7 @@ export function runwayDescriptor(rw) {
   const len = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / len, uz = (bz - az) / len;
   return {
     ref: rw.ref, icao: rw.airport?.icao ?? null, widthM: rw.width_m, lengthM: rw.length_m,
+    colour: rw.colour ?? null, // its asphalt in the imagery (0xRRGGBB; scenery_colours.py), or null
     pavement: [xz(a.pavement), xz(b.pavement)],
     ends: [
       { ident: a.ident, x: ax, z: az, y: a.elevation_m, dx: ux, dz: uz },

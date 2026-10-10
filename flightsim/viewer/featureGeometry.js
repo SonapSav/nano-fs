@@ -32,7 +32,10 @@ class Mesh {
   vertex(x, y, z, nx, ny, nz, c, u = 0, v = 0, w = 0) {
     this.pos.push(x, y, z);
     this.nrm.push(nx, ny, nz);
-    if (this.col) this.col.push(c[0], c[1], c[2]);
+    if (this.col) {
+      const k = c ?? this.paint; // a vertex's own colour, or the mesh's current paint
+      this.col.push(k[0], k[1], k[2]);
+    }
     if (this.uv) this.uv.push(u, v, w);
     return this.pos.length / 3 - 1;
   }
@@ -183,16 +186,26 @@ function polygon(mesh, flat, lift, tiles) {
   for (let k = 0; k < tris.length; k += 3) mesh.idx.push(base + tris[k], base + tris[k + 2], base + tris[k + 1]);
 }
 
-// Roads, railways (one mesh) and taxiways and aprons (another), or null where none.
+// Roads, railways (one mesh) and taxiways and aprons (another), or null where none. Roads,
+// taxiways and aprons take the colour the imagery shows for them (the features file's
+// `colours`, scenery_colours.py: per road class, taxiways, aprons), brightened as the ground's imagery
+// is (terrain.js imageryGain), as vertex colours; older builds a plain grey.
 export function featureGroundData(f, tiles, segments = null) {
   const ground = drawnGround(tiles, segments);
-  const roads = new Mesh(), rail = new Mesh(), paved = new Mesh(), taxilines = new Mesh();
-  for (const [cls, lines] of Object.entries(f.roads ?? {})) for (const line of lines) ribbon(roads, line, ROAD_WIDTH_M[cls] ?? 7, ROAD_LIFT_M, ground);
+  const roads = new Mesh(true), rail = new Mesh(), paved = new Mesh(true), taxilines = new Mesh();
+  const C = f.colours;
+  const paint = (hex, grey) => (hex !== undefined ? imageryColour(hex) : grey);
+  for (const [cls, lines] of Object.entries(f.roads ?? {})) {
+    roads.paint = C?.roads?.[cls] !== undefined ? imageryColour(C.roads[cls]) : ROAD_GREY;
+    for (const line of lines) ribbon(roads, line, ROAD_WIDTH_M[cls] ?? 7, ROAD_LIFT_M, ground);
+  }
   for (const line of f.rail ?? []) ribbon(rail, line, RAIL_WIDTH_M, ROAD_LIFT_M, ground);
+  paved.paint = paint(C?.taxiway ?? C?.paved, PAVED_GREY);
   for (const line of f.taxiway ?? []) {
     ribbon(paved, line, TAXIWAY_WIDTH_M, PAVED_LIFT_M, ground);
     ribbon(taxilines, line, TAXILINE_WIDTH_M, PAVED_LIFT_M + 0.02, ground); // the yellow centreline
   }
+  paved.paint = paint(C?.apron ?? C?.paved, PAVED_GREY);
   for (const ring of f.apron ?? []) polygon(paved, ring, PAVED_LIFT_M - 0.02, tiles);
   return { roads: roads.arrays(), rail: rail.arrays(), paved: paved.arrays(), taxilines: taxilines.arrays() };
 }
@@ -249,10 +262,53 @@ export function lightData(f, tiles) {
 
 const srgbToLinear = (c) => (c < 0.04045 ? c * 0.0773993808 : Math.pow(c * 0.9478672986 + 0.0521327014, 2.4));
 const linear = (hex) => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255].map((v) => srgbToLinear(v / 255));
+
+// An imagery colour (0xRRGGBB, sRGB) as the drawn surfaces' linear albedo, brightened as
+// the ground's imagery (terrain.js imageryGain), so both look alike under the same light.
+export const IMAGERY_GAIN = 1.4;
+export const imageryColour = (hex) => linear(hex).map((v) => Math.min(1, v * IMAGERY_GAIN));
+const ROAD_GREY = [0x5a, 0x5c, 0x5e].map((v) => srgbToLinear(v / 255)); // builds without colours
+const PAVED_GREY = [0x7d, 0x7f, 0x80].map((v) => srgbToLinear(v / 255));
+
+// Walls and fences (OSM barrier=wall / fence): upright strips along their lines on the
+// drawn ground, both faces, walls WALL_M high and solid (render colour), fences FENCE_M
+// and see-through (the material's mesh pattern). Heights: project choices.
+const WALL_M = 3.0, FENCE_M = 2.4;
+
+export function barrierData(f, tiles, segments = null) {
+  const ground = drawnGround(tiles, segments);
+  const out = {};
+  for (const [kind, h] of [["wall", WALL_M], ["fence", FENCE_M]]) {
+    const m = new Mesh(false, true);
+    for (const line of f[kind] ?? []) {
+      let along = 0;
+      for (let k = 0; k + 3 < line.length; k += 2) {
+        const ax = line[k], az = line[k + 1], bx = line[k + 2], bz = line[k + 3], len = Math.hypot(bx - ax, bz - az);
+        if (len < 0.05) continue;
+        const nx = -(bz - az) / len, nz = (bx - ax) / len;
+        const ts = [0, ...ground.cuts(ax, az, bx, bz), 1];
+        for (let i = 0; i + 1 < ts.length; i++) {
+          const [t0, t1] = [ts[i], ts[i + 1]];
+          const x0 = ax + (bx - ax) * t0, z0 = az + (bz - az) * t0, x1 = ax + (bx - ax) * t1, z1 = az + (bz - az) * t1;
+          const g0 = ground.height(x0, z0) - 0.3, g1 = ground.height(x1, z1) - 0.3;
+          const s0 = along + len * t0, s1 = along + len * t1;
+          const v = m.vertex(x0, g0, z0, nx, 0, nz, null, s0, 0, h);
+          m.vertex(x1, g1, z1, nx, 0, nz, null, s1, 0, h);
+          m.vertex(x0, g0 + h + 0.3, z0, nx, 0, nz, null, s0, h, h);
+          m.vertex(x1, g1 + h + 0.3, z1, nx, 0, nz, null, s1, h, h);
+          m.idx.push(v, v + 2, v + 1, v + 1, v + 2, v + 3);
+        }
+        along += len;
+      }
+    }
+    out[kind] = m.arrays();
+  }
+  return out;
+}
+
 const WALLS = [0xe9e2d2, 0xdcd3bf, 0xf1eee6, 0xcfc4ad, 0xe3dccb].map(linear); // render and stone
 const GLASS = [0x7d93a6, 0x8aa1ae, 0x6f8494].map(linear); // towers
 const ROOF_SHADE = 0.85;
-const IMAGERY_GAIN = 1.4; // terrain.js regionMaterial imageryGain: roofs match the ground's imagery
 const WALL_FROM_ROOF = 0.45; // how much of the roof's colour the walls take (project choice)
 
 // Buildings with at least `minHeightM` (e.g. only towers on distant tiles), one mesh with

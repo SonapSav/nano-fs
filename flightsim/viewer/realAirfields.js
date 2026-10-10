@@ -10,6 +10,7 @@ const HOLD_BAR_M = 23; // across the taxiway
 
 import * as THREE from "three";
 import { addGroundDetail } from "./groundDetail.js";
+import { IMAGERY_GAIN } from "./featureGeometry.js";
 import { addRunwayLights, parkedMatrix } from "./scenery.js";
 import { buildC172 } from "./aircraft.js";
 import { mergeByMaterial } from "./staticMerge.js";
@@ -36,7 +37,7 @@ function runwayTexture(d, thresholdsAlong) {
   c.width = Math.round(L * pxL);
   c.height = Math.round(W * pxW);
   const g = c.getContext("2d");
-  g.fillStyle = "#3b3d40";
+  g.fillStyle = d.colour !== null && d.colour !== undefined ? `#${d.colour.toString(16).padStart(6, "0")}` : "#3b3d40"; // the imagery's asphalt
   g.fillRect(0, 0, c.width, c.height);
   g.fillStyle = "#e8e8e2";
   const [t0, t1] = thresholdsAlong;
@@ -83,6 +84,7 @@ function runwayMesh(d) {
   const along = (e) => (e.x - ax) * ux + (e.z - az) * uz;
   const tex = runwayTexture({ ...d, lengthM: L }, [along(d.ends[0]), along(d.ends[1])]);
   const material = addGroundDetail(new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }), { strength: 0.25, tint: 0, fadeEndM: 250 });
+  if (d.colour !== null && d.colour !== undefined) material.color.setScalar(IMAGERY_GAIN); // lit as the ground's imagery
   return new THREE.Mesh(g, material);
 }
 

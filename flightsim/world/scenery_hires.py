@@ -10,9 +10,11 @@ no data (black). The build:
    the region file like the other sources) and downloads them (each checked against
    the listing's MD5 ETag, so the pinned listing pins every file);
 2. composites them pixel by pixel in the region file's pass order (first with data wins);
-3. matches colours to the Sentinel imagery (`tiles/i_*.jpg`): per tile a curve per band
-   (quantile matching over the tile's footprint: EarthView stretches each tile's
-   contrast on its own), then a smooth gain per band (Sentinel / EarthView, both blurred
+3. matches colours to the Sentinel imagery (`tiles/i_*.jpg`): per tile a brightness
+   curve and a colour balance (quantile matching of the band mean, then a gain per band,
+   over the tile's footprint on land: EarthView stretches each tile's contrast on its
+   own; with water in, asphalt was matched to the deep sea's black, and curves per band
+   turned dark greys maroon), then a smooth gain per band (Sentinel / EarthView, both blurred
    over `match_blur_m`), so tiles and passes taken on different days, through different
    haze, meet without seams and fade into Sentinel;
 4. feathers the edges of the covered area into the Sentinel imagery (`feather_m`) and
@@ -279,7 +281,7 @@ def _composite(tiles: _Tiles, which: np.ndarray, e: np.ndarray, n: np.ndarray, r
         if idx is None:
             continue
         if luts is not None:
-            v = np.stack([np.interp(v[b], np.arange(256), luts[i][b]) for b in range(3)])
+            v = _apply_match(v, luts[i])
         rgb[(slice(None), *idx)] = v
         won[idx] = i
     return rgb, won
@@ -339,12 +341,35 @@ def _quantile_lut(src: np.ndarray, dst: np.ndarray) -> np.ndarray:
     return np.clip(lut, 0, 255)
 
 
+def _fit_match(v: np.ndarray, t: np.ndarray) -> tuple:
+    """A tile's colour match (rgb rows (3, n) of EarthView against Sentinel): one curve
+    for the brightness (quantile matching of the band mean) and one colour balance (a gain
+    per band, medians after the curve). Per band curves turned dark greys maroon (the
+    bands' dark tails differ); this keeps a pixel's hue and fixes the overall cast."""
+    lv, lt = v.mean(0), t.mean(0)
+    lut = _quantile_lut(lv, lt)
+    # Below the median no darker than the mid-tones' gain: the 10 m imagery's darkest land
+    # is deep shadow, and matching to it crushed 1 m asphalt to black.
+    m = max(float(np.median(lv)), 1.0)
+    x = np.arange(256)
+    lut = np.where(x < m, np.maximum(lut, x * np.interp(m, x, lut) / m), lut)
+    scaled = v * (np.interp(lv, np.arange(256), lut) / np.maximum(lv, 1.0))
+    balance = np.median(t, axis=1) / np.maximum(np.median(scaled, axis=1), 1.0)
+    return lut, np.clip(balance / balance.mean(), 0.7, 1.4)
+
+
+def _apply_match(v: np.ndarray, match: tuple) -> np.ndarray:
+    lut, balance = match
+    lv = v.mean(0)
+    return v * (np.interp(lv, np.arange(256), lut) / np.maximum(lv, 1.0)) * np.asarray(balance)[:, None]
+
+
 class _Match:
     """The colour matching on the coarse grid, shared by every chunk: a curve per tile
     (EarthView stretches each tile's contrast on its own), a smooth gain per band over
     the whole area, and the feathering weight."""
 
-    MIN_CELLS = 100  # a tile's own curve needs this many coarse cells with data (of 576)
+    MIN_CELLS = 100  # a tile's own curve needs this many coarse land cells with data (of 576)
 
     def __init__(self, tiles: _Tiles, thumbs: list, sentinel: _Sentinel, e, n, x0: float, hi: dict, log):
         from scipy.ndimage import distance_transform_edt, find_objects
@@ -354,22 +379,29 @@ class _Match:
         k = (np.arange(size) + 0.5) * COARSE_M + x0
         x, z = np.meshgrid(k, k)
         target = sentinel.sample(x, z)
+        land = sentinel.land(x, z)
         read = lambda i: (thumbs[i][0], thumbs[i][1] > 0.9)  # noqa: E731
         which = tiles.overlapping(e, n)
-        # Per tile: its whole footprint with data against Sentinel's colour there.
+        # Per tile: its footprint's land with data against Sentinel's colour there. Land
+        # only: with the sea in, the darkest land (asphalt) was matched to deep water and
+        # came out black.
         self.luts, pooled = {}, {}
         for i in which:
             idx, v = _sample(tiles, i, e, n, *read(i))
             if idx is None:
                 continue
+            on = land[idx]
+            idx, v = tuple(a[on] for a in idx), v[:, on]
+            if not on.any():
+                continue
             t = target[(slice(None), *idx)]
             if v.shape[1] >= self.MIN_CELLS:
-                self.luts[i] = np.stack([_quantile_lut(v[b], t[b]) for b in range(3)])
+                self.luts[i] = _fit_match(v, t)
             p = pooled.setdefault(tiles.rank[i], ([], []))
             p[0].append(v)
             p[1].append(t)
         # Slivers (too little data of their own): their pass's curve.
-        by_pass = {p: np.stack([_quantile_lut(np.concatenate(v, 1)[b], np.concatenate(t, 1)[b]) for b in range(3)]) for p, (v, t) in pooled.items()}
+        by_pass = {p: _fit_match(np.concatenate(v, 1), np.concatenate(t, 1)) for p, (v, t) in pooled.items()}
         for i in which:
             if i not in self.luts and tiles.rank[i] in by_pass:
                 self.luts[i] = by_pass[tiles.rank[i]]

@@ -221,6 +221,36 @@ if (water > 0.01) normal = normalize(mix(normal, normalize((viewMatrix * vec4(-w
   return data.imagery ? material : addGroundDetail(material); // imagery: its own detail (groundTextures.js)
 }
 
+// Fences: a chain-link mesh on posts every 3 m (the facade attribute: metres along, up),
+// grey; between the wires discarded; far off the mesh thins to its average (posts and
+// the top rail stay). Sizes project choices.
+function fenceMaterial() {
+  const material = new THREE.MeshLambertMaterial({ color: 0x8a8d8f, side: THREE.DoubleSide });
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nattribute vec3 facade;\nvarying vec3 vFence;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvFence = facade;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vFence;")
+      .replace(
+        "#include <clipping_planes_fragment>",
+        `#include <clipping_planes_fragment>
+{
+  float post = step(fract(vFence.x / 3.0), 0.03);
+  float rail = step(vFence.z - 0.08, vFence.y);
+  vec2 d = vec2(vFence.x + vFence.y, vFence.x - vFence.y) / 0.12;
+  float w = clamp(fwidth(d.x) * 0.5, 0.0, 1.0);
+  float wire = max(step(fract(d.x), 0.18 + w), step(fract(d.y), 0.18 + w));
+  float keep = max(max(post, rail), w > 0.6 ? 0.0 : wire);
+  if (keep < 0.5 && w <= 0.6) discard;
+  if (w > 0.6 && max(post, rail) < 0.5 && fract(dot(gl_FragCoord.xy, vec2(0.5, 0.25))) > 0.35) discard; // far: thinned to the mesh's average
+}`,
+      );
+  };
+  material.customProgramCacheKey = () => "fence";
+  return material;
+}
+
 // Building facades (featureGeometry.js `facade`: metres along the wall, up from the base,
 // the building's height): window bays every 3.3 m floor and 3.2 m across on ordinary
 // buildings; from 40 m up, glass towers: continuous glass bands with thin floor slabs,
@@ -331,7 +361,7 @@ function featureMeshes(f, mats) {
     g.setIndex(new THREE.BufferAttribute(data.index, 1));
     const m = new THREE.Mesh(g, mats[kind]);
     m.receiveShadow = true; // the sun's shadows (sunShadows.js)
-    m.castShadow = kind === "buildings";
+    m.castShadow = kind === "buildings" || kind === "wall" || kind === "fence";
     group.add(m);
   }
   return group;
@@ -463,10 +493,14 @@ export class Terrain {
     this.featureMats = {
       // Roads and railways give way to a region's 1 m imagery where it covers (imageryClip.js).
       // At night they light up (street lamps) over the imagery too (imageryClip.js).
-      roads: glowAtNight(hideUnderImagery(addGroundDetail(new THREE.MeshLambertMaterial({ color: 0x5a5c5e, side: THREE.DoubleSide, ...pulled }), { strength: 0.25, tint: 0, fadeEndM: 250 })), [1.0, 0.72, 0.45], 0.05),
+      // Their colour: the imagery's (vertex colours, featureGeometry.js featureGroundData).
+      roads: glowAtNight(hideUnderImagery(addGroundDetail(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, ...pulled }), { strength: 0.25, tint: 0, fadeEndM: 250 })), [1.0, 0.72, 0.45], 0.05),
       lights: lightMaterial(3.5),
       rail: hideUnderImagery(new THREE.MeshLambertMaterial({ color: 0x5b4a3e, side: THREE.DoubleSide, ...pulled })),
-      paved: addGroundDetail(new THREE.MeshLambertMaterial({ color: 0x7d7f80, side: THREE.DoubleSide, ...pulled }), { strength: 0.25, tint: 0, fadeEndM: 250 }),
+      paved: addGroundDetail(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, ...pulled }), { strength: 0.25, tint: 0, fadeEndM: 250 }),
+      // Walls (render) and fences (see-through mesh: discarded between the wires).
+      wall: new THREE.MeshLambertMaterial({ color: 0xd2c7b0, side: THREE.DoubleSide }),
+      fence: fenceMaterial(),
       buildings: facadeMaterial(),
       taxilines: new THREE.MeshBasicMaterial({ color: 0xd9a92b, side: THREE.DoubleSide, ...pulled, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }),
     };

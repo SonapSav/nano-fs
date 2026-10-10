@@ -17,7 +17,7 @@ and the viewer read the built files through scenery.py. Steps, each repeatable:
 4b. shore distance: from each water cell to the nearest land (the viewer's shallow water).
 5. features (OpenStreetMap): roads, railways, taxiways, aprons and buildings per tile.
 5b. high-resolution imagery (scenery_hires.py), where the region file asks for it.
-5c. building colours from the imagery (scenery_colours.py).
+5c. building, road, bridge and runway colours from the imagery (scenery_colours.py).
 6. manifest.json: the region, its sources, every file's sha256.
 
 The same sources and code give byte-identical files.
@@ -768,9 +768,9 @@ def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print) -> dict:
     if spec.sources.get("hires_imagery"):
         sources.append(build_hires(spec, out, log))  # and the building colours
     elif imagery:
-        from flightsim.world.scenery_colours import colour_buildings
+        from flightsim.world.scenery_colours import colour_features
 
-        colour_buildings(spec, out, log)
+        colour_features(spec, out, log)
     return write_manifest(spec, sources, out)
 
 
@@ -788,9 +788,9 @@ def build_hires(spec: RegionSpec, out: Path, log=print) -> dict:
     if pin and pin != entry["sha256"]:
         raise ValueError(f"{entry['name']}: sha256 {entry['sha256']} differs from the pinned {pin}; delete it to list again")
     scenery_hires.build_hires(spec, out, log)
-    from flightsim.world.scenery_colours import colour_buildings
+    from flightsim.world.scenery_colours import colour_features
 
-    colour_buildings(spec, out, log)  # from the new imagery
+    colour_features(spec, out, log)  # from the new imagery
     return entry
 
 
@@ -816,7 +816,7 @@ def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_h
             sites[m["name"]] = (cx, cz, max(math.hypot(x - cx, z - cz) for x, z in zip(xs, zs)))
     parts = extract_parts(pbf, g, sites) if sites else {}
     _landmarks(spec, marks, captured, tiles, out, log, parts)
-    empty = {"roads": {}, "rail": [], "taxiway": [], "apron": [], "buildings": []}
+    empty = {"roads": {}, "rail": [], "taxiway": [], "apron": [], "buildings": [], "wall": [], "fence": []}
     counts = {"buildings": 0, "roads": 0}
     for iz in range(lo, hi + 1):
         for ix in range(lo, hi + 1):
