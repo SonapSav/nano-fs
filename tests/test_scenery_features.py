@@ -46,13 +46,15 @@ def test_features_from_osm(tmp_path):
         lat, lon = ll(n, e)
         xml.append(f'<node id="{i}" version="1" lat="{lat:.9f}" lon="{lon:.9f}"/>')
     ways = [(10, [1, 2], {"highway": "primary"}), (11, [3, 4, 5, 6, 3], {"building": "yes", "building:levels": "4"}),
-            (12, [7, 8], {"highway": "footway"})]  # fmt: skip
+            (12, [7, 8], {"highway": "footway"}), (13, [3, 4], {"highway": "trunk", "bridge": "yes", "lanes": "2", "name": "B"})]  # fmt: skip
     for wid, nds, tags in ways:
         xml.append(f'<way id="{wid}" version="1">' + "".join(f'<nd ref="{n}"/>' for n in nds)
                    + "".join(f'<tag k="{k}" v="{v}"/>' for k, v in tags.items()) + "</way>")  # fmt: skip
     xml.append("</osm>")
     (tmp_path / "t.osm").write_text("\n".join(xml))
     f = extract_features(tmp_path / "t.osm", g, (23.9, 53.9, 24.1, 54.1), 8000, 4000)
+    (bridge,) = f.pop("bridges")  # on a bridge: out of the ground roads, whole
+    assert (bridge["id"], bridge["nodes"], bridge["cls"], bridge["lanes"], bridge["name"]) == (13, [3, 4], "trunk", 2.0, "B")
     roads = {k: v["roads"] for k, v in f.items() if v["roads"]}
     assert set(roads) == {(-1, -1), (0, -1), (1, -1)}  # x -100..6000 at z = -100 (north 100): three tiles
     assert all(set(r) == {"primary"} for r in roads.values())  # the footway is left out
