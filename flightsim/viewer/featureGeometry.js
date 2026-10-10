@@ -42,24 +42,52 @@ class Mesh {
   }
 }
 
-// A polyline [x0, z0, x1, z1, ...] as a draped ribbon of the given width.
+// A polyline [x0, z0, x1, z1, ...] as one continuous draped ribbon of the given width:
+// at each bend the edges meet along the bisector (a mitre, its length capped at
+// MITRE_MAX widths so hairpins stay tidy); every DRAPE_M along a segment the ribbon
+// follows the ground.
+const MITRE_MAX = 2;
 function ribbon(mesh, line, width, lift, tiles) {
   const hw = width / 2;
-  for (let k = 0; k + 3 < line.length; k += 2) {
-    const x0 = line[k], z0 = line[k + 1], x1 = line[k + 2], z1 = line[k + 3];
-    const len = Math.hypot(x1 - x0, z1 - z0);
-    if (len < 0.01) continue;
-    const ux = (x1 - x0) / len, uz = (z1 - z0) / len, sx = -uz * hw, sz = ux * hw;
+  // The points (repeated ones dropped) and each segment's unit direction.
+  const pts = [];
+  for (let k = 0; k + 1 < line.length; k += 2) {
+    const x = line[k], z = line[k + 1], last = pts[pts.length - 1];
+    if (!last || Math.hypot(x - last[0], z - last[1]) > 0.01) pts.push([x, z]);
+  }
+  if (pts.length < 2) return;
+  const dirs = [];
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const dx = pts[i + 1][0] - pts[i][0], dz = pts[i + 1][1] - pts[i][1], len = Math.hypot(dx, dz);
+    dirs.push([dx / len, dz / len, len]);
+  }
+  // Side offset at point i: the mitre of its two segments (one at the ends).
+  const side = (i) => {
+    const a = dirs[Math.max(0, i - 1)], b = dirs[Math.min(dirs.length - 1, i)];
+    let nx = -(a[1] + b[1]), nz = a[0] + b[0];
+    const nl = Math.hypot(nx, nz);
+    if (nl < 1e-6) return [-a[1] * hw, a[0] * hw]; // a full reversal
+    nx /= nl;
+    nz /= nl;
+    const cos = nx * -a[1] + nz * a[0]; // against the first segment's own side direction
+    const k = hw / Math.max(cos, 1 / MITRE_MAX);
+    return [nx * k, nz * k];
+  };
+  let prev = -1;
+  const put = (x, z, sx, sz) => {
+    const y = heightAt(tiles, x, z) + lift;
+    const a = mesh.vertex(x + sx, y, z + sz, 0, 1, 0);
+    mesh.vertex(x - sx, y, z - sz, 0, 1, 0);
+    if (prev >= 0) mesh.idx.push(prev, a, prev + 1, prev + 1, a, a + 1);
+    prev = a;
+  };
+  for (let i = 0; i < dirs.length; i++) {
+    const [x0, z0] = pts[i], [ux, uz, len] = dirs[i];
+    if (i === 0) put(x0, z0, ...side(0));
+    // Drape points inside the segment (plain side offset), then its end (a mitre).
     const n = Math.max(1, Math.ceil(len / DRAPE_M));
-    let prev = -1;
-    for (let s = 0; s <= n; s++) {
-      const x = x0 + (x1 - x0) * (s / n), z = z0 + (z1 - z0) * (s / n);
-      const y = heightAt(tiles, x, z) + lift;
-      const a = mesh.vertex(x + sx, y, z + sz, 0, 1, 0);
-      mesh.vertex(x - sx, y, z - sz, 0, 1, 0);
-      if (prev >= 0) mesh.idx.push(prev, a, prev + 1, prev + 1, a, a + 1);
-      prev = a;
-    }
+    for (let s = 1; s < n; s++) put(x0 + ux * len * (s / n), z0 + uz * len * (s / n), -uz * hw, ux * hw);
+    put(pts[i + 1][0], pts[i + 1][1], ...side(i + 1));
   }
 }
 

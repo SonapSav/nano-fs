@@ -132,3 +132,35 @@ def test_landmark_parts_and_courtyard(tmp_path):
     assert (dome["x"], dome["z"], dome["d"], dome["top"]) == (pytest.approx(70, abs=0.2), pytest.approx(-70, abs=0.2), pytest.approx(10, abs=0.2), 43.0)
     assert dome["min"] is None and parts["building_parts"] == []
     assert len(parts["pools"]) == 1 and len(parts["pools"][0]) == 8
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_curved_road_is_one_mitred_strip():
+    """A road with an L-turn and a gentle curve (the owner's photo: teeth on the outside of
+    bends): one continuous strip, every triangle facing the same way (no folds), the outer
+    corner of the L at the mitre (half width x sqrt 2 from the centreline point)."""
+    script = f"""
+    const fg = await import({json.dumps((VIEWER / "featureGeometry.js").as_uri())});
+    const d = await import({json.dumps((VIEWER / "demCore.js").as_uri())});
+    const n = d.HEIGHT_CELLS + 1, h = new Float32Array(n * n).fill(10);
+    const tiles = {{ heights: (ix, iz) => (ix === 0 && iz === 0 ? h : null), landcover: () => null }};
+    const curve = [];
+    for (let a = 0; a <= 90; a += 10) curve.push(500 + 100 * Math.sin(a * Math.PI / 180), 500 + 100 - 100 * Math.cos(a * Math.PI / 180));
+    const out = {{}};
+    for (const [name, line] of [["L", [100, 100, 200, 100, 200, 200]], ["curve", curve]]) {{
+      const g = fg.featureGroundData({{ roads: {{ primary: [line] }} }}, tiles).roads;
+      const P = (i) => [g.position[3 * i], g.position[3 * i + 2]];
+      const signs = new Set();
+      for (let t = 0; t < g.index.length; t += 3) {{
+        const [a, b, c] = [0, 1, 2].map((k) => P(g.index[t + k]));
+        signs.add(Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])));
+      }}
+      out[name] = {{ signs: [...signs], verts: g.position.length / 3, corner: name === "L" ? Math.max(...[...Array(g.position.length / 3).keys()].map((i) => Math.hypot(P(i)[0] - 200, P(i)[1] - 100)).filter((r) => r < 20)) : null }};
+    }}
+    console.log(JSON.stringify(out));
+    """
+    out = json.loads(subprocess.run([NODE, "--input-type=module"], input=script, capture_output=True, text=True, check=True).stdout)
+    for k in ("L", "curve"):
+        assert out[k]["signs"] == [out[k]["signs"][0]] and out[k]["signs"][0] != 0  # no folded or degenerate triangles
+    assert out["L"]["corner"] == pytest.approx(7 * math.sqrt(2), abs=1e-3)  # primary: 14 m wide
+    assert out["L"]["verts"] == 2 * (1 + 4 + 4)  # one strip: start, then 4 drape steps per 100 m segment

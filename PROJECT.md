@@ -1294,6 +1294,10 @@ landmarks; later night lighting, shadows, haze.
     their roots were outside the skin (at x 48-58, 5-7 in up the fuselage is only
     ~13-16 in wide each side; roots were at 18-20 in). Now inside; a test checks every
     strut and leg root is inside the fuselage.
+  - [x] Roads on bends (2026-10-10, the owner's photo: teeth on the outside of curves):
+    each straight piece of an OSM line was its own rectangle; roads, rail, taxiways and
+    their centrelines are now one continuous strip per line with mitred joins (capped
+    at 2 widths) (featureGeometry.js ribbon; test_scenery_features.py).
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the
     flown aircraft's static parts (45 meshes), palms and bushes across tiles (~50).
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings
