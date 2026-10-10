@@ -10,6 +10,7 @@ import * as THREE from "three";
 import { addGroundDetail } from "./groundDetail.js";
 import { CLIP_FRAGMENT, CLIP_GLSL, clipUniforms, hideUnderImagery } from "./imageryClip.js";
 import { DETAIL_GLSL, detailTexture, detailUniforms } from "./groundTextures.js";
+import { glintLevel, glowAtNight, lightMaterial, lightPoints, nightLevel } from "./nightLights.js";
 import { TILE_SIZE_M, WATER_LEVEL_M, tileGeometryData, tileObjectsData } from "./terrainCore.js";
 import { SEA_SURFACE_M, demTileGeometryData, demTileObjectsData } from "./demTiles.js";
 import { world } from "./world.js";
@@ -116,6 +117,7 @@ function tileGeometry(data) {
 // eye. `waterUniforms` are shared by every tile: the scene keeps the time, sun and sky
 // (haze colour) current.
 export const waterUniforms = {
+  waterGlint: glintLevel, // the sun's (or moon's) glint: dimmer at dusk and night
   waterTime: { value: 0 },
   waterSun: { value: new THREE.Vector3(0, 1, 0) },
   waterSky: { value: new THREE.Color(0.7, 0.8, 0.9) },
@@ -129,6 +131,7 @@ uniform float imageryGain;
 uniform float waterTime;
 uniform vec3 waterSun;
 uniform vec3 waterSky;
+uniform float waterGlint;
 varying vec3 vWaterPos;
 // Slope of a sum of directional waves (wavelengths ~6-40 m), for the surface normal.
 vec2 waterSlope(vec2 p, float t) {
@@ -209,7 +212,7 @@ if (water > 0.01) normal = normalize(mix(normal, normalize((viewMatrix * vec4(-w
   float fresnel = 0.02 + 0.98 * pow(1.0 - max(dot(wn, wv), 0.0), 5.0);
   outgoingLight = mix(outgoingLight, waterSky * 0.9, fresnel * water);
   float glint = pow(max(dot(reflect(-wv, wn), normalize(waterSun)), 0.0), 180.0) * step(0.02, waterSun.y);
-  outgoingLight += vec3(1.0, 0.93, 0.8) * glint * 4.0 * water;
+  outgoingLight += vec3(1.0, 0.93, 0.8) * glint * 4.0 * waterGlint * water;
 }
 #include <opaque_fragment>`,
       );
@@ -222,21 +225,23 @@ if (water > 0.01) normal = normalize(mix(normal, normalize((viewMatrix * vec4(-w
 // the building's height): window bays every 3.3 m floor and 3.2 m across on ordinary
 // buildings; from 40 m up, glass towers: continuous glass bands with thin floor slabs,
 // reflecting the haze (Schlick's Fresnel) and the sun. The pattern fades out with
-// distance (it would shimmer). Sizes and colours project choices, by eye.
+// distance (it would shimmer). At night windows light up (nightLights.js). Sizes and
+// colours project choices, by eye.
 function facadeMaterial() {
   const material = new THREE.MeshLambertMaterial({ vertexColors: true });
   material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, waterUniforms);
+    Object.assign(shader.uniforms, waterUniforms, { nightLevel });
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nattribute vec3 facade;\nvarying vec3 vFacade;\nvarying vec3 vFacadePos;\nvarying vec3 vFacadeNormal;")
       .replace("#include <begin_vertex>", "#include <begin_vertex>\nvFacade = facade;\nvFacadePos = (modelMatrix * vec4(position, 1.0)).xyz;\nvFacadeNormal = normalize(mat3(modelMatrix) * normal);");
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nvarying vec3 vFacade;\nvarying vec3 vFacadePos;\nvarying vec3 vFacadeNormal;\nuniform vec3 waterSun;\nuniform vec3 waterSky;\n" +
+      .replace("#include <common>", "#include <common>\nvarying vec3 vFacade;\nvarying vec3 vFacadePos;\nvarying vec3 vFacadeNormal;\nuniform vec3 waterSun;\nuniform vec3 waterSky;\nuniform float waterGlint;\nuniform float nightLevel;\n" +
         "float band(float x, float a, float b, float w) { return smoothstep(a - w, a + w, x) * (1.0 - smoothstep(b - w, b + w, x)); }")
       .replace(
         "#include <color_fragment>",
         `#include <color_fragment>
 float glassAmount = 0.0;
+vec3 nightGlow = vec3(0.0);
 if (vFacade.x >= 0.0) {
   // Darker toward the foot of the wall (the ground and neighbours hide part of the sky
   // there): a cheap ambient occlusion, strongest in the first metres (project choice).
@@ -249,6 +254,20 @@ if (vFacade.x >= 0.0) {
   float glassBand = (1.0 - band(fy, 0.0, 0.12, aa)) * step(vFacade.y, vFacade.z - 0.5);
   glassAmount = mix(window * 0.55, glassBand, tower) * fade;
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.07, 0.09), glassAmount * 0.8);
+  // At night: windows lit at random (about 4 in 10), warm or cool, per window cell and
+  // neighbourhood; beyond the pattern's fade their average glow, so the city still
+  // shines from afar (project choices).
+  if (nightLevel > 0.001) {
+    vec2 cell = vec2(floor(vFacade.x / 3.2), floor(vFacade.y / 3.3)) + floor(vFacadePos.xz / 37.0) * 17.0;
+    float h = fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453);
+    float lit = step(0.6, h) * step(0.8, vFacade.y) * step(vFacade.y, vFacade.z - 1.0);
+    vec3 tint = mix(vec3(1.0, 0.72, 0.42), vec3(0.82, 0.88, 1.0), step(0.85, fract(h * 7.31)));
+    float near = mix(window, glassBand * 0.9, tower) * lit;
+    // Far: each neighbourhood's own share of lit windows (some dark), in its window area.
+    float share = fract(sin(dot(floor(vFacadePos.xz / 37.0), vec2(39.3468, 11.1353))) * 24634.6345);
+    float far = mix(0.33, 0.8, tower) * 0.4 * share * share;
+    nightGlow = tint * mix(far, near, fade) * 1.6;
+  }
 }`,
       )
       .replace(
@@ -258,8 +277,9 @@ if (vFacade.x >= 0.0) {
   float fresnel = 0.04 + 0.96 * pow(1.0 - max(dot(vFacadeNormal, v), 0.0), 5.0);
   outgoingLight = mix(outgoingLight, waterSky * 0.85, min(1.0, fresnel + 0.25) * glassAmount);
   float glint = pow(max(dot(reflect(-v, vFacadeNormal), normalize(waterSun)), 0.0), 120.0) * step(0.02, waterSun.y);
-  outgoingLight += vec3(1.0, 0.93, 0.8) * glint * 3.0 * glassAmount;
+  outgoingLight += vec3(1.0, 0.93, 0.8) * glint * 3.0 * waterGlint * glassAmount;
 }
+outgoingLight += nightGlow * nightLevel;
 #include <opaque_fragment>`,
       );
   };
@@ -299,6 +319,10 @@ function featureMeshes(f, mats) {
   const group = new THREE.Group();
   for (const [kind, data] of Object.entries(f)) {
     if (!data) continue;
+    if (kind === "lights") {
+      group.add(lightPoints(data.position, data.color, mats.lights)); // street and taxiway lights at night
+      continue;
+    }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(data.position, 3));
     g.setAttribute("normal", new THREE.BufferAttribute(data.normal, 3));
@@ -438,7 +462,9 @@ export class Terrain {
     const pulled = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 };
     this.featureMats = {
       // Roads and railways give way to a region's 1 m imagery where it covers (imageryClip.js).
-      roads: hideUnderImagery(addGroundDetail(new THREE.MeshLambertMaterial({ color: 0x5a5c5e, side: THREE.DoubleSide, ...pulled }), { strength: 0.25, tint: 0, fadeEndM: 250 })),
+      // At night they light up (street lamps) over the imagery too (imageryClip.js).
+      roads: glowAtNight(hideUnderImagery(addGroundDetail(new THREE.MeshLambertMaterial({ color: 0x5a5c5e, side: THREE.DoubleSide, ...pulled }), { strength: 0.25, tint: 0, fadeEndM: 250 })), [1.0, 0.72, 0.45], 0.05),
+      lights: lightMaterial(3.5),
       rail: hideUnderImagery(new THREE.MeshLambertMaterial({ color: 0x5b4a3e, side: THREE.DoubleSide, ...pulled })),
       paved: addGroundDetail(new THREE.MeshLambertMaterial({ color: 0x7d7f80, side: THREE.DoubleSide, ...pulled }), { strength: 0.25, tint: 0, fadeEndM: 250 }),
       buildings: facadeMaterial(),
@@ -624,7 +650,7 @@ export class Terrain {
       this.scene.remove(t.objects);
       t.objects.traverse((o) => o.isInstancedMesh && o.dispose());
     }
-    t.mesh?.traverse((o) => o !== t.mesh && o.isMesh && o.geometry !== WATER_QUAD && o.geometry.dispose());
+    t.mesh?.traverse((o) => o !== t.mesh && (o.isMesh || o.isPoints) && o.geometry !== WATER_QUAD && o.geometry.dispose());
     this.tiles.delete(key);
   }
 }

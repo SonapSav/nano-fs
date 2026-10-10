@@ -8,7 +8,7 @@
 import { tileGeometryData, tileObjectsData } from "./terrainCore.js";
 import { demTileGeometryData, demTileObjectsData, neededTiles } from "./demTiles.js";
 import { heightsName, landcoverName, shoreName } from "./demCore.js";
-import { buildingData, featureGroundData } from "./featureGeometry.js";
+import { buildingData, featureGroundData, lightData } from "./featureGeometry.js";
 
 const featuresName = (ix, iz) => `tiles/f_${ix}_${iz}.json`;
 const imageryName = (ix, iz) => `tiles/i_${ix}_${iz}.jpg`;
@@ -66,7 +66,7 @@ async function demBuild(r) {
   let features = null;
   if (geometry && r.buildingsMinM !== null) {
     const f = await fetchTile(region.features, featuresName, "json", r.tx, r.tz);
-    if (f) features = { ...(r.ground ? featureGroundData(f, tiles, r.segments) : {}), buildings: buildingData(f, tiles, r.buildingsMinM) }; // ground features draped on this tile's own mesh
+    if (f) features = { ...(r.ground ? featureGroundData(f, tiles, r.segments) : {}), buildings: buildingData(f, tiles, r.buildingsMinM), lights: lightData(f, tiles) }; // ground features draped on this tile's own mesh; lights for the night
   }
   return { geometry, objects, features };
 }

@@ -197,6 +197,56 @@ export function featureGroundData(f, tiles, segments = null) {
   return { roads: roads.arrays(), rail: rail.arrays(), paved: paved.arrays(), taxilines: taxilines.arrays() };
 }
 
+// Lights at night (nightLights.js): street lamps along the roads, every LAMP_SPACING_M
+// and staggered side to side (both sides of wide roads), LAMP_HEIGHT_M up; blue edge
+// lights along both sides of the taxiways every TAXI_LIGHT_M. Positions and colours
+// (linear, above 1 for the glow), or null where none. Spacings, heights and colours:
+// project choices (LED street lighting, ICAO blue taxiway edges).
+const LAMP_SPACING_M = 36;
+const LAMP_HEIGHT_M = 10;
+const TAXI_LIGHT_M = 30;
+const LAMP_COLOUR = { motorway: [1.2, 1.12, 0.98], trunk: [1.2, 1.12, 0.98] }; // whiter on the highways
+const STREET_COLOUR = [1.25, 0.92, 0.58];
+const TAXI_COLOUR = [0.3, 0.45, 1.6];
+
+// Calls fn(x, z, ux, uz, k) every `step` metres along a polyline (from step / 2).
+function along(line, step, fn) {
+  let next = step / 2, s = 0, k = 0;
+  for (let i = 0; i + 3 < line.length; i += 2) {
+    const ax = line[i], az = line[i + 1], bx = line[i + 2], bz = line[i + 3];
+    const len = Math.hypot(bx - ax, bz - az);
+    if (len < 1e-6) continue;
+    while (next <= s + len) {
+      const t = (next - s) / len;
+      fn(ax + (bx - ax) * t, az + (bz - az) * t, (bx - ax) / len, (bz - az) / len, k++);
+      next += step;
+    }
+    s += len;
+  }
+}
+
+export function lightData(f, tiles) {
+  const pos = [], col = [];
+  const put = (x, z, h, c) => {
+    pos.push(x, heightAt(tiles, x, z) + h, z);
+    col.push(c[0], c[1], c[2]);
+  };
+  for (const [cls, lines] of Object.entries(f.roads ?? {})) {
+    const half = (ROAD_WIDTH_M[cls] ?? 7) / 2, c = LAMP_COLOUR[cls] ?? STREET_COLOUR, both = half >= 7;
+    for (const line of lines) {
+      along(line, LAMP_SPACING_M, (x, z, ux, uz, k) => {
+        for (const side of both ? [1, -1] : [k % 2 ? 1 : -1]) put(x - uz * side * (half + 1), z + ux * side * (half + 1), LAMP_HEIGHT_M, c);
+      });
+    }
+  }
+  for (const line of f.taxiway ?? []) {
+    along(line, TAXI_LIGHT_M, (x, z, ux, uz) => {
+      for (const side of [1, -1]) put(x - uz * side * (TAXIWAY_WIDTH_M / 2), z + ux * side * (TAXIWAY_WIDTH_M / 2), 0.4, TAXI_COLOUR);
+    });
+  }
+  return pos.length ? { position: new Float32Array(pos), color: new Float32Array(col) } : null;
+}
+
 const srgbToLinear = (c) => (c < 0.04045 ? c * 0.0773993808 : Math.pow(c * 0.9478672986 + 0.0521327014, 2.4));
 const linear = (hex) => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255].map((v) => srgbToLinear(v / 255));
 const WALLS = [0xe9e2d2, 0xdcd3bf, 0xf1eee6, 0xcfc4ad, 0xe3dccb].map(linear); // render and stone

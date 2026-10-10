@@ -13,6 +13,7 @@
 // mipmaps, about 180 MB.
 
 import * as THREE from "three";
+import { nightLevel } from "./nightLights.js";
 
 export const SLOTS = 8;
 const MIP_LEVELS = 10; // 512 px chunks down to 1 px
@@ -79,16 +80,16 @@ export function hideUnderImagery(material) {
   const previous = material.onBeforeCompile;
   material.onBeforeCompile = (shader, renderer) => {
     previous?.call(material, shader, renderer);
-    Object.assign(shader.uniforms, clipUniforms);
+    Object.assign(shader.uniforms, clipUniforms, { nightLevel });
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nvarying vec2 vClipXZ;")
       .replace("#include <begin_vertex>", "#include <begin_vertex>\nvClipXZ = (modelMatrix * vec4(position, 1.0)).xz;");
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", `#include <common>\nvarying vec2 vClipXZ;\n${CLIP_GLSL}`)
+      .replace("#include <common>", `#include <common>\nvarying vec2 vClipXZ;\nuniform float nightLevel;\n${CLIP_GLSL}`)
       .replace(
         "#include <clipping_planes_fragment>",
         `#include <clipping_planes_fragment>
-if (clipShown(vClipXZ) > fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))))) discard;`,
+if (clipShown(vClipXZ) * (1.0 - nightLevel) > fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))))) discard; // at night the lit roads show`,
       );
   };
   const previousKey = material.hasOwnProperty("customProgramCacheKey") ? material.customProgramCacheKey.bind(material) : () => "";

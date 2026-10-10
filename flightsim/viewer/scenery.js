@@ -1,6 +1,7 @@
 // Ground fallback, airfield, runway lights, PAPI and windsock. Visual only (sky and light: sky.js).
 
 import * as THREE from "three";
+import { lightMaterial, lightPoints as glowPoints } from "./nightLights.js";
 import { addGroundDetail } from "./groundDetail.js";
 import { AIRFIELD, height as terrainHeight } from "./terrain.js";
 import { buildC172 } from "./aircraft.js";
@@ -230,11 +231,18 @@ export function addRunwayLights(scene, rw = PROCEDURAL_RUNWAY) {
     // Approach lights: bars of 5 lights every 60 m, out to 420 m before the threshold.
     for (let d = 60; d <= 420; d += 60) for (let k = -2; k <= 2; k++) white.push([e.x - e.dx * d + lx * k, e.y + LIGHT_Y + 1, e.z - e.dz * d + lz * k]);
   }
+  // Round glows (nightLights.js), full at night and dimmer by day.
+  const pos = [...white, ...green].flat(), col = [...white.map(() => [1.6, 1.5, 1.25]), ...green.map(() => [0.35, 1.7, 0.6])].flat();
   const group = new THREE.Group();
-  group.add(lightPoints(white, 0xfff6d8, 5), lightPoints(green, 0x3cff6e, 5));
+  const points = glowPoints(new Float32Array(pos), new Float32Array(col), runwayLightMaterial());
+  points.frustumCulled = false;
+  group.add(points);
   scene.add(group);
   return group;
 }
+
+let runwayLights = null;
+const runwayLightMaterial = () => (runwayLights ??= lightMaterial(5, { dayToo: 0.45 })); // a glow larger than the fitting (project choice)
 
 // PAPI (precision approach path indicator), FAA L-880 4-box siting for a 3 deg glide path
 // (manufacturer manual following FAA AC 150/5345-28 / 150/5340-30): on the left of the

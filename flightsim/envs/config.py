@@ -306,7 +306,7 @@ class RouteConfig:
 # Visual conditions a task config may set (viewer only). "auto": time and visibility take
 # the defaults below, clouds follow the flight's wind and turbulence.
 VISUAL_OPTIONS = {
-    "time_of_day": ("auto", "morning", "midday", "afternoon", "evening"),
+    "time_of_day": ("auto", "morning", "midday", "afternoon", "evening", "dusk", "night"),
     "visibility": ("auto", "clear", "normal", "hazy"),
     "clouds": ("auto", "clear", "few", "scattered", "broken"),
 }

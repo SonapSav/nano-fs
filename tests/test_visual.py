@@ -38,7 +38,7 @@ def test_config_sets_and_validates_conditions():
     env.reset(seed=0)
     assert env.visual_conditions() == {"time_of_day": "evening", "visibility": "hazy", "clouds": "clear", "cloud_seed": 0}
     with pytest.raises(ValueError, match="visual.time_of_day"):
-        load_env_config(ENVS / "takeoff.yaml", {"visual": {"time_of_day": "night"}})
+        load_env_config(ENVS / "takeoff.yaml", {"visual": {"time_of_day": "dawn"}})
     plain = load_env_config(ENVS / "takeoff.yaml")
     assert "visual" not in json.loads(plain.config_json)  # absent: the config hash is unchanged
 
@@ -65,7 +65,7 @@ def test_cloud_fields_are_seeded_and_scale_with_the_amount(tmp_path):
         shutil.copy(VIEWER / "vendor" / f, three / f)
     shutil.copytree(VIEWER / "vendor" / "addons", three / "addons")
     (three / "package.json").write_text('{"name":"three","type":"module","exports":{".":"./three.module.js","./addons/*":"./addons/*"}}')
-    for f in ("clouds.js", "sky.js"):
+    for f in ("clouds.js", "sky.js", "nightLights.js"):
         shutil.copy(VIEWER / f, tmp_path / f)
     script = """
 const c = await import("./clouds.js");
@@ -86,4 +86,4 @@ console.log(JSON.stringify({ same: a === b, differs: a !== other, counts: ["clea
     assert clear == 0 < few < scattered < broken
     assert 900 < r["ymin"] and r["ymax"] < 2000  # bases ~3000 ft, tops below ~6500 ft
     assert r["sun"] == pytest.approx([0, 1, 0], abs=1e-9) and r["east"] == pytest.approx([1, 0, 0], abs=1e-9)
-    assert r["times"] == ["morning", "midday", "afternoon", "evening"]
+    assert r["times"] == ["morning", "midday", "afternoon", "evening", "dusk", "night"]

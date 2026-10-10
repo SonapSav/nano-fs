@@ -116,6 +116,7 @@ flightsim/          # installable package (uv_build backend)
                     #     groundTextures.js (close-up sand, paving and plant detail blended into a region's imagery)
                     #     sunShadows.js (a region's sun shadows: one map around the camera, drawn only when it moves)
                     #   haze.js: height-aware haze in every material (replaces three's fog chunks)
+                    #   nightLights.js: night level (from sky.js times dusk / night), light-point glows, lit surfaces
   analysis/         # mode identification, validation maneuvers, validation checks
   atmosphere/       # Dryden turbulence (MIL-F-8785C)
   world/            # terrain height shared with the viewer (bit-identical port of viewer/terrainCore.js);

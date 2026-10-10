@@ -1469,8 +1469,28 @@ landmarks; later night lighting, shadows, haze.
       visibility's `near`, ~95 % at `far` near the ground. From altitude the ground below
       is clearer than the horizon; mid-distances near the ground a little hazier than the
       old linear fog.
-  - [ ] Night lighting (the owner's go-ahead 2026-10-10): dusk and night, lit city,
-    roads, airports, landmarks and bridges, night sky.
+  - [x] Night lighting (2026-10-10, the owner's go-ahead): two new times of day, `dusk`
+    (afterglow, the sky shader's sun 1.5 deg below the horizon) and `night` (moonlight
+    from the east, a starfield: 3000 seeded stars, most faint), in env configs
+    (`visual.time_of_day`), the stream and the viewer's Sky settings. A shared night
+    level (`viewer/nightLights.js`) switches the lights on:
+    - Windows: the facade shader lights about 4 in 10 windows, warm or cool, per window
+      and block; beyond the pattern's fade each block's average glow (some blocks dark).
+    - Street lamps from the OSM roads (featureGeometry.js `lightData`, in the tile
+      worker): every 36 m on 10 m poles, staggered on narrow roads, both sides of wide
+      ones, whiter on motorways; blue taxiway edge lights every 30 m; lamps on every
+      bridge deck. Drawn as round glows (a point shader: world size with a 2.2 px
+      minimum, additive, hazed); roads glow faintly and show over the 1 m imagery at
+      night.
+    - Runway edge, threshold and approach lights: the same glows, dimmer by day.
+    - Landmarks floodlit (stone and gold in a cool white, metal and glass nearly dark);
+      Sheikh Zayed Bridge uplit white with a slowly changing tint (its lighting "changes
+      colours gradually", ZHA; a 90 s cycle, project choice).
+    - Sun and moon glints on water and glass, clouds, and the aircraft's ground shadow
+      dimmed at night.
+    All colours, sizes and strengths by eye (project choices). Frame time at night (this
+    iGPU, 3 views): 4.5-5.3 ms against 3.8-4.7 ms by day (~30 more draw calls).
+    Not done: lit aircraft taxiing lights on the ground, moving traffic.
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the
     flown aircraft's static parts (45 meshes), palms and bushes across tiles (~50).
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings

@@ -36,7 +36,7 @@ def out(tmp_path_factory):
     for f in ("three.module.js", "three.core.js"):
         shutil.copy(VIEWER / "vendor" / f, three / f)
     (three / "package.json").write_text('{"name":"three","type":"module","exports":{".":"./three.module.js"}}')
-    for f in ("terrain.js", "terrainCore.js", "demTiles.js", "demCore.js", "world.js", "roads.js", "roadNet.js", "groundDetail.js", "imageryClip.js", "groundTextures.js"):
+    for f in ("terrain.js", "terrainCore.js", "demTiles.js", "demCore.js", "world.js", "roads.js", "roadNet.js", "groundDetail.js", "imageryClip.js", "groundTextures.js", "nightLights.js"):
         shutil.copy(VIEWER / f, d / f)
     res = subprocess.run([NODE, "--input-type=module", "-e", SCRIPT], cwd=d, capture_output=True, text=True, timeout=120)
     assert res.returncode == 0, res.stderr

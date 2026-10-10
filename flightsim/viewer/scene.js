@@ -20,6 +20,7 @@ import { Landmarks } from "./landmarks.js";
 import { Bridges } from "./bridges.js";
 import { ImageryClip } from "./imageryClip.js";
 import { SunShadows } from "./sunShadows.js";
+import { pointScale } from "./nightLights.js";
 import "./haze.js"; // height-aware haze in every material (patches three's fog chunks)
 import { world } from "./world.js";
 import { groundDetailStrength } from "./groundDetail.js";
@@ -217,10 +218,12 @@ export class FlightScene {
   setVisual({ time_of_day = "afternoon", visibility = "normal", clouds = "few", cloud_seed = 0 } = {}) {
     this.skyLight.setTime(time_of_day);
     this.sunShadows?.invalidate(); // the sun moved
+    this.landmarks.setNight(this.skyLight.night); // floodlights and coloured bridge lighting
+    this.bridges.setNight(this.skyLight.night);
     this.skyLight.setVisibility(visibility);
     this.groundUnder = null; // the shadow follows the new sun (_followGround)
     this._environment(); // reflections of this sky
-    const tint = new THREE.Color(TIMES[this.skyLight.time].sun).lerp(new THREE.Color(0xffffff), 0.55);
+    const tint = new THREE.Color(TIMES[this.skyLight.time].sun).lerp(new THREE.Color(0xffffff), 0.55).multiplyScalar(TIMES[this.skyLight.time].cloud ?? 1);
     this.clouds.setTint(tint);
     this.clouds.set(clouds, cloud_seed);
   }
@@ -326,6 +329,8 @@ export class FlightScene {
     this.realAirfields.build(real ? w.airfields : null);
     this.landmarks.build(real ? w.landmarks : null);
     this.bridges.build(real ? w.bridges : null);
+    this.landmarks.setNight(this.skyLight.night);
+    this.bridges.setNight(this.skyLight.night);
     this.imageryClip.set(w.scenery, real ? w.hires : null);
     this.sunShadows.set(real, QUALITY[this.quality].shadowMap);
     this._environment();
@@ -384,7 +389,7 @@ export class FlightScene {
     sh.camera.position.set(cx, h + 100, cz);
     sh.camera.lookAt(cx, h, cz);
     sh.camera.updateProjectionMatrix();
-    sh.patch.material.opacity = 0.5 * Math.max(0, 1 - agl / 200);
+    sh.patch.material.opacity = 0.5 * Math.max(0, 1 - agl / 200) * (1 - 0.85 * this.skyLight.night); // faint by moonlight
     this.shadowMaskDirty = true;
   }
 
@@ -586,6 +591,8 @@ export class FlightScene {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    // Light points' size (nightLights.js): pixels per metre at 1 m, in drawing-buffer pixels.
+    pointScale.value = (h * this.renderer.getPixelRatio()) / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2));
   }
 
   _bindPointer() {

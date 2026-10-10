@@ -36,7 +36,8 @@ you can fly with a keyboard, gamepad or joystick.
   square, built offline from open data: bare-earth elevation (FABDEM) under the wheels
   and in the view, Sentinel-2 satellite imagery (10 m) with 1 m Satellogic EarthView
   imagery within 25 km of the airport, ESA WorldCover land cover, a sea
-  with waves, reflections and turquoise shallows, a 42 °C summer day with the
+  with waves, reflections and turquoise shallows, sun shadows across the city, haze that thins with height,
+  a lit city at dusk and night (windows, street lamps, runway lights, floodlit landmarks), a 42 °C summer day with the
   prevailing north-westerly wind, and OpenStreetMap runways, roads,
   taxiways, aprons and 110,000 buildings, with date palms and mangroves. The physics
   flies on the same ground the viewer draws, touching the sea ends the flight, and every

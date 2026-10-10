@@ -9,6 +9,7 @@
 
 import * as THREE from "three";
 import { steel, stone } from "./landmarkKit.js";
+import { lightMaterial, lightPoints } from "./nightLights.js";
 
 const TILE_M = 4000;
 const VIEW_M = 16000;
@@ -131,7 +132,12 @@ function waterRun(p) {
 
 // --- Deck and piers -----------------------------------------------------------------------
 
-function deck(b, p, cols, depthAt, pierAt, fascia = cols.concrete) {
+// Street lamps on bridges (their roads are not in the ground's road network): along both
+// edges every LAMP_M, LAMP_H_M up (project choices, as featureGeometry.js lightData).
+const LAMP_M = 36, LAMP_H_M = 10;
+const LAMP_RGB = [1.25, 0.95, 0.62];
+
+function deck(b, p, cols, depthAt, pierAt, fascia = cols.concrete, lamps = cols.lamps) {
   const hw = b.width_m / 2;
   const sec = p.map((q) => {
     const d = depthAt(q.s), y = q.y;
@@ -156,6 +162,13 @@ function deck(b, p, cols, depthAt, pierAt, fascia = cols.concrete) {
     fascia.quad(a.Lp, a.Lpi, c.Lpi, c.Lp, up); // parapet caps
     fascia.quad(a.Rp, a.Rpi, c.Rpi, c.Rp, up);
     fascia.quad(a.Lb, a.Rb, c.Rb, c.Lb, down);
+  }
+  if (lamps) {
+    const L = p[p.length - 1].s;
+    for (let s = LAMP_M / 2; s < L; s += LAMP_M) {
+      const q = at(p, s);
+      for (const side of [1, -1]) lamps.push(q.x + q.nx * side * (hw - 0.5), q.y + LAMP_H_M, q.z + q.nz * side * (hw - 0.5));
+    }
   }
   // Piers: at `pierAt` positions (arc lengths), where the underside is high enough.
   for (const s of pierAt) {
@@ -304,6 +317,7 @@ function waveArch(decks, white) {
     }
   }
   // Lamp posts: white, `lamp_height_m`, curving in over the road, along both outer edges.
+  const lampHeads = [];
   for (const d of decks) {
     const L = d.p[d.p.length - 1].s, hw = d.b.width_m / 2;
     for (let s = st.lamp_spacing_m / 2; s < L; s += st.lamp_spacing_m) {
@@ -313,9 +327,10 @@ function waveArch(decks, white) {
       const H = st.lamp_height_m, along = V(q.ux, 0, q.uz);
       const pts = [P(hw - 0.4, PARAPET_M), P(hw - 0.4, H - 1.4), P(hw - 0.9, H - 0.2), P(hw - 2.0, H), P(hw - 2.8, H - 0.4)];
       for (let k = 0; k + 1 < pts.length; k++) strut(white, pts[k], pts[k + 1], along, k ? 0.3 : 0.4, k ? 0.3 : 0.4);
+      lampHeads.push(pts[4].x, pts[4].y - 0.3, pts[4].z);
     }
   }
-  return { s0: S0, s1: S1, onSpine: (x, z) => { const s = project(x, z); return s >= S0 - 10 && s <= S1 + 10; } };
+  return { s0: S0, s1: S1, lampHeads, onSpine: (x, z) => { const s = project(x, z); return s >= S0 - 10 && s <= S1 + 10; } };
 }
 
 // Al Maqta Bridge: a steel tied (bowstring) arch over each carriageway, spanning the
@@ -399,6 +414,7 @@ export class Bridges {
 
   build(list) {
     this.clear();
+    this.lamps = []; // lamp positions (x, y, z) of every bridge
     const tiles = new Map(), landmarks = new Map();
     for (const b of list ?? []) {
       if (b.pts.length < 2) continue;
@@ -417,6 +433,19 @@ export class Bridges {
       }
     }
     this._meshes(tiles);
+    if (this.lamps.length) {
+      const pos = new Float32Array(this.lamps), col = new Float32Array(pos.length);
+      for (let i = 0; i < col.length; i += 3) col.set(LAMP_RGB, i);
+      this.group.add(lightPoints(pos, col, (this.lampMaterial ??= lightMaterial(3))));
+    }
+  }
+
+  // Night (0-1): Sheikh Zayed Bridge's white structure washed in slowly changing colours
+  // (its lighting changes colour gradually: ZHA), a full cycle in 90 s; saturation and
+  // strength project choices.
+  setNight(night) {
+    this.night = night;
+    if (!night) this.materials.white.emissive.setRGB(0, 0, 0);
   }
 
   // One bridge's deck, piers and (Sheikh Khalifa, Al Maqta) structure into its tile's
@@ -425,7 +454,7 @@ export class Bridges {
     const p = centreline(b), mid = p[Math.floor(p.length / 2)];
     const key = `${Math.floor(mid.x / TILE_M)},${Math.floor(mid.z / TILE_M)}`;
     if (!tiles.has(key)) tiles.set(key, { road: new Collector(), concrete: new Collector(), steel: new Collector(), paint: new Collector(), white: new Collector(), tubes: [], x: (Math.floor(mid.x / TILE_M) + 0.5) * TILE_M, z: (Math.floor(mid.z / TILE_M) + 0.5) * TILE_M });
-    const cols = tiles.get(key), d = { b, p };
+    const cols = { ...tiles.get(key), lamps: this.lamps }, d = { b, p };
     const kind = b.structure?.kind;
     b.depth_m ??= 1.8; // builds before 2026-10-10 did not record it (scenery_bridges.py DECK_DEPTH_M)
     let depthAt = () => b.depth_m, piers = null;
@@ -459,10 +488,11 @@ export class Bridges {
         const q = at(d.p, s);
         return !spine.onSpine(q.x, q.z);
       });
-      deck(d.b, d.p, { ...d.cols, ...own }, () => d.b.depth_m, piers, own.white);
+      deck(d.b, d.p, { ...d.cols, ...own }, () => d.b.depth_m, piers, own.white, null);
       return [d.cols, own];
     });
     cols.white.absorb(white);
+    this.lamps.push(...spine.lampHeads);
     for (const [c, own] of parts) {
       c.road.absorb(own.road);
       c.white.absorb(own.white);
@@ -494,6 +524,8 @@ export class Bridges {
 
   // Only the tiles within VIEW_M of the camera.
   update(cameraPos) {
+    // Uplit white with a slowly changing tint (a soft wash, the structure's white still reads).
+    if (this.night) this.materials.white.emissive.setHSL(((performance.now() / 1000) % 90) / 90, 0.35, 0.035 * this.night).add(new THREE.Color(0.03, 0.03, 0.035).multiplyScalar(this.night));
     for (const t of this.tiles ?? []) t.group.visible = Math.hypot(t.x - cameraPos.x, t.z - cameraPos.z) < VIEW_M;
   }
 

@@ -375,6 +375,21 @@ export class Landmarks {
     }
   }
 
+  // Floodlit at night (`night` 0-1, nightLights.js): stone, marble and gold glow in a
+  // cool white (their own colour, a little blued); glass and metal stay nearly dark
+  // (project choices, by eye; the Grand Mosque is lit in shades of blue-white).
+  setNight(night) {
+    const flood = new THREE.Color(0.78, 0.86, 1.0);
+    const seen = new Set();
+    this.group.traverse((o) => {
+      const m = o.material;
+      if (!(m instanceof THREE.MeshStandardMaterial) || seen.has(m)) return;
+      seen.add(m);
+      const k = m.metalness >= 0.8 ? 0.06 : 0.55;
+      m.emissive.copy(m.color).multiply(flood).multiplyScalar(k * night);
+    });
+  }
+
   clear() {
     this.group.traverse((o) => {
       o.geometry?.dispose();
