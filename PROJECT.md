@@ -1447,6 +1447,25 @@ landmarks; later night lighting, shadows, haze.
     each bridge is built on its own (a failure leaves out only that bridge, with a console
     warning); Sheikh Zayed's spine and decks are collected aside and fall back to plain
     decks if the structure cannot be drawn (test_viewer_bridges.py).
+  - [x] Sheikh Zayed Grand Mosque rebuilt from a measured layout (2026-10-10, the owner:
+    "build it with code based on that... use it as reference for maximum accuracy").
+    A reference 3D model (CC BY 4.0, from the owner; kept out of the repository, read only
+    by a measuring script) was fitted to OSM's courtyard (its minarets on the corners,
+    1.4 m rms; its main dome 3.8 m from OSM's) and checked against the 1 m imagery. From
+    it, in the courtyard's frame: the platform, galleries at 16.9 m, the prayer hall at
+    31.2 m (parapet 32.9, published 33), portico, east gate, corner pavilions and qibla
+    bay as blocks; three egg-shaped domes (main 85 m, sides 75 m) each ringed by eight
+    cupolas on kiosks (Muslim Heritage: "eight small cupolas around each"); portico,
+    gate, qibla and hall-end domes on octagonal drums; 30 gallery domes on square drums
+    to 29 m (published "some 34"); minarets of measured tiers (square to 0.42 of the
+    height, octagon, two corbelled balconies, round shaft, gilded lantern) at the
+    published 107 m (the model's were 16 % too tall). All in the region file's `layout`
+    (landmarks.js builds it; without one, the old OSM-based build). OSM's dome tops (43 m
+    gallery domes, 65 m side domes) disagree with the model and are no longer used.
+    Frame time near it ~5 ms (this iGPU). test_viewer_grand_mosque.py.
+  - [ ] The owner decides whether and how to credit the reference model used to measure
+    the Grand Mosque (CC BY 4.0; no model data is distributed). Not credited yet, at the
+    owner's request (2026-10-10).
   - [x] Bridge decks disconnected from their roads (2026-10-10, the owner's camera view
     of Sheikh Zayed Bridge's east end). Cause (scenery_bridges.py profile): the deck's
     ends were pinned to the ground but its ramps capped at 5 %, so where the water (and

@@ -18,9 +18,9 @@ const MARBLE = 0xe4ddd0;
 const PARAPET_M = 1.6; // (project choice)
 
 // Pools (OSM natural=water on a landmark): dark glossy water a little above the ground.
-function pools(m) {
+function pools(m, y = m.ground_m + 0.3) {
   if (!m.pools?.length) return null;
-  const geo = new THREE.ShapeGeometry(m.pools.map((r) => toShape(r))).rotateX(-Math.PI / 2).translate(0, m.ground_m + 0.3, 0);
+  const geo = new THREE.ShapeGeometry(m.pools.map((r) => toShape(r))).rotateX(-Math.PI / 2).translate(0, y, 0);
   return mesh(geo, poolWater(), { cast: false });
 }
 
@@ -68,7 +68,104 @@ function courtyardMaterial(box) {
   );
 }
 
+// Egg-shaped dome of unit radius and height (base at 0, apex at 1): the Grand Mosque's
+// large domes, bulging about 3 % at a quarter of their height (measured; region file).
+const EGG = [[1.0, 0], [1.025, 0.1], [1.035, 0.25], [1.02, 0.4], [0.95, 0.53], [0.84, 0.65], [0.67, 0.77], [0.5, 0.85], [0.3, 0.92], [0.1, 0.98], [0.0, 1.0]].map(([r, y]) => new THREE.Vector2(r, y));  // prettier-ignore
+
 function grandMosque(m) {
+  if (!m.layout) return grandMosqueSimple(m);
+  const g = new THREE.Group(), y0 = m.ground_m, L = m.layout;
+  const court = (m.inner ?? []).reduce((a, r) => (Math.abs(ringArea(r)) > Math.abs(ringArea(a ?? [])) ? r : a), null);
+  if (!court) return grandMosqueSimple(m);
+  // The courtyard's frame: u along its long side, v across toward the prayer hall (the
+  // footprint's centre lies on that side).
+  let b = orientedBox(court);
+  if (b.ha < b.hb) b = { ...b, ux: b.vx, uz: b.vz, vx: -b.ux, vz: -b.uz, ha: b.hb, hb: b.ha };
+  const [fx, fz] = ringCentre(m.ring);
+  if ((fx - b.cx) * b.vx + (fz - b.cz) * b.vz < 0) b = { ...b, vx: -b.vx, vz: -b.vz };
+  const P = (u, v) => [b.cx + b.ux * u + b.vx * v, b.cz + b.uz * u + b.vz * v];
+  const rot = Math.atan2(b.uz, b.ux);
+  const rect = (u0, u1, v0, v1) => [...P(u0, v0), ...P(u1, v0), ...P(u1, v1), ...P(u0, v1)];
+  const arch = [], plain = [], golden = [];
+
+  // Podium: a marble terrace, its walls down into the ground where it falls away.
+  const pod = L.podium, podTop = y0 + pod.top_m, podRing = rect(-pod.u, pod.u, pod.v[0], pod.v[1]);
+  plain.push(flat(podRing, [m.ring], podTop));
+  arch.push(walls(podRing, y0 - 8, podTop, 0));
+  // Galleries: OSM's footprint at the gallery roof (arcades toward the courtyard).
+  const gal = y0 + L.gallery_roof_m;
+  arch.push(walls(m.ring, podTop - 0.5, gal, ARCADE_BAY_M), walls(m.ring, gal, gal + PARAPET_M, 0), walls(m.ring, gal, gal + PARAPET_M, 0, { out: false }));
+  for (const r of m.inner ?? []) arch.push(walls(r, podTop - 0.5, gal, ARCADE_BAY_M, { out: false }), walls(r, gal, gal + PARAPET_M, 0, { out: false }), walls(r, gal, gal + PARAPET_M, 0));
+  plain.push(flat(m.ring, m.inner, gal));
+  // Blocks above the galleries: prayer hall, portico, gate, pavilions, qibla bay.
+  for (const [uu, [v0, v1], h] of L.blocks) {
+    const spans = Array.isArray(uu) ? [[uu[0], uu[1]], [-uu[1], -uu[0]]] : [[-uu, uu]];
+    for (const [u0, u1] of spans) {
+      const r = rect(u0, u1, v0, v1), top = y0 + h;
+      arch.push(walls(r, gal - 0.3, top, ARCADE_BAY_M), walls(r, top, top + PARAPET_M, 0), walls(r, top, top + PARAPET_M, 0, { out: false }));
+      plain.push(flat(r, [], top));
+    }
+  }
+  // Domes: a drum (n-gon walls with arched openings) from the roof below to the spring,
+  // a cornice, the dome (egg-shaped or classic), a gilded finial to the published top;
+  // the large domes with a ring of cupolas on kiosks.
+  const roofAt = (u, v) => {
+    let h = L.gallery_roof_m;
+    for (const [uu, [v0, v1], hb] of L.blocks) {
+      const inU = Array.isArray(uu) ? Math.abs(u) >= uu[0] && Math.abs(u) <= uu[1] : Math.abs(u) <= uu;
+      if (inU && v >= v0 && v <= v1) h = Math.max(h, hb);
+    }
+    return y0 + h;
+  };
+  const dome = (u, v, k, base = roofAt(u, v)) => {
+    const [x, z] = P(u, v), [dr, sides] = k.drum, spring = y0 + k.spring, apex = y0 + k.apex;
+    if (spring - base > 0.3) {
+      arch.push(walls(ngon(x, z, dr, sides, rot + Math.PI / sides), base - 0.2, spring, Math.max(2.2, (2 * Math.PI * dr) / sides / 2), { centred: true }));
+      plain.push(at(new THREE.CylinderGeometry(dr * 1.06, dr * 1.02, Math.max(0.4, 0.06 * dr), Math.max(sides, 16)), x, spring, z, 1));
+    }
+    plain.push(at(new THREE.LatheGeometry(k.shape === "egg" ? EGG : CLASSIC, k.r > 10 ? 40 : 20), x, spring, z, k.r, apex - spring, k.r));
+    const f = y0 + k.top - apex;
+    if (f > 0.3) for (const p of finialParts()) golden.push(at(p, x, apex - 0.05 * f, z, f));
+    if (k.ring) {
+      const [n, rr] = k.ring, cup = L.kinds[k === L.kinds.main ? "cupola_main" : "cupola_side"];
+      for (let i = 0; i < n; i++) {
+        const t = (2 * Math.PI * i) / n;
+        dome(u + rr * Math.cos(t), v + rr * Math.sin(t), cup, base);
+      }
+    }
+  };
+  for (const [u, v, kind, mirror] of L.domes) {
+    for (const uu of mirror ? [u, -u] : [u]) dome(uu, v, L.kinds[kind]);
+  }
+  const gd = L.gallery_domes, gk = L.kinds.gallery;
+  for (const v of gd.v) for (const u of [gd.u, -gd.u]) dome(u, v, gk);
+  for (const u of gd.east_u) for (const s of [1, -1]) dome(s * u, gd.east_v, gk);
+  for (const u of gd.hall_u) for (const s of [1, -1]) dome(s * u, gd.hall_v, gk);
+
+  // Minarets on the courtyard's corners: the measured tiers (square, octagonal, round,
+  // corbelled balconies, the gilded lantern), heights as fractions of the published height.
+  const H = m.minaret_m;
+  for (const [sa, sb] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+    const [x, z] = P(sa * b.ha, sb * b.hb);
+    for (const [f0, f1, sides, rad] of L.minaret) {
+      const [r0, r1] = Array.isArray(rad) ? rad : [rad, rad];
+      const geo = new THREE.CylinderGeometry(r1, r0, (f1 - f0) * H, sides, 1, false, sides === 4 ? Math.PI / 4 - rot : -rot).translate(x, y0 + ((f0 + f1) / 2) * H, z);
+      (f0 >= 0.805 && f1 <= 0.88 ? golden : plain).push(geo);
+    }
+    const spire = y0 + 0.95 * H;
+    plain.push(at(new THREE.SphereGeometry(0.92, 12, 8), x, spire + 0.4, z, 1));
+    for (const p of finialParts()) golden.push(at(p, x, spire + 1.0, z, y0 + H - spire - 1.0));
+  }
+  g.add(mesh(flat(court, [], podTop + 0.05), courtyardMaterial(b), { cast: false }));
+  g.add(mesh(merge(arch), facadeStone(MARBLE, { pattern: "arch" })), mesh(merge(plain), stone(MARBLE, { roughness: 0.42 })), mesh(merge(golden), gold()));
+  const water = pools(m, podTop + 0.08); // the reflecting pools on the platform
+  if (water) g.add(water);
+  return g;
+}
+
+// Without a measured layout (other regions' mosques): OSM's footprint at the roof height
+// with its domes and minarets on the courtyard's corners.
+function grandMosqueSimple(m) {
   const g = new THREE.Group(), y0 = m.ground_m, roof = y0 + m.roof_m;
   const court = (m.inner ?? []).reduce((a, r) => (Math.abs(ringArea(r)) > Math.abs(ringArea(a ?? [])) ? r : a), null);
   const wallGeos = [walls(m.ring, y0 - 0.5, roof, ARCADE_BAY_M), walls(m.ring, roof, roof + PARAPET_M, 0), walls(m.ring, roof, roof + PARAPET_M, 0, { out: false })];

@@ -112,8 +112,53 @@ landmarks:
   # gilding (Wikipedia: 104 m in the infobox). `parts`: the other domes (positions, sizes,
   # heights) and the reflecting pools come from OSM's building:part / natural=water areas;
   # the roof at OSM's height tag on the mosque (33 m).
+  # Layout (2026-10-10): measured on a reference 3D model fitted to OSM's courtyard (its four
+  # minarets on the courtyard's corners, 1.4 m rms; its main dome 3.8 m from OSM's) and
+  # checked against the 1 m imagery; heights from the model where no source gives them
+  # (it agrees with the published ones: main dome 85.4 m, hall roof with parapet 32.9 m;
+  # its minarets were 16 % too tall, so their tiers are fractions of the published 107 m).
+  # Muslim Heritage (muslimheritage.com, "Sheikh Zayed Great Mosque in Abu Dhabi"): three
+  # egg-shaped domes on the prayer hall with eight small cupolas around each, some 34
+  # small domes on the courtyard's galleries, roof 33 m, a platform raised above the
+  # ground. Coordinates (u, v) in metres from the courtyard's centre: u along its long
+  # axis (the layout is symmetric in u), v across toward the prayer hall. OSM's dome tops
+  # (43 m for the gallery domes, 65 m for the side domes) disagree with the model and are
+  # not used; the main dome's diameter is OSM's and the model's 37.5 m (the published
+  # 32.6-32.8 m is likely the inner shell).
   - {name: Sheikh Zayed Grand Mosque, kind: grand_mosque, osm: relation/1635169, replace: true, parts: true,
-     dome_top_m: 84, dome_diameter_m: 32.6, minaret_m: 107, roof_m: 33}
+     dome_top_m: 85, dome_diameter_m: 37.5, minaret_m: 107, roof_m: 33,
+     layout: {
+       podium: {u: 112, v: [-88, 173], top_m: 2.0},
+       gallery_roof_m: 16.9,
+       blocks: [  # [u half-width or [u0, u1], [v0, v1], roof m]: symmetric in u when one number
+         [74, [96, 153], 31.2],        # prayer hall (parapet to 32.9)
+         [71.5, [58.5, 97.5], 21.0],   # portico between courtyard and hall
+         [34, [-82, -57], 22.7],       # east gate
+         [[70, 95], [-83, -58.5], 26.6],  # east corner pavilions
+         [[73, 94], [111, 134], 27.3],    # west corner pavilions
+         [[19, 27], [57, 66], 26.2],      # pavilions flanking the portico dome
+         [16.3, [150.5, 171.5], 27.3],    # qibla bay
+         [[8, 39], [145.5, 156], 24.3]],  # beside the qibla bay
+       domes: [  # [u, v, kind]; mirrored in u when u > 0 ("m")
+         [0, 122.8, main], [52, 123, side, m], [0, 78.2, portico], [0, 156.2, qibla], [0, -69.2, gate],
+         [33.4, 89, portico_cupola, m], [65.5, 88.5, portico_cupola, m], [83.7, 123, hall_end, m]],
+       gallery_domes: {u: 79.75, v: [-53.25, -35.6, -17.8, 0, 17.3, 35, 52.5, 70, 88, 105.5],
+                       east_v: -70, east_u: [46.5, 64.5], hall_v: 70.2, hall_u: [29, 46.5, 64.5]},
+       kinds: {  # r: dome radius, drum: [radius, sides], spring/apex/top: m above ground; ring: cupolas [count, radius from centre]
+         main: {r: 18.3, drum: [19.5, 16], spring: 47, apex: 82, top: 85, ring: [8, 22], shape: egg},
+         side: {r: 15.0, drum: [16.0, 16], spring: 45, apex: 72, top: 75, ring: [8, 18], shape: egg},
+         cupola_main: {r: 3.0, drum: [4.4, 8], spring: 39.5, apex: 45.5, top: 47},
+         cupola_side: {r: 2.6, drum: [3.6, 8], spring: 37.5, apex: 42, top: 43},
+         portico: {r: 8.8, drum: [9.2, 8], spring: 38.5, apex: 46, top: 47},
+         portico_cupola: {r: 3.4, drum: [5.3, 8], spring: 39, apex: 43.5, top: 44.7},
+         qibla: {r: 7.0, drum: [7.2, 8], spring: 39.5, apex: 46, top: 47.5},
+         gate: {r: 7.3, drum: [7.7, 8], spring: 35.5, apex: 40.5, top: 44.3},
+         hall_end: {r: 5.0, drum: [5.4, 8], spring: 37.5, apex: 40.5, top: 41},
+         gallery: {r: 4.2, drum: [3.5, 4], spring: 24.7, apex: 28.3, top: 29}},
+       minaret: [  # [from, to (fractions of the height), shape (sides), radius m (centre to corner)]: the model's tiers
+         [0, 0.415, 4, 8.7], [0.205, 0.215, 4, 9.6], [0.415, 0.44, 8, 6.0], [0.44, 0.565, 8, 4.75],
+         [0.565, 0.605, 8, [4.9, 6.8]], [0.605, 0.615, 16, 6.8], [0.615, 0.775, 16, 2.53], [0.775, 0.795, 16, [2.6, 3.8]],
+         [0.795, 0.805, 16, 3.8], [0.805, 0.88, 16, 1.67], [0.88, 0.895, 16, 2.5], [0.895, 0.95, 16, 0.71]]}}
   # Capital Gate: 160 m, 35 storeys, leaning 18 degrees west on average (Wikipedia); floors
   # stacked vertically up to the 12th storey, then staggered (Building, ME Construction
   # News); a diagrid of about 700 diamond-shaped glass panels; a stainless steel element
