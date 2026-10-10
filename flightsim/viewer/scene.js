@@ -447,7 +447,10 @@ export class FlightScene {
     r.setViewport(0, 0, w / pr, h / pr);
     r.setScissor(0, 0, w / pr, h / pr);
     r.setScissorTest(true);
+    const shadows = r.shadowMap.autoUpdate;
+    r.shadowMap.autoUpdate = false; // the landmark shadow map of the main view serves here too
     r.render(this.scene, cam);
+    r.shadowMap.autoUpdate = shadows;
     r.setScissorTest(false);
     r.setViewport(0, 0, size.x, size.y);
     this.aircraft.visible = wasVisible;

@@ -12,6 +12,7 @@ import * as THREE from "three";
 import { addGroundDetail } from "./groundDetail.js";
 import { addRunwayLights, parkedMatrix } from "./scenery.js";
 import { buildC172 } from "./aircraft.js";
+import { mergeByMaterial } from "./staticMerge.js";
 import { runwayDescriptor } from "./runwayGeometry.js";
 
 export { runwayDescriptor };
@@ -111,16 +112,20 @@ export class RealAirfields {
     const y = (home.ends[0].y + home.ends[1].y) / 2;
     const near = (p) => Math.hypot(p.east - cx, -p.north - cz) < PARKED_RADIUS_M;
     const stands = (airfields?.stands ?? []).filter((s) => near(s) && s.heading_deg !== null);
-    const regs = ["A6-FLY", "A6-SKY", "A6-ABD", "A6-GUL", "A6-OMD", "A6-FAL", "A6-SND", "A6-PAL"];
-    stands.filter((_, i) => i % 3 === 0).slice(0, PARKED_MAX).forEach((s, i) => {
-      const model = buildC172({ registration: regs[i % regs.length] });
-      model.update({});
-      model.group.matrixAutoUpdate = false;
-      model.group.matrix.copy(parkedMatrix(s.east, -s.north, s.heading_deg, y + 0.15));
-      this.furniture.add(model.group);
-    });
-    // Hold-short bars (FAA style: two solid and two dashed yellow lines across the taxiway).
+    // One model, baked at every stand and joined per material: a few draw calls for all
+    // of them (parked: no lights, propeller stopped; one registration, A6-ABD, unreadable
+    // from the air).
+    const model = buildC172({ registration: "A6-ABD" });
+    model.update({});
+    const parked = stands.filter((_, i) => i % 3 === 0).slice(0, PARKED_MAX);
+    for (const mesh of mergeByMaterial(parked.map((s) => ({ object: model.group, matrix: parkedMatrix(s.east, -s.north, s.heading_deg, y + 0.15) })))) {
+      this.furniture.add(mesh);
+    }
+    model.group.traverse((o) => o.geometry?.dispose());
+    // Hold-short bars (FAA style: two solid and two dashed yellow lines across the
+    // taxiway), joined into one mesh.
     const yellow = new THREE.MeshBasicMaterial({ color: 0xd9a92b, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+    const bars = new THREE.Group();
     for (const h of airfields?.holds ?? []) {
       if (!near(h) || h.taxiway_deg === null) continue;
       const bar = new THREE.Group();
@@ -133,15 +138,20 @@ export class RealAirfields {
       }
       bar.position.set(h.east, y + 0.3, -h.north);
       bar.rotation.y = -((h.taxiway_deg * Math.PI) / 180); // bars across the taxiway (map bearing, clockwise from north)
-      this.furniture.add(bar);
+      bars.add(bar);
     }
+    for (const mesh of mergeByMaterial([{ object: bars, matrix: new THREE.Matrix4() }])) this.furniture.add(mesh);
+    bars.traverse((o) => o.geometry?.dispose());
     this.group.add(this.furniture);
   }
 
   clearFurniture() {
     if (!this.furniture) return;
     this.group.remove(this.furniture);
-    this.furniture.traverse((o) => o.geometry?.dispose());
+    this.furniture.traverse((o) => {
+      o.geometry?.dispose();
+      o.material?.dispose();
+    });
     this.furniture = null;
   }
 

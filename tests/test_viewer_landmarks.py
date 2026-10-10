@@ -76,6 +76,34 @@ for (const m of marks) {
   lm.update(new THREE.Vector3(), sun, dir);
   out.shadowOff = { cast: sun.castShadow, pos: sun.position.toArray() };
 }
+// Static merging (staticMerge.js): two placements of a group with two materials, one part
+// mirrored, one transparent, one hidden: one mesh per opaque material, every triangle
+// still facing away from the part's centre.
+{
+  const { mergeByMaterial } = await import("./staticMerge.js");
+  const a = new THREE.MeshLambertMaterial(), b = new THREE.MeshLambertMaterial(), glass = new THREE.MeshBasicMaterial({ transparent: true });
+  const grp = new THREE.Group();
+  const box = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), a);
+  const mirrored = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), a);
+  mirrored.position.set(3, 0, 0);
+  mirrored.scale.set(-1, 1, 1);
+  const other = new THREE.Mesh(new THREE.SphereGeometry(1), b), clear = new THREE.Mesh(new THREE.BoxGeometry(), glass), hidden = new THREE.Mesh(new THREE.BoxGeometry(), b);
+  hidden.visible = false;
+  grp.add(box, mirrored, other, clear, hidden);
+  const meshes = mergeByMaterial([{ object: grp, matrix: new THREE.Matrix4() }, { object: grp, matrix: new THREE.Matrix4().makeTranslation(0, 10, 0) }]);
+  const ga = meshes.find((m) => m.material === a).geometry;
+  // Winding: the geometric normal of each triangle points away from its box's centre.
+  let outward = 0;
+  const p = ga.attributes.position, v = [0, 1, 2].map(() => new THREE.Vector3()), n = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let t = 0; t < p.count; t += 3) {
+    v.forEach((w, i) => w.fromBufferAttribute(p, t + i));
+    n.subVectors(v[1], v[0]).cross(new THREE.Vector3().subVectors(v[2], v[0]));
+    const mid = v[0].clone().add(v[1]).add(v[2]).divideScalar(3);
+    c.set(mid.x > 1.5 ? 3 : 0, mid.y > 5 ? 10 : 0, 0);
+    if (n.dot(mid.sub(c)) > 0) outward++;
+  }
+  out.merge = { meshes: meshes.length, triangles: p.count / 3, outward };
+}
 console.log(JSON.stringify(out));
 """
 
@@ -88,7 +116,7 @@ def result(tmp_path_factory):
     for f in ("three.module.js", "three.core.js"):
         shutil.copy(VIEWER / "vendor" / f, three / f)
     (three / "package.json").write_text('{"name":"three","type":"module","exports":{".":"./three.module.js","./addons/*":"./addons/*"}}')
-    for f in ("landmarks.js", "landmarkKit.js"):
+    for f in ("landmarks.js", "landmarkKit.js", "staticMerge.js"):
         shutil.copy(VIEWER / f, d / f)
     out = subprocess.run([NODE, "--input-type=module", "-e", SCRIPT], cwd=d, capture_output=True, text=True, timeout=120)
     assert out.returncode == 0, out.stderr
@@ -126,3 +154,9 @@ def test_shadow_frames_the_nearest_landmark(result):
     assert s["dir"] == pytest.approx([v / math.sqrt(0.98) for v in (0.3, 0.8, -0.5)], abs=1e-6)  # the light's direction unchanged
     off = result["shadowOff"]
     assert not off["cast"] and off["pos"] == pytest.approx([v / math.sqrt(0.98) * 10000 for v in (0.3, 0.8, -0.5)], abs=1e-3)
+
+
+def test_static_merge_joins_per_material(result):
+    m = result["merge"]
+    assert m["meshes"] == 2  # two opaque materials; the transparent and the hidden parts left out
+    assert m["triangles"] == 2 * 2 * 12 and m["outward"] == m["triangles"]  # two boxes, twice; the mirrored one turned back

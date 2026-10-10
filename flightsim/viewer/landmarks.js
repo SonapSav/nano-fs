@@ -375,8 +375,10 @@ export class Landmarks {
       const box = new THREE.Box3().setFromObject(g), c = box.getCenter(new THREE.Vector3()), s = box.getSize(new THREE.Vector3());
       const R = Math.max(Math.max(s.x, s.z) / 2, 0.9 * s.y) + 25;
       const shadowOnly = new THREE.ShadowMaterial({ opacity: 0.42, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
-      g.add(mesh(new THREE.PlaneGeometry(2 * R, 2 * R).rotateX(-Math.PI / 2).translate(c.x, m.ground_m + 0.12, c.z), shadowOnly, { cast: false }));
-      this.sites.push({ x: c.x, y: m.ground_m + s.y / 3, z: c.z, R });
+      const plane = mesh(new THREE.PlaneGeometry(2 * R, 2 * R).rotateX(-Math.PI / 2).translate(c.x, m.ground_m + 0.12, c.z), shadowOnly, { cast: false });
+      plane.visible = false; // only the landmark casting shadows needs it
+      g.add(plane);
+      this.sites.push({ x: c.x, y: m.ground_m + s.y / 3, z: c.z, R, plane });
     }
   }
 
@@ -404,6 +406,8 @@ export class Landmarks {
       sun.shadow.normalBias = 0.4;
     }
     if (best !== this.shadowSite) {
+      if (this.shadowSite) this.shadowSite.plane.visible = false;
+      best.plane.visible = true;
       this.shadowSite = best;
       const cam = sun.shadow.camera;
       [cam.left, cam.right, cam.top, cam.bottom] = [-best.R, best.R, best.R, -best.R];

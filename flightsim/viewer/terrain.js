@@ -259,6 +259,26 @@ if (vFacade.x >= 0.0) {
   return material;
 }
 
+// A date palm around its trunk's middle: the trunk (9 m) and the crown of fronds drooping
+// from its top, coloured per vertex.
+function palmGeometry() {
+  const parts = [[new THREE.CylinderGeometry(0.22, 0.32, 9, 5), 0x7a6248], [new THREE.ConeGeometry(3.6, 1.6, 7).rotateX(Math.PI).translate(0, 4.5, 0), 0x4d6b35]];
+  const pos = [], nrm = [], col = [];
+  for (const [g, hex] of parts) {
+    const ni = g.toNonIndexed(), c = new THREE.Color(hex);
+    pos.push(...ni.attributes.position.array);
+    nrm.push(...ni.attributes.normal.array);
+    for (let i = 0; i < ni.attributes.position.count; i++) col.push(c.r, c.g, c.b);
+    g.dispose();
+    ni.dispose();
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("normal", new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  return g;
+}
+
 const NEAR_TEXTURE = 256, FAR_TEXTURE = 64; // land cover texels per tile side (near: one per cell)
 
 // A region's OpenStreetMap features by ring (project choices): roads, paving and every
@@ -290,15 +310,13 @@ function tileObjects(data, shared, far) {
   // A region's palms (trunk and crown) and bushes.
   if (palms?.length) {
     const n = palms.length / 4;
-    const trunks = new THREE.InstancedMesh(shared.palmTrunk, shared.trunkMat, n);
-    const crowns = new THREE.InstancedMesh(shared.palmCrown, shared.palmMat, n);
+    const trees = new THREE.InstancedMesh(shared.palm, shared.palmMat, n);
     for (let i = 0; i < n; i++) {
       const [x, h, z, k] = palms.subarray(4 * i, 4 * i + 4);
       q.setFromAxisAngle(up, (x * 13 + z * 7) % 6.283);
-      trunks.setMatrixAt(i, m.compose(p.set(x, h + 4.5 * k, z), q, s.set(k, k, k)));
-      crowns.setMatrixAt(i, m.compose(p.set(x, h + 9 * k, z), q, s.set(k, k, k)));
+      trees.setMatrixAt(i, m.compose(p.set(x, h + 4.5 * k, z), q, s.set(k, k, k)));
     }
-    group.add(trunks, crowns);
+    group.add(trees);
   }
   if (bushes?.length) {
     const n = bushes.length / 4;
@@ -421,12 +439,11 @@ export class Terrain {
       tank: new THREE.CylinderGeometry(6, 5, 7, 12),
       towerMat: new THREE.MeshLambertMaterial({ color: 0xbfc4c7 }),
       crownMat: new THREE.MeshLambertMaterial({ color: 0x2f4a2a }),
-      // Real-world regions: date palms (9 m: trunk and a flat crown of fronds) and low bushes.
-      palmTrunk: new THREE.CylinderGeometry(0.22, 0.32, 9, 5),
-      palmCrown: new THREE.ConeGeometry(3.6, 1.6, 7).rotateX(Math.PI), // fronds drooping from the top
+      // Real-world regions: date palms (9 m: trunk and a flat crown of fronds, one geometry
+      // with vertex colours: one draw call per tile) and low bushes.
+      palm: palmGeometry(),
       bush: new THREE.IcosahedronGeometry(2.2, 0).scale(1, 0.55, 1),
-      trunkMat: new THREE.MeshLambertMaterial({ color: 0x7a6248 }),
-      palmMat: new THREE.MeshLambertMaterial({ color: 0x4d6b35 }),
+      palmMat: new THREE.MeshLambertMaterial({ vertexColors: true }),
       bushMat: new THREE.MeshLambertMaterial({ color: 0x3c5532 }),
       box: new THREE.BoxGeometry(1, 1, 1),
       wallMat: new THREE.MeshLambertMaterial({ color: 0xd9d4c5 }),

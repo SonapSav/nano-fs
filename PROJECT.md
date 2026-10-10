@@ -1235,6 +1235,22 @@ landmarks; later night lighting, shadows, haze.
     height for each footprint, all building parts and domes with min_height,
     roof:height and colour; a landmark may name several OSM objects. All landmarks: +35
     draw calls, +126k triangles, about +0.9 ms a frame (shadow pass included).
+  - [x] 4g Abu Dhabi frame rate (2026-10-10). The owner's Firefox: 66 fps on the Abu Dhabi
+    performance case (script 11 ms of a 14 ms frame; procedural 109-113 fps), 50-52 fps in
+    flight: the main thread, not the graphics chip (half resolution changed nothing in
+    our measurements). Counted per kind on the runway 31 approach: ~670 draw calls, of
+    which ~330 the eight parked C172s (full flying models, ~40 parts each) and ~70 the
+    hold-short bars; the tile features (roads, paving, buildings) only ~30. Fixes:
+    `viewer/staticMerge.js` bakes static objects into one mesh per material (all parked
+    aircraft: one model, one registration, no lights; all hold bars: one mesh); palms one
+    instanced geometry (trunk and crown, vertex colours); the belly camera reuses the
+    main view's landmark shadow map; only the shadow-casting landmark's ground plane is
+    drawn. Approach view (headless Chromium, this machine's iGPU, 1920 x 548 view): 670
+    -> 238 draw calls, main view 9.2 -> 6.4 ms; near the mosque 9.2 -> 5.4 ms. Merging
+    the tile features and thinning distant tiles (planned) left out: measured, they
+    were ~30 calls. Left: terrain tiles (~50, one texture each), the flown aircraft (45
+    parts), palms and bushes (~50).
+  - [ ] The owner's re-run of the performance test after 4g (and whether 144 Hz holds).
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings
     (OSM 3D tags, shadows), night lighting, or ready-made models.
 

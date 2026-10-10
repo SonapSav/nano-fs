@@ -109,7 +109,8 @@ flightsim/          # installable package (uv_build backend)
                     #     demCore.js (bit-identical to world/dem.py), demTiles.js, featureGeometry.js (region tiles, OSM
                     #     roads, paving and buildings, in the tile worker), realAirfields.js / runwayGeometry.js (its
                     #     runways), mapRegion.js (its map tiles), landmarks.js / landmarkKit.js (landmark models,
-                    #     their materials and sun shadows; ?debug in the URL exposes the scene for screenshots)
+                    #     their materials and sun shadows; ?debug in the URL exposes the scene for screenshots),
+                    #     staticMerge.js (static objects baked into one mesh per material: fewer draw calls)
   analysis/         # mode identification, validation maneuvers, validation checks
   atmosphere/       # Dryden turbulence (MIL-F-8785C)
   world/            # terrain height shared with the viewer (bit-identical port of viewer/terrainCore.js);
