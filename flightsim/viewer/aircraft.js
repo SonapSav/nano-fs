@@ -338,6 +338,7 @@ function beam(a, b, width, thick, material) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(width * IN, len, thick * IN), material);
   m.position.copy(pa).add(pb).multiplyScalar(0.5);
   m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), pb.clone().sub(pa).normalize());
+  m.userData.root = pa; // its root end (body metres): inside the fuselage (tests)
   return m;
 }
 
@@ -461,9 +462,11 @@ export function buildC172({ registration = REGISTRATION } = {}) {
     pivots[side > 0 ? "aileronR" : "aileronL"] = aileron;
     // Strut, main gear leg, wheel and fairing (the leg, wheel and fairing compress
     // together: settle()).
-    group.add(beam([48, yy(20), 7], [45, yy(102), wingZ(102) - 3], 4.5, 1.6, white));
+    // Roots inside the fuselage's skin (at x 48-58 and 5-7 in up it is only ~13-16 in
+    // wide each side: a root further out hung in the air).
+    group.add(beam([48, yy(14), 7], [45, yy(102), wingZ(102) - 3], 4.5, 1.6, white));
     const main = new THREE.Group();
-    main.add(beam([58, yy(18), 5], [58, yy(41), -7], 4, 1.2, grey));
+    main.add(beam([58, yy(10), 6], [58, yy(41), -7], 4, 1.2, grey));
     main.add(wheel([58.2, yy(43), -8], 7.5, 5, tyre));
     main.add(ellipsoid([60, yy(43), -6], 16, 5, 8.5, white));
     const mainShadow = contactShadow(0.42, 0.24);

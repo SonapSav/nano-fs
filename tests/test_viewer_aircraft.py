@@ -75,6 +75,22 @@ out.shadow = m.gears.map((g) => { g.shadow.updateMatrix = () => {}; m.group.matr
   const c = new THREE.Vector3().setFromMatrixPosition(g.shadow.matrixWorld), n = new THREE.Vector3(0, 1, 0).transformDirection(g.shadow.matrixWorld);
   const t = g.contact.clone().add(g.group.position).applyMatrix4(rest);
   return { visible: g.shadow.visible, y: c.y, ny: n.y, dx: Math.hypot(c.x - t.x, c.z - t.z) }; });
+// Strut and gear-leg roots inside the fuselage: a ray from the root sideways crosses the
+// fuselage's skin an odd number of times (rested pose, gear settled).
+{
+  m.group.matrix.identity(); m.group.updateMatrixWorld(true);
+  const fus = m.group.children[0], roots = [];
+  m.group.traverse((o) => o.userData.root && roots.push(o));
+  const rc = new THREE.Raycaster();
+  out.roots = roots.map((o) => {
+    const p = o.userData.root.clone().applyMatrix4(o.parent.matrixWorld);
+    const side = p.y >= 0 ? 1 : -1;
+    rc.set(p, new THREE.Vector3(0, side, 0));
+    const a = rc.intersectObject(fus).length;
+    rc.set(p, new THREE.Vector3(0, -side, 0));
+    return [a, rc.intersectObject(fus).length];
+  });
+}
 console.log(JSON.stringify(out));
 """
 
@@ -123,3 +139,9 @@ def test_contact_shadow_under_each_tyre(model):
     assert model["shadowHigh"] == [False] * 3  # 10 m up: none
     for sh in model["shadow"]:
         assert sh["visible"] and sh["y"] == pytest.approx(0.034, abs=0.002) and sh["ny"] == pytest.approx(1, abs=1e-6) and sh["dx"] < 0.01
+
+
+def test_struts_and_legs_start_inside_the_fuselage(model):
+    assert len(model["roots"]) == 5  # two wing struts, two main legs, the nose leg
+    for out_side, in_side in model["roots"]:
+        assert out_side % 2 == 1  # inside the skin: one crossing outward

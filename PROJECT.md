@@ -1290,6 +1290,10 @@ landmarks; later night lighting, shadows, haze.
     looked to float (the owner): each tyre now presses 1.5 cm into the surface (a loaded
     tyre's flat spot) and lays a soft contact shadow under it, fading out within 0.6 m
     of height (aircraft.js settle).
+  - [x] Main gear legs and wing struts reach the fuselage (2026-10-10, the owner's photo):
+    their roots were outside the skin (at x 48-58, 5-7 in up the fuselage is only
+    ~13-16 in wide each side; roots were at 18-20 in). Now inside; a test checks every
+    strut and leg root is inside the fuselage.
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the
     flown aircraft's static parts (45 meshes), palms and bushes across tiles (~50).
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings
