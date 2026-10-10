@@ -639,6 +639,7 @@
                     <property>aero/qbar-psf</property>
                     <property>metrics/Sw-sqft</property>
                     <property>aero/function/kCLge</property>
+                      <!-- nano-fs (2026-10-10): lift above alpha 0.14 rad raised, ramping to +10 % at the peak (0.28 rad) and back to the original by 0.36 rad, where the post-stall column joins it, to match the POH's aft-CG stall speeds (Figure 5-3); the post-stall column unchanged -->
                       <table>
                           <independentVar lookup="row">aero/alpha-rad</independentVar>
                           <independentVar lookup="column">aero/stall-hyst-norm</independentVar>
@@ -650,16 +651,16 @@
                               0.1000	0.8300	0.7800
                               0.1200	0.9200	0.7900
                               0.1400	1.0200	0.8100
-                              0.1600	1.0800	0.8200
-                              0.1700	1.1300	0.8300
-                              0.1900	1.1900	0.8500
-                              0.2100	1.2500	0.8600
-                              0.2400	1.3500	0.8800
-                              0.2600	1.4400	0.9000
-                              0.2800	1.4700	0.9200
-                              0.3000	1.4300	0.9500
-                              0.3200	1.3800	0.9900
-                              0.3400	1.3000	1.0500
+                              0.1600	1.0954	0.8200
+                              0.1700	1.1542	0.8300
+                              0.1900	1.2325	0.8500
+                              0.2100	1.3125	0.8600
+                              0.2400	1.4464	0.8800
+                              0.2600	1.5634	0.9000
+                              0.2800	1.6170	0.9200
+                              0.3000	1.5373	0.9500
+                              0.3200	1.4490	0.9900
+                              0.3400	1.3325	1.0500
                               0.3600	1.1500	1.1500
                           </tableData>
                       </table>
@@ -831,7 +832,7 @@
                     <property>metrics/Sw-sqft</property>
                     <property>metrics/cbarw-ft</property>
                     <property>fcs/elevator-pos-rad</property>
-                    <value>-1.1220</value>
+                    <value>-1.2800</value> <!-- nano-fs (2026-10-10): was -1.1220; -1.28 (Roskam's value for the closely related Cessna 182, via the UIUC model) so the elevator reaches the POH's forward-CG stalls (a fit gave 1.15x the original) -->
                 </product>
             </function>
             <function name="aero/coefficient/Cmdf">

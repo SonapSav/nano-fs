@@ -8,6 +8,11 @@
       2700 RPM redline; cruise J ~0.70 unchanged, so the cruise checks are unchanged)
     C_THRUST x 1.15 for J <= 0.2, blending linearly to x 1.0 at J >= 0.45
       (keeps the takeoff acceleration: roll to 51 KIAS 884 ft, POH 892; climb 733 fpm, POH ~700)
+    C_THRUST x 1.22 more for J <= 0.25, blending to x 1.0 at J >= 0.40 (2026-10-10): the line
+      above compared the roll to 51 KCAS, but the POH's 51 KIAS lift-off is 55.7 KCAS
+      (Figure 5-1); the takeoff roll is now 894 ft (POH 892) at a 55.1 KCAS lift-off, the
+      climb at 76 KCAS (J ~0.47) unchanged. Static thrust about 584 lb (sea level, 2380 RPM;
+      not checked against a source).
   The commented-out tables below are the original file's and are not used.
 -->
 <propeller name="Fixed-Pitch 75-inch Two-Blade Propeller (nano-fs tuned)">
@@ -49,10 +54,10 @@
 
   <table name="C_THRUST" type="internal">
     <tableData>
-      0.0   0.0839
-      0.1   0.0839
-      0.2   0.0828
-      0.3   0.0774
+      0.0   0.1024
+      0.1   0.1024
+      0.2   0.1010
+      0.3   0.0888
       0.4   0.0711
       0.5   0.0660
       0.6   0.0620

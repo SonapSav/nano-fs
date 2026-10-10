@@ -303,6 +303,8 @@ def takeoff_roll(
         if any(v for k, v in contacts.items() if k not in ("NOSE", "LEFT_MAIN", "RIGHT_MAIN")):
             raise RuntimeError(f"structure touched the ground during the takeoff roll: {contacts}")
         if not any(contacts[w] for w in ("NOSE", "LEFT_MAIN", "RIGHT_MAIN")):
+            if to_reference is None and reference_cas_mps is not None:
+                to_reference = distance  # airborne before the reference speed: the whole roll
             return TakeoffRoll(static_rpm, distance, s.cas_mps, s.theta_rad, to_reference)
     raise RuntimeError("no lift-off within 120 s")
 

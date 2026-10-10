@@ -383,8 +383,29 @@ owner before work can start.
 
 ### Aircraft model fidelity (from step 2)
 
-- [ ] Stall speeds 3.4-4.7 kt fast in 3 of 6 POH cases (aft CG flaps up 54.4 vs 51 KCAS;
+- [x] Stall speeds 3.4-4.7 kt fast in 3 of 6 POH cases (aft CG flaps up 54.4 vs 51 KCAS;
   forward CG flaps up 55.5 vs 52; forward CG 30 deg flaps 50.7 vs 46, elevator-limited).
+  Fixed in c172p_tuned (2026-10-10, fidelity pass): every aft-CG case was 2-3.4 kt fast
+  with the wing stalled (lift ~10 % low near the stall), every forward-CG case
+  elevator-limited. Wing lift above alpha 0.14 rad raised to +10 % at the peak (back to
+  the original by 0.36 rad, where the post-stall column joins it; cruise unchanged) and
+  the elevator's pitch effectiveness -1.122 -> -1.28 /rad (Roskam's value for the closely
+  related C182, via the UIUC model; a free fit gave 1.15x). Now 50.2/48.5/46.7 KCAS aft
+  and 52.1/49.5/48.4 forward (POH 51/48/46 and 52/49/46): all six pass, the forward
+  full-flap case still elevator-limited (+2.4 kt, tolerance 3).
+- [x] Takeoff (2026-10-10): our check compared the POH's lift-off speed, 51 KIAS, with the
+  model's calibrated airspeed. The POH's Figure 5-1 (Airspeed Calibration, now in
+  docs/REFERENCES.md) gives 51 KIAS = 55.7 KCAS (flaps 10), and the model lifts off at
+  55.1: no lift-off deviation. The ground roll to that speed was then 23 % long (the
+  2026-10-06 propeller tuning had matched the roll to 51 KCAS); the propeller's thrust
+  coefficient x 1.22 more at advance ratios up to 0.25 (blending out by 0.40, so the climb
+  at J ~0.47 is unchanged): roll 894 ft (POH 892). Static thrust about 584 lb (not
+  checked against a source). The checks now use liftoff_kcas; c172p (untuned) keeps a
+  19 % long roll as a known deviation. c172p_tuned: 35 of 38 checks pass, the phugoid
+  (and its two rows) the only known deviation. Controllers on the tuning seeds
+  (1000-1199), before vs after: approach 200/200 both (touchdown sink 93 vs 92 ft/min),
+  takeoff 200/200 (autopilot roll 252 -> 220 m), circuit 200/200, LQR and PID altitude/
+  heading-hold returns unchanged (-1388 vs -1388, -1396 vs -1392).
 - [ ] Phugoid period 27.8 s vs ~35 s in the AAIB flight test (about 21% short); damping matches.
 - [ ] Spiral mode is stable at mid CG in the model; the AAIB pilot found the real aircraft divergent.
 - [ ] Short-period mode: no independent C172 measurement found in open sources; only
@@ -397,8 +418,9 @@ owner before work can start.
   and peak EGT mixtures are far apart (unlike a real engine); fine for fuel flow.
 - [ ] The model's empty-aircraft CG is aft of a typical 172P: the forward CG limit at
   2400 lb needs about 40 lb fuel and 860 lb in the front seats.
-- [ ] Ground checks (added 2026-10-06, POH at 2400 lb, sea level, 15 C), four known
-  deviations:
+- [x] Ground checks (added 2026-10-06, POH at 2400 lb, sea level, 15 C), four known
+  deviations (all fixed in c172p_tuned by 2026-10-10; the takeoff ones were partly the
+  KIAS/KCAS mix-up above):
   - Takeoff (short field, flaps 10): ground roll 1059 ft vs 892 (+19%), lift-off 55.4
     KCAS vs 51 KIAS, with back pressure eased to keep the pitch below 9 deg. The model's
     tail skid touches at 10.3 deg pitch on the main wheels, and lifting off at 51 KIAS

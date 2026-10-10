@@ -93,10 +93,11 @@ ground:
     hold_s: 10            # brakes held at full throttle until the RPM settles
     ground_roll_ft: 892
     tolerance_pct: 15
-    known_deviation: "model 1059 ft, 19% long: lifting off at the POH's 51 KIAS needs ~11 deg pitch, past the model's tail-skid contact (10.3 deg); the roll to 51 KIAS alone is 861 ft"
-    liftoff_kias: 51      # model CAS compared (no airspeed position error modelled)
+    known_deviation: "model 1059 ft, 19% long, lifting off at the POH's speed (55.4 KCAS; 51 KIAS = 55.7 KCAS): the model accelerates too slowly on the ground"
+    acceleration_known_deviation: "the same roll: the model lifts off at the POH's lift-off speed"
+    liftoff_kias: 51      # the POH's lift-off speed (indicated) ...
+    liftoff_kcas: 55.7    # ... calibrated: Figure 5-1 (Airspeed Calibration, normal static source), flaps 10: 50 KIAS = 55 KCAS, 60 = 62 (2026-10-10; compared as 51 KCAS before)
     liftoff_tolerance_kt: 3
-    liftoff_known_deviation: "model 55.4 KCAS, 4.4 kt fast: the pitch limit below the tail-skid contact (see the ground roll)"
   climb:
     ref: Figure 5-5 Maximum Rate of Climb (1981 POH; flaps up, full throttle, 76 KIAS at S.L.; 0 C 745, 20 C 685 fpm)
     kcas: 76              # model CAS compared with KIAS

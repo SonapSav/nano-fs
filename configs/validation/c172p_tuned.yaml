@@ -13,5 +13,18 @@ ground:
   landing:
     known_deviation: null      # 538 ft
   takeoff:
-    known_deviation: "model 1112 ft, 25% long: it lifts off at 55 KCAS, not 51 (see the lift-off speed; the roll to 51 KIAS is 884 ft, POH 892)"
-    liftoff_known_deviation: "model 55.5 KCAS, 4.5 kt fast: lifting off at 51 KIAS needs ~11 deg pitch, past the model's tail-skid contact (10.3 deg); aerodynamics and gear geometry unchanged from c172p"
+    known_deviation: null      # 894 ft at a 55.1 KCAS lift-off (propeller thrust at low advance ratio tuned 2026-10-10)
+    acceleration_known_deviation: null
+    liftoff_known_deviation: null
+
+# Tuned 2026-10-10: wing lift near the stall (+10 % at the peak) and elevator effectiveness
+# (-1.28), so the stall speeds match the POH (aft CG: aerodynamic; forward CG: the
+# elevator now reaches the stall). Same points as c172p.yaml, without its deviations.
+stall:
+  points:
+    - {cg: aft, flaps_deg: 0, kcas: 51}
+    - {cg: aft, flaps_deg: 10, kcas: 48}
+    - {cg: aft, flaps_deg: 30, kcas: 46}
+    - {cg: forward, flaps_deg: 0, kcas: 52}
+    - {cg: forward, flaps_deg: 10, kcas: 49}
+    - {cg: forward, flaps_deg: 30, kcas: 46}

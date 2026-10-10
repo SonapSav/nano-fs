@@ -17,4 +17,14 @@ Changes from JSBSim's `c172p` (2026-10-05/06, documented in `PROJECT.md` and
   0.65) and its thrust coefficient raised 15 % up to 0.2 (blending back by 0.45), to
   match the POH climb and takeoff figures.
 
+- `c172p_tuned.xml` (2026-10-10): the wing's lift near the stall raised (from alpha 0.14
+  rad, +10 % at the peak, back to the original by 0.36 rad where the post-stall column
+  joins it) to match the POH's aft-CG stall speeds, and the elevator's pitch
+  effectiveness from -1.122 to -1.28 /rad (Roskam's value, via the UIUC model, for the
+  closely related Cessna 182) so the elevator reaches the POH's forward-CG stalls.
+- `Engines/prop_75in2f_tuned.xml` (2026-10-10): thrust coefficient x 1.22 more at advance
+  ratios up to 0.25 (blending back by 0.40): the 2026-10-06 tuning had matched the roll to
+  51 KCAS, but the POH's 51 KIAS lift-off is 55.7 KCAS (Figure 5-1); the takeoff roll now
+  matches (894 ft, POH 892), the climb unchanged.
+
 Everything else is unchanged from JSBSim's c172p.

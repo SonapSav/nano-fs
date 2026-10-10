@@ -107,8 +107,8 @@ def _phugoid_test(aircraft: str, loading: Loading, alt_ft: float, trim_kias: flo
 
 
 @cache
-def _takeoff(aircraft: str, loading: Loading, flaps_deg: float, elevator: float, max_pitch_deg: float, hold_s: float, ref_kias: float):
-    return takeoff_roll(aircraft, loading, flaps_deg / 30.0, elevator, math.radians(max_pitch_deg), hold_s, ref_kias * KT_TO_MPS)
+def _takeoff(aircraft: str, loading: Loading, flaps_deg: float, elevator: float, max_pitch_deg: float, hold_s: float, ref_kcas: float):
+    return takeoff_roll(aircraft, loading, flaps_deg / 30.0, elevator, math.radians(max_pitch_deg), hold_s, ref_kcas * KT_TO_MPS)
 
 
 def plan_checks(cfg: dict) -> list[PlannedCheck]:
@@ -205,7 +205,7 @@ def plan_checks(cfg: dict) -> list[PlannedCheck]:
 
     def takeoff():
         to = gr["takeoff"]
-        return _takeoff(ac, ground_loading(), to["flaps_deg"], to["elevator"], to["max_pitch_deg"], to["hold_s"], to["liftoff_kias"])
+        return _takeoff(ac, ground_loading(), to["flaps_deg"], to["elevator"], to["max_pitch_deg"], to["hold_s"], to["liftoff_kcas"])
 
     def static_rpm():
         r = gr["static_rpm"]
@@ -222,14 +222,14 @@ def plan_checks(cfg: dict) -> list[PlannedCheck]:
         to = gr["takeoff"]
         ref, tol = to["ground_roll_ft"], to["ground_roll_ft"] * to["tolerance_pct"] / 100
         return Check("takeoff_roll_to_liftoff_speed", src[gr["source"]],
-                     f"Takeoff roll to the POH lift-off speed ({to['liftoff_kias']} KIAS), i.e. the acceleration alone, 2400 lb, sea level, 15 C ({to['ref']})",
+                     f"Takeoff roll to the POH lift-off speed ({to['liftoff_kias']} KIAS = {to['liftoff_kcas']} KCAS), i.e. the acceleration alone, 2400 lb, sea level, 15 C ({to['ref']})",
                      f"{ref} ft", takeoff().to_reference_m / FT_TO_M, "ft", ref - tol, ref + tol, to.get("acceleration_known_deviation"))
 
     def liftoff_speed():
         to = gr["takeoff"]
-        ref, tol = to["liftoff_kias"], to["liftoff_tolerance_kt"]
+        ref, tol = to["liftoff_kcas"], to["liftoff_tolerance_kt"]
         return Check("takeoff_liftoff_speed", src[gr["source"]], f"Takeoff lift-off speed, short field, flaps {to['flaps_deg']} deg ({to['ref']})",
-                     f"{ref} KIAS", takeoff().liftoff_cas_mps / KT_TO_MPS, "KCAS", ref - tol, ref + tol, to.get("liftoff_known_deviation"))
+                     f"{to['liftoff_kias']} KIAS = {ref} KCAS", takeoff().liftoff_cas_mps / KT_TO_MPS, "KCAS", ref - tol, ref + tol, to.get("liftoff_known_deviation"))
 
     def landing_ground_roll():
         la = gr["landing"]

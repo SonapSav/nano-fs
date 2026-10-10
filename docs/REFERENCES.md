@@ -38,6 +38,18 @@ KCAS used for validation; the POH notes KIAS values are approximate.
 | 10° | 48 | 49 |
 | 30° | 46 | 46 |
 
+### Figure 5-1, Airspeed Calibration, normal static source (1981 edition, p. 5-8; read 2026-10-10)
+
+Condition: power required for level flight or maximum rated RPM dive.
+
+| Flaps | KIAS | KCAS |
+|---|---|---|
+| up | 50 60 70 80 90 100 110 120 130 140 150 160 | 56 62 70 79 89 98 107 117 126 135 145 154 |
+| 10 deg | 40 50 60 70 80 90 100 110 | 49 55 62 70 79 89 98 108 |
+| 30 deg | 40 50 60 70 80 85 | 47 53 61 70 80 84 |
+
+Used to convert the POH's indicated speeds: the short-field lift-off speed 51 KIAS (flaps 10) is 55.7 KCAS. (Figure 5-3's stall speeds are given in KCAS, the climb speed 76 KIAS is 75.4 KCAS: no change.)
+
 ### Section 2, Center of Gravity Limits (normal category, 1981 edition)
 
 Forward 35.0 in aft of datum at 1950 lb or less, straight line to 39.5 in at 2400 lb; aft 47.3 in at all weights. Datum: lower portion of front face of firewall.
@@ -71,7 +83,7 @@ The JSBSim c172p structural frame matches this datum to about 3 in: POH sample l
 
 ## Searched and not used
 
-- **Roskam, Airplane Flight Dynamics Part I, pp. 480-482**, via the UIUC cessna172-v1 model file (https://m-selig.ae.illinois.edu/apasim/Aircraft-uiuc/cessna172-v1/aircraft.dat). The file itself notes the data is "actually Cessna 182", and it shares lineage with the FlightGear/JSBSim C172 model, so it is not an independent reference.
+- **Roskam, Airplane Flight Dynamics Part I, pp. 480-482**, via the UIUC cessna172-v1 model file (https://m-selig.ae.illinois.edu/apasim/Aircraft-uiuc/cessna172-v1/aircraft.dat). The file itself notes the data is "actually Cessna 182", and it shares lineage with the FlightGear/JSBSim C172 model, so it is not an independent reference. Its elevator pitch effectiveness, Cm_de = -1.28 /rad (also on the FlightGear UIUC c172 page, https://de3mirror.flightgear.org/fgdata/fgdata_2020_3/Aircraft-uiuc/models/cessna172/linear.html), is used in c172p_tuned (2026-10-10) as the value of a closely related airframe, after the POH's forward-CG stall speeds showed the c172p's -1.122 too weak (a fit gave 1.15x; -1.28 is 1.14x).
 - **NASA CR-2337 (Kohlman, 1974)**: flight test data for a Cessna Cardinal (177), a different aircraft.
 - **NASA CR-2605 (Roesch and Harlan, 1975)**: Cessna 172 stability derivatives computed with DATCOM (estimates, not measurements); scan too garbled to transcribe reliably.
 - **No open, independent measurement of the C172 short-period mode was found.** The short period is checked only against the MIL-F-8785C limits.
