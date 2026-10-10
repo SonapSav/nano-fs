@@ -1463,6 +1463,13 @@ landmarks; later night lighting, shadows, haze.
     (landmarks.js builds it; without one, the old OSM-based build). OSM's dome tops (43 m
     gallery domes, 65 m side domes) disagree with the model and are no longer used.
     Frame time near it ~5 ms (this iGPU). test_viewer_grand_mosque.py.
+  - [ ] Discuss later (the owner, 2026-10-10): surface textures for the Grand Mosque (and
+    then other landmarks and ordinary buildings). Options put forward: (1) galleries as
+    open arcades in the shader (dark pointed-arch recesses on paired columns, faked
+    depth), (2) real arch geometry, (3) CC0 photo marble textures (ambientCG / Poly Haven,
+    vendored, a few MB), (4) shader ornament (gold bands, crenellated parapets, floral
+    inlays, veining); photos of the real mosque ruled out (copyright, smearing). My
+    recommendation: 1 and 4 first, then 3 if close-ups need it.
   - [ ] The owner decides whether and how to credit the reference model used to measure
     the Grand Mosque (CC BY 4.0; no model data is distributed). Not credited yet, at the
     owner's request (2026-10-10).
