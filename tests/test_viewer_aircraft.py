@@ -68,6 +68,13 @@ out.settled = bottoms(rest);
 out.rise = m.gears.map((g) => -g.group.position.z);
 m.settle(pose(10, 2.45), () => 0.03);
 out.airborne = m.gears.map((g) => -g.group.position.z);
+out.shadowHigh = m.gears.map((g) => g.shadow.visible);
+m.settle(rest, () => 0.03);
+// The contact shadow: flat (its normal world up) just above the surface, under the tyre.
+out.shadow = m.gears.map((g) => { g.shadow.updateMatrix = () => {}; m.group.matrix.copy(rest); m.group.matrixAutoUpdate = false; m.group.updateMatrixWorld(true);
+  const c = new THREE.Vector3().setFromMatrixPosition(g.shadow.matrixWorld), n = new THREE.Vector3(0, 1, 0).transformDirection(g.shadow.matrixWorld);
+  const t = g.contact.clone().add(g.group.position).applyMatrix4(rest);
+  return { visible: g.shadow.visible, y: c.y, ny: n.y, dx: Math.hypot(c.x - t.x, c.z - t.z) }; });
 console.log(JSON.stringify(out));
 """
 
@@ -107,6 +114,12 @@ def test_tip_shading_is_not_bent_by_end_caps(model):
 
 def test_gear_settles_on_the_surface(model):
     assert all(y < 0.03 for y in model["unsettled"])  # JSBSim's contacts sit in the ground at rest
-    assert model["settled"] == pytest.approx([0.03] * len(model["settled"]), abs=0.003)  # tyres on the surface
+    assert model["settled"] == pytest.approx([0.015] * len(model["settled"]), abs=0.003)  # tyres on the surface, 1.5 cm flat spot
     assert all(0 < r < 0.3 for r in model["rise"])
     assert model["airborne"] == [0] * len(model["airborne"])  # nothing moves in the air
+
+
+def test_contact_shadow_under_each_tyre(model):
+    assert model["shadowHigh"] == [False] * 3  # 10 m up: none
+    for sh in model["shadow"]:
+        assert sh["visible"] and sh["y"] == pytest.approx(0.034, abs=0.002) and sh["ny"] == pytest.approx(1, abs=1e-6) and sh["dx"] < 0.01

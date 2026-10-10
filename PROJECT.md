@@ -1286,7 +1286,10 @@ landmarks; later night lighting, shadows, haze.
     nothing placed the gear or the shadow again. Now the scene re-places them whenever
     the ground under the aircraft changes (or the sun), without waiting for a frame
     (scene.js _followGround); reproduced on the preview and fixed
-    (data/shots/gear_preview.py). Tyres dark grey (0x3a3a3a), not black.
+    (data/shots/gear_preview.py). Tyres dark grey (0x3a3a3a), not black. Then they
+    looked to float (the owner): each tyre now presses 1.5 cm into the surface (a loaded
+    tyre's flat spot) and lays a soft contact shadow under it, fading out within 0.6 m
+    of height (aircraft.js settle).
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the
     flown aircraft's static parts (45 meshes), palms and bushes across tiles (~50).
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings

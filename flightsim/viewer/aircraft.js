@@ -357,6 +357,23 @@ function wheel(center, radius, width, material) {
 // --- The aircraft -----------------------------------------------------------------------
 
 const MAX_GEAR_RISE_M = 0.3; // beyond this the aircraft is on its belly, not its gear
+const TYRE_DEFLECTION_M = 0.015; // a loaded tyre's flat spot against the surface (project choice)
+const CONTACT_FADE_M = 0.6; // the contact shadow fades out this high above the surface
+
+// A soft dark ellipse under a tyre (where the sun's shadow of the aircraft may be elsewhere,
+// the ground darkens where the tyre presses on it): black, opaque in the middle, fading to
+// the rim (alpha per vertex). Unit radius in its plane (x, z); scaled per tyre.
+function contactShadow(lengthM, widthM) {
+  const g = new THREE.CircleGeometry(1, 24).rotateX(-Math.PI / 2);
+  const n = g.attributes.position.count, rgba = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) rgba[4 * i + 3] = i === 0 ? 0.6 : 0; // vertex 0: the centre
+  g.setAttribute("color", new THREE.BufferAttribute(rgba, 4));
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+  m.scale.set(lengthM / 2, 1, widthM / 2);
+  m.matrixAutoUpdate = false;
+  m.visible = false;
+  return m;
+}
 
 export function buildC172({ registration = REGISTRATION } = {}) {
   const gears = []; // { group, contact (body metres) }
@@ -449,8 +466,10 @@ export function buildC172({ registration = REGISTRATION } = {}) {
     main.add(beam([58, yy(18), 5], [58, yy(41), -7], 4, 1.2, grey));
     main.add(wheel([58.2, yy(43), -8], 7.5, 5, tyre));
     main.add(ellipsoid([60, yy(43), -6], 16, 5, 8.5, white));
+    const mainShadow = contactShadow(0.42, 0.24);
+    main.add(mainShadow);
     group.add(main);
-    gears.push({ group: main, contact: toBody(58.2, yy(43), -15.5) }); // JSBSim's LEFT_MAIN / RIGHT_MAIN
+    gears.push({ group: main, contact: toBody(58.2, yy(43), -15.5), shadow: mainShadow }); // JSBSim's LEFT_MAIN / RIGHT_MAIN
     // Navigation lights on the wingtips at their thickest point (about 30% chord; the tip
     // is ~5 in thick), facing outward and a little forward: red left, green right.
     group.add(lamp(toBody(43, yy(214), wingZ(214) + 0.7), new THREE.Vector3(0.35, side, 0), side > 0 ? 0x2bff5a : 0xff2a2a, 1.3, 0.35, 1.8));
@@ -486,8 +505,10 @@ export function buildC172({ registration = REGISTRATION } = {}) {
   nose.add(beam([-4, 0, 10], [-6.8, 0, -13], 3, 3, grey));
   nose.add(wheel([-6.8, 0, -14], 5.5, 4, tyre));
   nose.add(ellipsoid([-5, 0, -12], 12, 4, 7, white));
+  const noseShadow = contactShadow(0.32, 0.18);
+  nose.add(noseShadow);
   group.add(nose);
-  gears.push({ group: nose, contact: toBody(-6.8, 0, -19.5) }); // JSBSim's NOSE
+  gears.push({ group: nose, contact: toBody(-6.8, 0, -19.5), shadow: noseShadow }); // JSBSim's NOSE
 
   // Belly camera (camera.js): a ball turret under the cabin floor, its lens at the centre.
   // Hidden while the camera draws its own picture.
@@ -508,10 +529,23 @@ export function buildC172({ registration = REGISTRATION } = {}) {
     // (leg, wheel, fairing) is raised along the body's up axis by how far its contact
     // point is under the surface. `matrix`: the aircraft's world matrix (body axes);
     // `surfaceAt(x, z)`: the drawn surface's height there (world metres).
+    // The tyre presses TYRE_DEFLECTION_M into the surface (its flat spot), and a contact
+    // shadow lies on the surface under it, fading out with height.
     settle(matrix, surfaceAt) {
+      const inv = new THREE.Matrix4().copy(matrix).invert();
+      const rot = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().extractRotation(matrix)).invert();
       for (const g of gears) {
-        const p = g.contact.clone().applyMatrix4(matrix);
-        g.group.position.z = -Math.min(MAX_GEAR_RISE_M, Math.max(0, surfaceAt(p.x, p.z) - p.y)); // body z is down
+        const p = g.contact.clone().applyMatrix4(matrix), surface = surfaceAt(p.x, p.z);
+        g.group.position.z = -Math.min(MAX_GEAR_RISE_M, Math.max(0, surface - TYRE_DEFLECTION_M - p.y)); // body z is down
+        const bottom = g.contact.clone().add(g.group.position).applyMatrix4(matrix).y;
+        const height = bottom - surface;
+        g.shadow.visible = height < CONTACT_FADE_M;
+        if (!g.shadow.visible) continue;
+        g.shadow.material.opacity = Math.min(1, 1 - Math.max(0, height) / CONTACT_FADE_M);
+        // Flat on the surface (world horizontal) just above it, under the tyre: its pose in
+        // the gear group's frame.
+        const world = new THREE.Vector3(p.x, surface + 0.004, p.z).applyMatrix4(inv).sub(g.group.position);
+        g.shadow.matrix.compose(world, rot, g.shadow.scale);
       }
     },
     update(row, dtS = 0) {
