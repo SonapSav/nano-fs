@@ -113,6 +113,30 @@ landmarks:
   - {name: Etihad Towers, kind: glass_towers, replace: true,
      osm: [way/168401784, way/168401785, way/168401781, way/168401783, way/168401782]}
 
+# Bridges (viewer/bridges.js; the build: world/scenery_bridges.py). Every OSM road and
+# railway bridge gets a deck: its ends on the roads at the ground, 1 m over land, 8 m of
+# clearance over water (project choice), ramps of at most 5 %. These landmark bridges
+# (OSM ways or name) set their own clearance, deck depth and structure. Sources
+# retrieved 2026-10-10 (docs/REFERENCES.md); "project choice" where none gave a figure.
+bridges:
+  # Sheikh Zayed Bridge (Zaha Hadid, 2010): 842 m, four lanes each way, a through arch of
+  # composite steel and concrete; the principal arch 235 m long, 60 m above the water
+  # (Wikipedia); 3 arches, 16 m clearance (Structurae). Side arches: project choice.
+  - {name: Sheikh Zayed Bridge, kind: wave_arch, ways: [91207495, 407685949], clearance_m: 16, deck_depth_m: 2.5,
+     main_arch_m: 235, arch_top_m: 60, side_arch_m: 150, side_arch_top_m: 32}
+  # Al Maqta Bridge (1967, second arch 1997): about 300 m, steel tied (bowstring) arches,
+  # one per direction (Wikipedia; Gulf News). Arch over the channel; its rise and the
+  # clearance: project choices.
+  - {name: Al Maqta Bridge, kind: tied_arch, ways: [24155984, 24155986], clearance_m: 6, deck_depth_m: 1.5, arch_rise_ratio: 0.18}
+  # Mussafah Bridge (1976-78): 480 m, six lanes, prestressed concrete girder (Wikipedia,
+  # Structurae). Clearance: project choice.
+  - {name: Mussafah Bridge, kind: girder, ways: [24151136, 24151139], clearance_m: 8, deck_depth_m: 2.2}
+  # Sheikh Khalifa Bridge (the Saadiyat Island bridge, 2009): 1,455 m, Al Mina to
+  # Saadiyat, prestressed concrete box girders 3.5-10.25 m deep, spans to 200 m (main
+  # unit 110-200-135-70-45 m) on V-piers, at most 35 m above ground (Strabag; Wikipedia).
+  - {name: Sheikh Khalifa Bridge, kind: box_girder, osm_name: Sheikh Khalifa Bridge, clearance_m: 31.5, deck_depth_m: 3.5,
+     main_spans_m: [110, 200, 135, 70, 45], girder_max_m: 10.25, v_pier_deg: 27.45}
+
 # Published airfield data where OSM lacks or disagrees (OSM gives positions and numbers).
 # Runways without a width here or in OSM get default_runway_width_m.
 airports:

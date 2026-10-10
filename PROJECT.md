@@ -1311,6 +1311,21 @@ landmarks; later night lighting, shadows, haze.
     roads on bridges and overpasses are draped onto the ground below (FABDEM is bare
     earth; OSM bridge tags are not used yet). Fix if a spot matters: split ribbons at
     interior grid points; for bridges see the bridges item.
+  - [x] Bridges (2026-10-10): the build takes every OSM road and railway bridge out of the
+    ground roads (767 ways joined into 686 bridges, 144 km; scenery_bridges.py) and
+    gives it a deck profile: ends on the ground roads, 1 m over land (embankment to
+    embankment), over water (WorldCover water or bare earth within 1 m of sea level: the
+    satellite classes a deck as built-up) a clearance above sea level, ramps at most 5 %
+    (bridges.json). Viewer (bridges.js): road, girder fascia, parapets, underside, piers
+    where the deck stands 2.5 m up (35 m apart over land, 45 m over water), grouped by
+    tile, drawn within 16 km. Landmarks: Sheikh Zayed Bridge (wave of white steel arches
+    over the median, principal arch 235 m long and 60 m high, strands crossing at the
+    crown, hangers), Al Maqta (a bowstring arch per carriageway over the channel), Mussafah
+    (girder), Sheikh Khalifa Bridge = the Saadiyat Island bridge (35 m deck, haunched box
+    girder to 10.25 m over the 200 m span's piers, triple V-piers at 27.45 deg). Sources
+    in docs/REFERENCES.md; side arches, Maqta's rise and the clearances of Maqta and
+    Mussafah are project choices. Visual only (the physics flies through them). Approach
+    view: +40 draw calls, +150k triangles.
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the
     flown aircraft's static parts (45 meshes), palms and bushes across tiles (~50).
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings

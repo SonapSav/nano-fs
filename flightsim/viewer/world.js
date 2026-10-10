@@ -16,6 +16,7 @@ const state = {
   manifest: null,
   airfields: null, // the region's airfields.json: {aerodromes, runways}
   landmarks: [], // the region's landmarks.json (none for older builds)
+  bridges: [], // the region's bridges.json (none for older builds)
   heights: new Map(), // "ix,iz" -> Float32Array | null (outside the region) | "loading"
   landcover: new Map(),
 };
@@ -70,6 +71,9 @@ export const world = {
   get landmarks() {
     return state.landmarks;
   },
+  get bridges() {
+    return state.bridges;
+  },
   get manifest() {
     return state.manifest;
   },
@@ -85,6 +89,7 @@ export const world = {
     state.scenery = scenery;
     state.manifest = state.airfields = null;
     state.landmarks = [];
+    state.bridges = [];
     state.heights.clear();
     state.landcover.clear();
     if (scenery) {
@@ -97,6 +102,9 @@ export const world = {
         state.airfields = airfields;
         if ("landmarks.json" in (manifest.files ?? {})) {
           state.landmarks = await fetch(sceneryUrl(scenery, "landmarks.json")).then((r) => (r.ok ? r.json() : [])).catch(() => []);
+        }
+        if ("bridges.json" in (manifest.files ?? {})) {
+          state.bridges = await fetch(sceneryUrl(scenery, "bridges.json")).then((r) => (r.ok ? r.json() : [])).catch(() => []);
         }
       } catch (e) {
         console.warn(`scenery ${scenery.name} not available: ${e.message}`);

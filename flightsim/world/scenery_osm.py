@@ -321,13 +321,17 @@ def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: fl
     z (south) metres rounded to 0.1, for the tiles of the region. Lines are cut at tile
     edges; areas go to the tile of their centroid (outer rings only). `capture`: OSM
     objects ("way/<id>", "relation/<id>") whose first outer ring and its inner rings are
-    also returned under the key "captured" ({object: {"outer": ring, "inner": [ring, ...]}})."""
+    also returned under the key "captured" ({object: {"outer": ring, "inner": [ring, ...]}}).
+    Roads and railways on bridges are left out of the tiles and returned whole under the
+    key "bridges" ([{"id", "nodes" (OSM node ids), "pts" ([[x, z], ...]), "kind" ("roads"
+    or "rail"), "cls", "lanes", "layer", "name"}]; scenery_bridges.py)."""
     import osmium
 
     s, w, n, e = bounds_deg
     inside_deg = lambda lat, lon: s <= lat <= n and w <= lon <= e  # noqa: E731
     tiles: dict = {}
     captured: dict[str, dict] = {}
+    bridges: list[dict] = []
 
     def tile(key):
         return tiles.setdefault(key, {"roads": {}, "rail": [], "taxiway": [], "apron": [], "buildings": []})
@@ -391,7 +395,13 @@ def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: fl
             pts = [xz(nd.lat, nd.lon) for nd in o.nodes]
         except osmium.InvalidLocationError:
             continue
+        if tags.get("bridge", "no") != "no" and kind in ("roads", "rail"):
+            bridges.append({"id": o.id, "nodes": [nd.ref for nd in o.nodes], "pts": [list(p) for p in pts], "kind": kind, "cls": cls or "rail",
+                            "lanes": _metres(tags.get("lanes")), "layer": _metres(tags.get("layer")) or 1,
+                            "name": tags.get("bridge:name") or tags.get("name:en") or tags.get("name")})  # fmt: skip
+            continue
         add_lines(kind, pts, cls)
     if capture:
         tiles["captured"] = captured
+    tiles["bridges"] = sorted(bridges, key=lambda b: b["id"])
     return tiles

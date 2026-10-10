@@ -35,6 +35,7 @@ import numpy as np
 import yaml
 
 from flightsim.world import geo
+from flightsim.world.dem import DemTerrain
 from flightsim.world.scenery import (
     FORMAT, HEIGHT_CELLS, IMAGERY_PX, LANDCOVER_CELLS, POST_M, SCENERY_DIR, SHORE_STEP_M, TILE_SIZE_M, features_name,
     heights_name, imagery_name, landcover_name, shore_name,
@@ -70,7 +71,7 @@ def load_spec(path: str | Path) -> RegionSpec:
     raw = yaml.safe_load(Path(path).read_text())
     return RegionSpec(
         name=raw["name"], origin_lat_deg=float(raw["origin_lat_deg"]), origin_lon_deg=float(raw["origin_lon_deg"]),
-        tiles_radius=int(raw["tiles_radius"]), sources={**raw["sources"], "landmarks": raw.get("landmarks") or []},
+        tiles_radius=int(raw["tiles_radius"]), sources={**raw["sources"], "landmarks": raw.get("landmarks") or [], "bridges": raw.get("bridges") or []},
         pinned=raw.get("pinned", {}) or {},
         airports=raw.get("airports", {}) or {}, default_runway_width_m=float(raw.get("default_runway_width_m", 30.0)),
         origin_airport=raw.get("origin_airport"),
@@ -510,6 +511,42 @@ def _height_at(out: Path, x: float, z: float) -> float:
     return max(0.0, float(posts[j, i]))
 
 
+class _BuiltTerrain(DemTerrain):
+    """The terrain of the tiles built so far (no manifest yet): height and water, loaded
+    tile by tile as asked."""
+
+    class _Tiles(dict):
+        def __init__(self, out: Path, name, dtype, n):
+            super().__init__()
+            self.out, self.name, self.dtype, self.n = out, name, dtype, n
+
+        def get(self, key, default=None):
+            if key not in self:
+                path = self.out / self.name(*key)
+                self[key] = np.fromfile(path, self.dtype).reshape(self.n, self.n) if path.exists() else None
+            return self[key] if self[key] is not None else default
+
+    def __init__(self, out: Path):
+        self.heights = self._Tiles(out, heights_name, "<f4", HEIGHT_CELLS + 1)
+        self.landcover = self._Tiles(out, landcover_name, np.uint8, LANDCOVER_CELLS)
+
+
+def _bridges(spec: RegionSpec, ways: list[dict], out: Path, log=print) -> None:
+    """bridges.json (scenery_bridges.py): every OSM road and railway bridge as a deck
+    profile; the region file's `bridges` (landmark bridges) set their own clearance."""
+    from flightsim.world.scenery_bridges import build_bridges, landmark_summary
+
+    t = _BuiltTerrain(out)
+    bridges = build_bridges(ways, t.height_at, t.water_at, spec.sources.get("bridges") or [])
+    (out / "bridges.json").write_text(json.dumps(bridges, separators=(",", ":"), sort_keys=True) + "\n")
+    log(f"bridges: {len(ways)} OSM ways in {len(bridges)} bridges")
+    for name, r in landmark_summary(bridges).items():
+        log(f"bridge {name}: {r['chains']} decks, {r['length_m']:.0f} m in all, deck up to {r['deck_max_m']:.1f} m")
+    for m in spec.sources.get("bridges") or []:
+        if not any(b.get("landmark") == m["name"] for b in bridges):
+            log(f"bridge {m['name']}: not found in the OSM extract")
+
+
 def _osm_ids(mark: dict) -> list[str]:
     """A landmark's OSM objects: `osm` is one ("way/<id>") or a list."""
     return [mark["osm"]] if isinstance(mark["osm"], str) else list(mark["osm"])
@@ -738,6 +775,7 @@ def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_h
     marks = spec.sources.get("landmarks") or []
     tiles = extract_features(pbf, g, region_bounds_deg(spec, 0.0), half, TILE_SIZE_M, capture={o for m in marks for o in _osm_ids(m)})
     captured = tiles.pop("captured", {})
+    _bridges(spec, tiles.pop("bridges", []), out, log)
     if building_height is not None:
         _measured_heights(spec, g, tiles, building_height, log)
     sites = {}

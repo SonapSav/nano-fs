@@ -110,14 +110,15 @@ flightsim/          # installable package (uv_build backend)
                     #     roads, paving and buildings, in the tile worker), realAirfields.js / runwayGeometry.js (its
                     #     runways), mapRegion.js (its map tiles), landmarks.js / landmarkKit.js (landmark models,
                     #     their materials and sun shadows; ?debug in the URL exposes the scene for screenshots),
-                    #     staticMerge.js (static objects baked into one mesh per material: fewer draw calls)
+                    #     staticMerge.js (static objects baked into one mesh per material: fewer draw calls),
+                    #     bridges.js (every OSM bridge's deck and piers, the landmark bridges' arches and girders)
   analysis/         # mode identification, validation maneuvers, validation checks
   atmosphere/       # Dryden turbulence (MIL-F-8785C)
   world/            # terrain height shared with the viewer (bit-identical port of viewer/terrainCore.js);
                     #   geo.py: WGS84 latitude/longitude <-> map metres around the world's origin (viewer/geo.js the same)
                     #   scenery.py: built real-world regions (tile grid, files, manifest); scenery_build.py: the build
                     #   dem.py: a region's height and water (viewer/demCore.js the same); ground.py: the ground of a config
-                    #   scenery_osm.py: the build's OpenStreetMap runways and features
+                    #   scenery_osm.py: the build's OpenStreetMap runways and features; scenery_bridges.py: bridge decks
   batch.py          # parallel seeded episode batches
   config.py         # YAML loading (base: inheritance, overrides) + config hash
   runner.py         # headless run loop

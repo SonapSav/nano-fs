@@ -17,6 +17,7 @@ import { RoadNetwork } from "./roads.js";
 import { QUALITY, Terrain, waterUniforms } from "./terrain.js";
 import { LIFT_M as RUNWAY_LIFT_M, RealAirfields } from "./realAirfields.js";
 import { Landmarks } from "./landmarks.js";
+import { Bridges } from "./bridges.js";
 import { world } from "./world.js";
 import { groundDetailStrength } from "./groundDetail.js";
 import { buildC172 } from "./aircraft.js";
@@ -126,6 +127,7 @@ export class FlightScene {
     this.proceduralWindsock = this.windsock = new Windsock(this.procedural);
     this.realAirfields = new RealAirfields(this.scene);
     this.landmarks = new Landmarks(this.scene);
+    this.bridges = new Bridges(this.scene);
     this.wind = [0, 0]; // the windsock's wind (from deg, kt), kept across a world change
     this.terrain = new Terrain(this.scene, quality);
     this._applyQuality(quality);
@@ -210,7 +212,7 @@ export class FlightScene {
     this.skyLight.setTime(time_of_day);
     this.skyLight.setVisibility(visibility);
     this.groundUnder = null; // the shadow follows the new sun (_followGround)
-    this.landmarks.setEnvironment(this.renderer, this.skyLight.sky); // reflections of this sky
+    this._environment(); // reflections of this sky
     const tint = new THREE.Color(TIMES[this.skyLight.time].sun).lerp(new THREE.Color(0xffffff), 0.55);
     this.clouds.setTint(tint);
     this.clouds.set(clouds, cloud_seed);
@@ -232,7 +234,7 @@ export class FlightScene {
     this.renderer = r;
     this.skyLight.renderer = r;
     this.shadowMaskDirty = true; // the mask texture lived in the old context
-    this.landmarks.setEnvironment(r, this.skyLight.sky);
+    this._environment();
     this._bindPointer();
     this.resize();
   }
@@ -312,7 +314,8 @@ export class FlightScene {
     this.windsock = this.proceduralWindsock;
     this.realAirfields.build(real ? w.airfields : null);
     this.landmarks.build(real ? w.landmarks : null);
-    this.landmarks.setEnvironment(this.renderer, this.skyLight.sky);
+    this.bridges.build(real ? w.bridges : null);
+    this._environment();
     const home = real ? this.realAirfields.nearest(near.x, near.z) : null;
     if (home) {
       this.papi = new Papi(this.scene, home);
@@ -523,8 +526,15 @@ export class FlightScene {
     this.updateShadow();
   }
 
+  // The sky's environment map for the landmarks and bridges.
+  _environment() {
+    this.landmarks.setEnvironment(this.renderer, this.skyLight.sky);
+    this.bridges.setEnvironment(this.landmarks.envTarget?.texture);
+  }
+
   render() {
     this._followGround();
+    this.bridges.update(this.camera.position);
     waterUniforms.waterTime.value = (performance.now() / 1000) % 10000;
     this._stepRecentre();
     this._renderShadowMask();
