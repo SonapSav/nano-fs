@@ -1409,8 +1409,20 @@ landmarks; later night lighting, shadows, haze.
     switch turns it off. It replaces the plain noise on imagery tiles (the land cover
     fallback keeps it). Strengths and sizes by eye; the first ripples were too regular
     (corduroy lines) and were weakened. Frame time unchanged within noise.
-  - [ ] Next in the owner's scenery plan (2026-10-10): buildings coloured from the
-    imagery, lighting (shadows, haze), night lighting.
+  - [x] Buildings coloured from the imagery (2026-10-10, the owner's go-ahead): a build
+    step after the imagery (`world/scenery_colours.py`; run by `build` and
+    `--hires-only`) gives each OSM building the median colour of the imagery inside its
+    footprint (the 1 m chunks where built, the 10 m Sentinel tile elsewhere; footprints
+    rasterized per 4 km tile), stored as a fourth value of the building (0xRRGGBB) in
+    its features file: 108,543 buildings, 3 min on 12 cores. Towers (40 m and up) keep
+    their glass: the imagery sees them up to ~23 deg off nadir, so their roofs lie
+    beside the footprint. Viewer (`featureGeometry.js`): the roof takes the colour,
+    brightened as the ground's imagery (x1.4), the walls blend 45 % of it into the stone
+    and render palette (project choices). Roofs now sit in the imagery's tones instead
+    of one light stone; some come out dark where shadow or a neighbour's lean covers
+    most of a small footprint. Frame time unchanged.
+  - [ ] Next in the owner's scenery plan (2026-10-10): lighting (shadows, haze), night
+    lighting.
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the
     flown aircraft's static parts (45 meshes), palms and bushes across tiles (~50).
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings

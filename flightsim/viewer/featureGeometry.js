@@ -5,8 +5,11 @@
 //
 // Roads and railways: ribbons draped every DRAPE_M, lifted ROAD_LIFT_M (the material also
 // pulls them forward in depth). Taxiways: ribbons; aprons: polygons (ear clipping).
-// Buildings: footprints extruded to their height, flat roofs, one colour each (vertex
-// colours: light stone and render for most, blue-grey glass for towers; project choices).
+// Buildings: footprints extruded to their height, flat roofs (vertex colours): the roof
+// the imagery's colour over the footprint where the build gives one (scenery_colours.py),
+// brightened as the ground's imagery is (terrain.js imageryGain), the walls that blended
+// with light stone and render; else stone and render; towers blue-grey glass (project
+// choices).
 
 import { TILE_SIZE_M, heightAt } from "./demCore.js";
 
@@ -199,6 +202,8 @@ const linear = (hex) => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255].map((v)
 const WALLS = [0xe9e2d2, 0xdcd3bf, 0xf1eee6, 0xcfc4ad, 0xe3dccb].map(linear); // render and stone
 const GLASS = [0x7d93a6, 0x8aa1ae, 0x6f8494].map(linear); // towers
 const ROOF_SHADE = 0.85;
+const IMAGERY_GAIN = 1.4; // terrain.js regionMaterial imageryGain: roofs match the ground's imagery
+const WALL_FROM_ROOF = 0.45; // how much of the roof's colour the walls take (project choice)
 
 // Buildings with at least `minHeightM` (e.g. only towers on distant tiles), one mesh with
 // vertex colours and, for the facade shader (terrain.js), a "facade" attribute in metres:
@@ -207,7 +212,7 @@ const ROOF_SHADE = 0.85;
 export function buildingData(f, tiles, minHeightM = 0) {
   const mesh = new Mesh(true, true);
   let i = 0;
-  for (const [height, , ring] of f.buildings ?? []) {
+  for (const [height, , ring, colour] of f.buildings ?? []) {
     i++;
     if (height < minHeightM || ring.length < 6) continue;
     let cx = 0, cz = 0;
@@ -220,8 +225,12 @@ export function buildingData(f, tiles, minHeightM = 0) {
     const y0 = heightAt(tiles, cx, cz) - 0.5; // a little into the ground on slopes
     const y1 = y0 + 0.5 + height;
     const hash = Math.abs(Math.round(cx * 7 + cz * 13 + i)) % 15;
-    const wall = height >= 40 ? GLASS[hash % GLASS.length] : WALLS[hash % WALLS.length];
-    const roof = wall.map((v) => v * ROOF_SHADE);
+    let wall = height >= 40 ? GLASS[hash % GLASS.length] : WALLS[hash % WALLS.length];
+    let roof = wall.map((v) => v * ROOF_SHADE);
+    if (colour !== undefined && height < 40) {
+      roof = linear(colour).map((v) => Math.min(1, v * IMAGERY_GAIN));
+      wall = wall.map((v, k) => v + (roof[k] - v) * WALL_FROM_ROOF);
+    }
     const n = ring.length / 2;
     let area = 0;
     for (let k = 0; k < n; k++) {

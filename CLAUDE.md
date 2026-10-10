@@ -122,6 +122,7 @@ flightsim/          # installable package (uv_build backend)
                     #   dem.py: a region's height and water (viewer/demCore.js the same); ground.py: the ground of a config
                     #   scenery_osm.py: the build's OpenStreetMap runways and features; scenery_bridges.py: bridge decks
                     #   scenery_hires.py: the build's 1 m imagery (Satellogic EarthView), colour-matched to Sentinel-2
+                    #   scenery_colours.py: building roof colours from the imagery (in the features files)
   batch.py          # parallel seeded episode batches
   config.py         # YAML loading (base: inheritance, overrides) + config hash
   runner.py         # headless run loop

@@ -92,6 +92,10 @@ def test_feature_meshes():
       roadY: [Math.min(...ys(g.roads)), Math.max(...ys(g.roads))], roadTris: g.roads.index.length / 3,
       apronTris: g.paved.index.length / 3, concave: fg.triangulate([0, 0, 10, 0, 10, 10, 5, 5, 0, 10]).length / 3,
       top: Math.max(...ys(b)), outward, tallCount: tall.position.length / 3, allCount: b.position.length / 3,
+      // A building with the imagery's colour (0x808080): its roof vertices (facade along -1).
+      roof: (() => {{ const c = fg.buildingData({{ buildings: [[10, "osm", [0, 0, 10, 0, 10, 10, 0, 10], 0x808080]] }}, tiles, 0);
+        const k = [...Array(c.position.length / 3).keys()].find((i) => c.facade[3 * i] === -1);
+        return [...c.color.slice(3 * k, 3 * k + 3)]; }})(),
     }}));
     """
     out = json.loads(subprocess.run([NODE, "--input-type=module"], input=script, capture_output=True, text=True, check=True).stdout)
@@ -101,6 +105,8 @@ def test_feature_meshes():
     assert out["top"] == pytest.approx(10 + 80)
     assert out["outward"]
     assert 0 < out["tallCount"] < out["allCount"]  # only the 80 m tower on distant tiles
+    grey = (128 / 255 * 0.9478672986 + 0.0521327014) ** 2.4 * 1.4  # sRGB to linear, brightened as the imagery
+    assert out["roof"] == pytest.approx([grey] * 3, rel=1e-5)
 
 
 def test_landmark_parts_and_courtyard(tmp_path):
