@@ -337,8 +337,10 @@ export class FlightScene {
     sh.patch.visible = agl < 200 && s.y > 0.02;
     if (!sh.patch.visible) return;
     // Flatten onto the plane y = h along the sun: (x, y, z) -> (x - sx/sy (y - h), h, z - sz/sy (y - h)).
-    // 25 cm up: above the runway and taxiway surfaces (drawn at 0.12-0.15 m).
-    const h = ground + 0.25, kx = s.x / s.y, kz = s.z / s.y;
+    // Just above the highest paved marking (hold bars, 0.08 m; runways 0.03, taxiways
+    // 0.05 m) and no higher: the patch darkens whatever lies under it, so higher it would
+    // cut across the tyres (bottoms at the runway, centres 0.22 m up).
+    const h = ground + 0.09, kx = s.x / s.y, kz = s.z / s.y;
     this.shadowFlatten.set(1, -kx, 0, kx * h, 0, 0, 0, h, 0, -kz, 1, kz * h, 0, 0, 0, 1);
     sh.flat.matrix.multiplyMatrices(this.shadowFlatten, this.aircraft.matrix);
     sh.flat.matrixWorld.copy(sh.flat.matrix);

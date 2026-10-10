@@ -1270,7 +1270,11 @@ landmarks; later night lighting, shadows, haze.
     compresses as JSBSim's does: `settle()` (aircraft.js) raises each gear (leg, wheel,
     fairing) by how far its contact point is under the drawn surface, every frame for the
     flown aircraft, once for parked ones (at rest: mains 4.3 cm, nose 7.4 cm with the
-    runway 3 cm up). Physics and logs unchanged.
+    runway 3 cm up). Physics and logs unchanged. The cut remained in the owner's third
+    photo: the aircraft's shadow patch (a semi-transparent sheet) was drawn 0.25 m up (to
+    clear the old 0.12-0.15 m surfaces) and sliced across the tyres; now 0.09 m (just
+    above the hold bars). Reproduced and checked with the belly camera in the live Al
+    Bateen takeoff (data/shots/belly_live.py).
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the
     flown aircraft's static parts (45 meshes), palms and bushes across tiles (~50).
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings
