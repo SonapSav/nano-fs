@@ -1387,11 +1387,18 @@ landmarks; later night lighting, shadows, haze.
     2.6-4.7 ms off). Credit "Satellogic EarthView (CC BY 4.0)" in the view and README.
     Known limits: faint seams between some EarthView tiles on plain sand; 2022 imagery
     (newer buildings stand on bare ground); towers lean in the imagery (off nadir up to
-    ~23 deg); OSM's drawn roads and paving still cover the imagery's real ones.
-  - [ ] With 1 m imagery: hide or thin OSM's drawn roads and paving where it covers
-    (the imagery shows them; dark interchange areas near the mosque), keeping runways
-    and taxiways; then detail textures, lighting (shadows, haze) and night lighting
-    (the owner's scenery plan, 2026-10-10).
+    ~23 deg).
+  - [x] Roads give way to the 1 m imagery (2026-10-10, the owner: "go ahead with the
+    roads"): the build writes `hires/cover.png` (the covered area's feathered weight
+    every 16 m, 33 KB, in `hires.json`); the viewer drops OSM's drawn roads and railways
+    where the imagery shows (its levels loaded and not faded out, times that weight),
+    dithered where it fades so they fade in and out without transparency
+    (`imageryClip.js hideUnderImagery`); runways, taxiways, aprons and the taxiway
+    centrelines stay (aircraft use them). Frame time unchanged within noise. The dark
+    areas inside the interchanges near the Grand Mosque are real: dense dark green
+    planting in the imagery, not drawn roads.
+  - [ ] Next in the owner's scenery plan (2026-10-10): detail textures, lighting
+    (shadows, haze), night lighting.
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the
     flown aircraft's static parts (45 meshes), palms and bushes across tiles (~50).
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings

@@ -21,7 +21,7 @@ const MAX_FETCHES = 6;
 const MAX_UPLOADS_PER_FRAME = 2;
 
 function placeholder() {
-  const t = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
+  const t = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1);
   t.needsUpdate = true;
   return t;
 }
@@ -37,6 +37,8 @@ export const clipUniforms = {
   clipIndex: { value: index },
   clipOn: { value: 0 },
   clipChunk: { value: new THREE.Vector2(512, 2048) }, // chunk size per level (m)
+  clipCover: { value: placeholder() }, // where the imagery covers (hires/cover.png; 0: nowhere yet)
+  clipCoverRect: { value: new THREE.Vector3(0, 0, 1) }, // its west and north edges and size (m)
 };
 
 export const CLIP_GLSL = `
@@ -45,14 +47,54 @@ uniform sampler2D clip1;
 uniform sampler2D clipIndex;
 uniform float clipOn;
 uniform vec2 clipChunk;
-// The level's colour at world (x, z) and whether its slot holds that chunk (a).
-vec4 clipSample(sampler2D tex, int level, float chunkM, vec2 p) {
+uniform sampler2D clipCover;
+uniform vec3 clipCoverRect;
+// Whether the level's slot for world (x, z) holds that chunk.
+float clipHas(int level, float chunkM, vec2 p) {
   vec2 c = floor(p / chunkM);
   vec2 slot = mod(c, ${SLOTS}.0);
   vec4 idx = texelFetch(clipIndex, ivec2(slot) + ivec2(0, level * ${SLOTS}), 0);
-  float ok = idx.b * (1.0 - step(0.5, abs(idx.r - c.x) + abs(idx.g - c.y)));
-  return vec4(texture2D(tex, p / (chunkM * ${SLOTS}.0)).rgb, ok);
+  return idx.b * (1.0 - step(0.5, abs(idx.r - c.x) + abs(idx.g - c.y)));
+}
+// The level's colour at world (x, z) and whether its slot holds that chunk (a).
+vec4 clipSample(sampler2D tex, int level, float chunkM, vec2 p) {
+  return vec4(texture2D(tex, p / (chunkM * ${SLOTS}.0)).rgb, clipHas(level, chunkM, p));
+}
+// How much the high-resolution imagery shows at world (x, z) from the camera: its levels
+// loaded and not faded out, times the covered area's weight.
+float clipShown(vec2 p) {
+  if (clipOn < 0.5) return 0.0;
+  vec2 uv = (p - clipCoverRect.xy) / clipCoverRect.z;
+  if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return 0.0;
+  float d = max(abs(p.x - cameraPosition.x), abs(p.y - cameraPosition.z));
+  float w1 = clipHas(1, clipChunk.y, p) * (1.0 - smoothstep(${FADE_M[1][0]}.0, ${FADE_M[1][1]}.0, d));
+  float w0 = clipHas(0, clipChunk.x, p) * (1.0 - smoothstep(${FADE_M[0][0]}.0, ${FADE_M[0][1]}.0, d));
+  return max(w0, w1) * texture2D(clipCover, uv).r;
 }`;
+
+// OpenStreetMap's drawn roads and railways give way to the imagery, which shows the real
+// ones: a fragment is dropped where the imagery shows (dithered where it fades, so they
+// fade in and out without sorting transparent surfaces).
+export function hideUnderImagery(material) {
+  const previous = material.onBeforeCompile;
+  material.onBeforeCompile = (shader, renderer) => {
+    previous?.call(material, shader, renderer);
+    Object.assign(shader.uniforms, clipUniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec2 vClipXZ;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvClipXZ = (modelMatrix * vec4(position, 1.0)).xz;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", `#include <common>\nvarying vec2 vClipXZ;\n${CLIP_GLSL}`)
+      .replace(
+        "#include <clipping_planes_fragment>",
+        `#include <clipping_planes_fragment>
+if (clipShown(vClipXZ) > fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))))) discard;`,
+      );
+  };
+  const previousKey = material.hasOwnProperty("customProgramCacheKey") ? material.customProgramCacheKey.bind(material) : () => "";
+  material.customProgramCacheKey = () => `${previousKey()}|underImagery`;
+  return material;
+}
 
 // After three's map_fragment: diffuseColor holds the tile imagery's colour (linear).
 export const CLIP_FRAGMENT = `
@@ -91,6 +133,27 @@ export class ImageryClip {
     }));
     clipUniforms.clipChunk.value.set(this.levels[0].chunkM, this.levels[1].chunkM);
     this._createTextures();
+    this.cover = hires.cover ?? null;
+    if (this.cover) this._loadCover(this.levels);
+  }
+
+  async _loadCover(levels) {
+    const c = this.cover;
+    try {
+      const r = await fetch(`scenery/${encodeURIComponent(this.scenery.name)}/${c.file}?h=${c.sha}`);
+      if (!r.ok) throw new Error(`${r.status}`);
+      const bitmap = await createImageBitmap(await r.blob(), { premultiplyAlpha: "none", colorSpaceConversion: "none" });
+      if (levels !== this.levels) return bitmap.close();
+      const t = new THREE.Texture(bitmap);
+      t.flipY = false; // rows go south, as the chunks
+      t.generateMipmaps = false;
+      t.minFilter = t.magFilter = THREE.LinearFilter;
+      t.needsUpdate = true;
+      clipUniforms.clipCover.value = t;
+      clipUniforms.clipCoverRect.value.set(c.x0_m, c.z0_m, c.size_m);
+    } catch (e) {
+      console.warn(`hires imagery cover: ${e.message}`);
+    }
   }
 
   // A new WebGL context (scene.js rebuildRenderer): the textures again, then the chunks.
@@ -99,7 +162,7 @@ export class ImageryClip {
     this.renderer = renderer;
     if (!this.levels) return;
     const scenery = this.scenery;
-    const hires = { chunk_px: this.chunkPx, levels: this.levels.map((l) => ({ chunk_m: l.chunkM, chunks: Object.fromEntries(l.chunks) })) };
+    const hires = { chunk_px: this.chunkPx, cover: this.cover, levels: this.levels.map((l) => ({ chunk_m: l.chunkM, chunks: Object.fromEntries(l.chunks) })) };
     this.set(scenery, hires);
   }
 
@@ -138,6 +201,8 @@ export class ImageryClip {
     this.ready = [];
     clipUniforms.clip0.value = placeholder();
     clipUniforms.clip1.value = placeholder();
+    clipUniforms.clipCover.value.dispose();
+    clipUniforms.clipCover.value = placeholder();
     clipUniforms.clipOn.value = 0;
   }
 

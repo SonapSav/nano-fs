@@ -20,8 +20,9 @@ no data (black). The build:
    4 m (four times larger chunks), JPEG; rows going south like the tiles' imagery, on the
    map grid (chunk (cx, cz) covers east x in [cx, cx + 1) x chunk and south z alike).
    Pixels without EarthView data hold the Sentinel colour, so a chunk is a complete
-   picture. `hires.json` lists the chunks; the viewer (viewer/imageryClip.js) streams the
-   ones around the camera.
+   picture. `hires.json` lists the chunks and `hires/cover.png` (the covered area's
+   weight every 16 m); the viewer (viewer/imageryClip.js) streams the chunks around the
+   camera and hides OSM's drawn roads where the imagery covers.
 """
 
 from __future__ import annotations
@@ -445,6 +446,19 @@ def _write_jpeg(img: np.ndarray, path: Path, quality: int) -> None:
                 part.rename(path)
 
 
+def _write_png(img: np.ndarray, path: Path) -> None:
+    import warnings
+
+    import rasterio
+    import rasterio.errors
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", rasterio.errors.NotGeoreferencedWarning)
+        with rasterio.open(path, "w", driver="PNG", width=img.shape[2], height=img.shape[1], count=img.shape[0], dtype="uint8") as o:
+            o.write(img)
+    path.with_name(path.name + ".aux.xml").unlink(missing_ok=True)
+
+
 def _block(cx1: int, cz1: int) -> list[tuple[int, int, int]]:
     """One level-1 chunk: its level-0 chunks with imagery and itself, written; returns
     the written chunks as (level, cx, cz)."""
@@ -523,7 +537,11 @@ def build_hires(spec, out: Path, log=print, workers: int | None = None) -> None:
         chunks = sorted((cx, cz) for L, cx, cz in written if L == lv)
         levels.append({"m_per_px": m, "chunk_m": chunk_m(lv),
                        "chunks": {f"{cx},{cz}": sha256_file(out / "hires" / f"l{lv}" / f"c_{cx}_{cz}.jpg")[:16] for cx, cz in chunks}})  # fmt: skip
-    index = {"format": HIRES_FORMAT, "chunk_px": CHUNK_PX, "levels": levels}
+    # Where the imagery covers (its feathered weight on the coarse grid; rows going south):
+    # the viewer hides OSM's drawn roads there, as the imagery shows the real ones.
+    _write_png((np.round(match.alpha * 255).astype(np.uint8))[None], out / "hires" / "cover.png")
+    cover = {"file": "hires/cover.png", "x0_m": x0, "z0_m": x0, "size_m": size * COARSE_M, "sha": sha256_file(out / "hires" / "cover.png")[:16]}
+    index = {"format": HIRES_FORMAT, "chunk_px": CHUNK_PX, "levels": levels, "cover": cover}
     (out / "hires.json").write_text(json.dumps(index, indent=0, sort_keys=True) + "\n")
     size_mb = sum(p.stat().st_size for p in (out / "hires").rglob("*.jpg")) / 1e6
     log(f"hires imagery: {len(levels[0]['chunks'])} chunks at 1 m, {len(levels[1]['chunks'])} at 4 m, {size_mb:.0f} MB")

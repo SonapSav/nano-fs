@@ -8,7 +8,7 @@
 
 import * as THREE from "three";
 import { addGroundDetail } from "./groundDetail.js";
-import { CLIP_FRAGMENT, CLIP_GLSL, clipUniforms } from "./imageryClip.js";
+import { CLIP_FRAGMENT, CLIP_GLSL, clipUniforms, hideUnderImagery } from "./imageryClip.js";
 import { TILE_SIZE_M, WATER_LEVEL_M, tileGeometryData, tileObjectsData } from "./terrainCore.js";
 import { SEA_SURFACE_M, demTileGeometryData, demTileObjectsData } from "./demTiles.js";
 import { world } from "./world.js";
@@ -427,8 +427,9 @@ export class Terrain {
     this.scenery = null; // a real-world region (world.js), or null: procedural
     const pulled = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 };
     this.featureMats = {
-      roads: addGroundDetail(new THREE.MeshLambertMaterial({ color: 0x5a5c5e, side: THREE.DoubleSide, ...pulled }), { strength: 0.25, tint: 0, fadeEndM: 250 }),
-      rail: new THREE.MeshLambertMaterial({ color: 0x5b4a3e, side: THREE.DoubleSide, ...pulled }),
+      // Roads and railways give way to a region's 1 m imagery where it covers (imageryClip.js).
+      roads: hideUnderImagery(addGroundDetail(new THREE.MeshLambertMaterial({ color: 0x5a5c5e, side: THREE.DoubleSide, ...pulled }), { strength: 0.25, tint: 0, fadeEndM: 250 })),
+      rail: hideUnderImagery(new THREE.MeshLambertMaterial({ color: 0x5b4a3e, side: THREE.DoubleSide, ...pulled })),
       paved: addGroundDetail(new THREE.MeshLambertMaterial({ color: 0x7d7f80, side: THREE.DoubleSide, ...pulled }), { strength: 0.25, tint: 0, fadeEndM: 250 }),
       buildings: facadeMaterial(),
       taxilines: new THREE.MeshBasicMaterial({ color: 0xd9a92b, side: THREE.DoubleSide, ...pulled, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }),
