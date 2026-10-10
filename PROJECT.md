@@ -1421,6 +1421,23 @@ landmarks; later night lighting, shadows, haze.
     and render palette (project choices). Roofs now sit in the imagery's tones instead
     of one light stone; some come out dark where shadow or a neighbour's lean covers
     most of a small footprint. Frame time unchanged.
+  - [x] Sheikh Zayed Bridge like the real one (2026-10-10, the owner's three photos: "I'd
+    like to look like that, now it doesn't"). Was: thin round tubes crossing over the
+    median on plain grey piers. Now (bridges.js waveArch, sources in REFERENCES): a white
+    spine in the void between the twin decks (23.6 m each, published), rising into three
+    arches (spans 144, 74 and 50 m published; centres measured on the 1 m imagery; tops
+    60 m published, 40 and 30 m project choices) of two flat box ribs each (4 m wide, 8 m
+    deep at the springs to 5 m at the crown; the published boxes are 5-8 m deep) that
+    part over the span, asymmetric with nearly straight legs; below the decks one wider
+    concrete spine that swoops down to "dune" piers at the water between the arches, so
+    the profile is one continuous wave; the marina arch swings outside the southern deck
+    (the imagery; the architects' "diverging ... to the outside of the roadways");
+    hangers to the nearest deck edge, cross beams in the void, white decks and parapets,
+    white curved lamp posts every 25 m along the outer edges (project choices), the road
+    crowning at 20 m (published; clearance 17.5 m). No ordinary piers under the spine.
+    All of it merged into the tile's meshes (the old arches were separate tube meshes).
+    Bridge decks everywhere: darker asphalt. The region file's bridge entry changed, so
+    bridges.json must be rebuilt (a full build, or the features step).
   - [ ] Next in the owner's scenery plan (2026-10-10): lighting (shadows, haze), night
     lighting.
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the

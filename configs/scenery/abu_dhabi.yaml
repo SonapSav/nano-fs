@@ -151,11 +151,20 @@ landmarks:
 # (OSM ways or name) set their own clearance, deck depth and structure. Sources
 # retrieved 2026-10-10 (docs/REFERENCES.md); "project choice" where none gave a figure.
 bridges:
-  # Sheikh Zayed Bridge (Zaha Hadid, 2010): 842 m, four lanes each way, a through arch of
-  # composite steel and concrete; the principal arch 235 m long, 60 m above the water
-  # (Wikipedia); 3 arches, 16 m clearance (Structurae). Side arches: project choice.
-  - {name: Sheikh Zayed Bridge, kind: wave_arch, ways: [91207495, 407685949], clearance_m: 16, deck_depth_m: 2.5,
-     main_arch_m: 235, arch_top_m: 60, side_arch_m: 150, side_arch_top_m: 32}
+  # Sheikh Zayed Bridge (Zaha Hadid, 2010): twin decks of 23.6 m between parapets (EAW),
+  # 61 m overall (ZHA); the road crowns 20 m above mean water, the main arch 60 m (ZHA);
+  # steel arches over the decks, 5-8 m deep boxes, prestressed concrete below the decks,
+  # the arches fixed in mass concrete piers, "in profile a continuous flowing line"; arch
+  # spans about 144 m (main channel), 74 m (secondary channel) and 50 m (marina) (EAW;
+  # ENR). The arches' centres measured on the 1 m imagery (map x, z), the marina arch
+  # outside the southern deck there; rib width, the side arches' tops, where the crowns
+  # sit (from the west end), how far the ribs part, lamp posts: project choices (the
+  # owner's photos, 2026-10-10).
+  - {name: Sheikh Zayed Bridge, kind: wave_arch, ways: [91207495, 407685949], clearance_m: 17.5, deck_depth_m: 2.5,
+     deck_width_m: 23.6, rib_width_m: 4, rib_depth_m: [8, 5], pier_low_m: 1.5, lamp_spacing_m: 25, lamp_height_m: 12,
+     arches: [{centre_xz: [2757, 474], span_m: 144, top_m: 60, ribs_apart_m: 9, side: 0, crown_at: 0.38},
+              {centre_xz: [2995, 513], span_m: 74, top_m: 40, ribs_apart_m: 6, side: 0.15, crown_at: 0.45},
+              {centre_xz: [3160, 541], span_m: 50, top_m: 30, ribs_apart_m: 4, side: 1}]}
   # Al Maqta Bridge (1967, second arch 1997): about 300 m, steel tied (bowstring) arches,
   # one per direction (Wikipedia; Gulf News). Arch over the channel; its rise and the
   # clearance: project choices.

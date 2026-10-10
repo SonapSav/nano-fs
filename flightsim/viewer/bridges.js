@@ -127,7 +127,7 @@ function waterRun(p) {
 
 // --- Deck and piers -----------------------------------------------------------------------
 
-function deck(b, p, cols, depthAt, pierAt) {
+function deck(b, p, cols, depthAt, pierAt, fascia = cols.concrete) {
   const hw = b.width_m / 2;
   const sec = p.map((q) => {
     const d = depthAt(q.s), y = q.y;
@@ -145,13 +145,13 @@ function deck(b, p, cols, depthAt, pierAt) {
   for (let i = 0; i + 1 < sec.length; i++) {
     const a = sec[i], c = sec[i + 1], n = a.n, m = n.clone().negate();
     cols.road.quad(a.Li, a.Ri, c.Ri, c.Li, up);
-    cols.concrete.quad(a.Lb, a.Lp, c.Lp, c.Lb, n); // left fascia and parapet's outer face
-    cols.concrete.quad(a.Rb, a.Rp, c.Rp, c.Rb, m);
-    cols.concrete.quad(a.Li, a.Lpi, c.Lpi, c.Li, m); // parapets' inner faces
-    cols.concrete.quad(a.Ri, a.Rpi, c.Rpi, c.Ri, n);
-    cols.concrete.quad(a.Lp, a.Lpi, c.Lpi, c.Lp, up); // parapet caps
-    cols.concrete.quad(a.Rp, a.Rpi, c.Rpi, c.Rp, up);
-    cols.concrete.quad(a.Lb, a.Rb, c.Rb, c.Lb, down);
+    fascia.quad(a.Lb, a.Lp, c.Lp, c.Lb, n); // left fascia and parapet's outer face
+    fascia.quad(a.Rb, a.Rp, c.Rp, c.Rb, m);
+    fascia.quad(a.Li, a.Lpi, c.Lpi, c.Li, m); // parapets' inner faces
+    fascia.quad(a.Ri, a.Rpi, c.Rpi, c.Ri, n);
+    fascia.quad(a.Lp, a.Lpi, c.Lpi, c.Lp, up); // parapet caps
+    fascia.quad(a.Rp, a.Rpi, c.Rpi, c.Rp, up);
+    fascia.quad(a.Lb, a.Rb, c.Rb, c.Lb, down);
   }
   // Piers: at `pierAt` positions (arc lengths), where the underside is high enough.
   for (const s of pierAt) {
@@ -170,48 +170,148 @@ function spacedPiers(p, spacing) {
 
 // --- Landmark structures ------------------------------------------------------------------
 
-// Sheikh Zayed Bridge: a wave of arches over the median between the carriageways, the
-// principal arch (`main_arch_m` long, `arch_top_m` above the water) over the channel and
-// a lower arch either side; each arch two steel strands that cross at its crown (the
-// "S" seen from above), hangers down to the decks every 15 m. Side arches, strand sizes
-// and hanger spacing: project choices.
-function waveArch(decks, cols) {
+// Sheikh Zayed Bridge (Zaha Hadid; sources in docs/REFERENCES.md): a white spine in the
+// void between the twin decks that rises into steel arches above them and plunges below
+// them to mass concrete piers at the water: in profile one continuous wave. Each arch is
+// a pair of flat box ribs (`rib_width_m` wide, `rib_depth_m` deep from spring to crown:
+// 5-8 m published) that part over the span (`ribs_apart_m`, the lens seen from above);
+// below the decks they are one wider concrete spine. The arches (`arches`: centre on the
+// map, span, top above the water, measured on the 1 m imagery) sit in the void, the last
+// swinging out past the southern deck (`side`: 0 the void's middle, 1 outside that deck),
+// as the spine "splits and splays ... to the outside of the roadways at the other end".
+// Hangers from the ribs to the nearest deck edge, cross beams under the decks in the void,
+// white curved lamp posts along both outer edges. Rises of the side arches, hanger and
+// beam spacing, lamp posts: project choices. Returns the stretch the spine carries (no
+// ordinary piers there).
+function waveArch(decks, white) {
   const ref = decks.reduce((a, d) => (d.p[d.p.length - 1].s > a.p[a.p.length - 1].s ? d : a));
-  const others = decks.filter((d) => d !== ref).flatMap((d) => d.p);
-  const median = (q) => {
-    if (!others.length) return { x: q.x, z: q.z, half: 0 };
-    let best = null, bd = Infinity;
-    for (const o of others) {
-      const d = Math.hypot(o.x - q.x, o.z - q.z);
-      if (d < bd) [best, bd] = [o, d];
+  const st = ref.b.structure, W = ref.b.width_m;
+  const others = decks.filter((d) => d !== ref).map((d) => d.p);
+  // The nearest point on a centreline (interpolated between its samples): {x, z, s, d}.
+  const nearest = (p, x, z) => {
+    let best = { d: Infinity };
+    for (let i = 0; i + 1 < p.length; i++) {
+      const a = p[i], b = p[i + 1], dx = b.x - a.x, dz = b.z - a.z, l2 = dx * dx + dz * dz || 1;
+      const k = Math.min(1, Math.max(0, ((x - a.x) * dx + (z - a.z) * dz) / l2));
+      const px = a.x + dx * k, pz = a.z + dz * k, d = Math.hypot(px - x, pz - z);
+      if (d < best.d) best = { x: px, z: pz, s: a.s + (b.s - a.s) * k, d };
     }
-    return { x: (q.x + best.x) / 2, z: (q.z + best.z) / 2, half: bd / 2 };
+    return best;
   };
-  const st = ref.b.structure, run = waterRun(ref.p) ?? { s0: 0, s1: ref.p[ref.p.length - 1].s };
-  const sc = (run.s0 + run.s1) / 2, A = st.main_arch_m, S = st.side_arch_m;
-  const arches = [[sc - A / 2, sc + A / 2, st.arch_top_m, 1.6], [sc - A / 2 - S, sc - A / 2, st.side_arch_top_m, 1.1], [sc + A / 2, sc + A / 2 + S, st.side_arch_top_m, 1.1]];
-  const geos = [];
-  for (const [s0, s1, top, r] of arches) {
-    for (const sign of [1, -1]) {
-      const pts = [];
-      for (let k = 0; k <= 40; k++) {
-        const t = k / 40, q = at(ref.p, s0 + (s1 - s0) * t), m = median(q);
-        const spring = Math.max(q.g, 0) + 2;
-        const off = sign * m.half * 0.85 * Math.cos(Math.PI * t), y = spring + (top - spring) * Math.sin(Math.PI * t) ** 0.85;
-        pts.push(V(m.x + q.nx * off, y, m.z + q.nz * off));
+  const project = (x, z) => nearest(ref.p, x, z).s;
+  const otherPts = others.flat();
+  const southRef = otherPts.length && ref.p.reduce((t, q) => t + q.z, 0) / ref.p.length > otherPts.reduce((t, q) => t + q.z, 0) / otherPts.length;
+  // The void's middle at arc length s, the lateral unit vector toward the southern deck and
+  // half the distance between the deck centrelines.
+  const frame = (s) => {
+    const q = at(ref.p, s);
+    if (!others.length) return { q, x: q.x, z: q.z, lx: q.nx, lz: q.nz, half: 0 };
+    const best = others.map((p) => nearest(p, q.x, q.z)).reduce((a, b) => (b.d < a.d ? b : a)), bd = best.d;
+    const sg = southRef ? -1 : 1; // from the ref deck toward the other, flipped if ref is the southern one
+    return { q, x: (q.x + best.x) / 2, z: (q.z + best.z) / 2, lx: (sg * (best.x - q.x)) / bd, lz: (sg * (best.z - q.z)) / bd, half: bd / 2 };
+  };
+  const arches = st.arches.map((a) => {
+    const c = project(a.centre_xz[0], a.centre_xz[1]);
+    return { ...a, s0: c - a.span_m / 2, s1: c + a.span_m / 2, westFirst: at(ref.p, c + 1).x > at(ref.p, c - 1).x };
+  }).sort((x, y) => x.s0 - y.s0);
+  const [rw, d0, d1] = [st.rib_width_m, st.rib_depth_m[0], st.rib_depth_m[1]];
+  const low = st.pier_low_m, lead = 60, tail = 40;
+  const S0 = arches[0].s0 - lead, S1 = arches[arches.length - 1].s1 + tail;
+  // Profile: {y (centre of the spine), sep (rib centres apart), f (side), above (an arch)}.
+  const profile = (s) => {
+    const { q } = frame(s), yd = q.y, ground = q.wet ? low : Math.max(q.g, low);
+    for (const [i, a] of arches.entries()) {
+      if (s >= a.s0 && s <= a.s1) {
+        // Asymmetric (the sources): the crown `crown_at` of the span from the arch's west
+        // end; nearly straight legs to a rounded top, as in photographs (1 - |x|^1.6).
+        const t = (s - a.s0) / (a.s1 - a.s0), tw = a.westFirst ? t : 1 - t, c = a.crown_at ?? 0.5;
+        const h = 1 - Math.abs(tw < c ? 1 - tw / c : (tw - c) / (1 - c)) ** 1.6;
+        return { y: yd + (a.top_m - d1 / 2 - yd) * h, sep: a.ribs_apart_m * Math.sqrt(h), f: a.side, above: true, t, depth: d0 + (d1 - d0) * h, i };
       }
-      geos.push(tube(pts, r, 80));
-      // Hangers to the deck on this strand's side.
-      for (let s = s0 + 15; s < s1 - 10; s += 15) {
-        const t = (s - s0) / (s1 - s0), q = at(ref.p, s), m = median(q), k = Math.round(t * 40), a = pts[k];
-        if (a.y < q.y + 4) continue;
-        const side = sign * Math.cos(Math.PI * t) >= 0 ? 1 : -1; // the carriageway under the strand
-        const d = V(m.x + q.nx * side * (m.half - ref.b.width_m / 2 + 0.6), q.y + PARAPET_M, m.z + q.nz * side * (m.half - ref.b.width_m / 2 + 0.6));
-        strut(cols.steel, a, d, V(q.ux, 0, q.uz), 0.35, 0.35);
+      const b = arches[i + 1];
+      if (b && s > a.s1 && s < b.s0) {
+        // Below the decks: down to a mass pier at the water, the spine deepening toward it
+        // (the "dune" piers of photographs; how much: project choice).
+        const u = (s - a.s1) / (b.s0 - a.s1), dip = Math.sin(Math.PI * u), depth = d0 * (1 + 0.8 * dip);
+        return { y: yd - (yd - low - depth / 2) * dip, sep: 0, f: a.side + (b.side - a.side) * u, above: false, depth };
+      }
+    }
+    const first = s < arches[0].s0, a = first ? arches[0] : arches[arches.length - 1];
+    const u = first ? (s - S0) / lead : (S1 - s) / tail; // 0 at the spine's end, 1 at the arch
+    return { y: ground - d0 / 2 + (yd - ground + d0 / 2) * Math.sin((Math.PI / 2) * u), sep: 0, f: a.side, above: false, depth: d0 };
+  };
+  const lateral = (fr, f) => f * (fr.half + W / 2 + rw); // offset of the spine from the void's middle
+  // Sweep a box section along stations (centre, lateral unit, width, depth), each
+  // station's section square to the smoothed tangent there, so segments join cleanly.
+  const sweep = (secs) => {
+    const rings = secs.map((S, k) => {
+      const a = secs[Math.max(0, k - 1)].c, b = secs[Math.min(secs.length - 1, k + 1)].c;
+      const T = new THREE.Vector3().subVectors(b, a).normalize();
+      const L = V(S.lx, 0, S.lz), N = new THREE.Vector3().crossVectors(L, T).normalize();
+      if (N.y < 0) N.negate();
+      return [[1, 1], [-1, 1], [-1, -1], [1, -1]].map(([u, v]) => S.c.clone().addScaledVector(L, (u * S.w) / 2).addScaledVector(N, (v * S.d) / 2));
+    });
+    for (let k = 0; k + 1 < rings.length; k++) {
+      const [ca, cb] = [rings[k], rings[k + 1]];
+      for (let e = 0; e < 4; e++) {
+        const e1 = (e + 1) % 4, mid = ca[e].clone().add(ca[e1]).multiplyScalar(0.5).sub(secs[k].c);
+        white.quad(ca[e], ca[e1], cb[e1], cb[e], mid);
+      }
+    }
+  };
+  const STEP = 2;
+  const spine = [], ribs = [[], []];
+  for (let s = S0; s <= S1 + 1e-6; s += STEP) {
+    const fr = frame(s), pr = profile(s), o = lateral(fr, pr.f);
+    const c = (off) => V(fr.x + fr.lx * off, pr.y, fr.z + fr.lz * off);
+    if (pr.above) {
+      for (const [k, sg] of [[0, -1], [1, 1]]) ribs[k].push({ c: c(o + (sg * pr.sep) / 2), lx: fr.lx, lz: fr.lz, w: rw, d: pr.depth, s, i: pr.i });
+      if (spine.length) {
+        spine.push({ c: c(o), lx: fr.lx, lz: fr.lz, w: rw * 1.5, d: pr.depth });
+        sweep(spine);
+        spine.length = 0;
+      }
+    } else {
+      spine.push({ c: c(o), lx: fr.lx, lz: fr.lz, w: rw * 1.5, d: pr.depth });
+      for (const r of ribs) if (r.length) {
+        sweep(r);
+        r.length = 0;
       }
     }
   }
-  return geos;
+  if (spine.length) sweep(spine);
+  for (const r of ribs) if (r.length) sweep(r);
+  // Hangers and cross beams, every 12 m inside each arch.
+  for (const a of arches) {
+    for (let s = a.s0 + 10; s < a.s1 - 8; s += 12) {
+      const fr = frame(s), pr = profile(s), o = lateral(fr, pr.f);
+      const deckY = fr.q.y - ref.b.depth_m;
+      const edges = [-fr.half - W / 2, -fr.half + W / 2, fr.half - W / 2, fr.half + W / 2];
+      for (const sg of [-1, 1]) {
+        const off = o + (sg * pr.sep) / 2, top = pr.y - pr.depth / 2;
+        if (top < fr.q.y + 5) continue;
+        const e = edges.reduce((b, x) => (Math.abs(x - off) < Math.abs(b - off) ? x : b));
+        strut(white, V(fr.x + fr.lx * off, top, fr.z + fr.lz * off), V(fr.x + fr.lx * e, fr.q.y + PARAPET_M, fr.z + fr.lz * e), V(fr.q.ux, 0, fr.q.uz), 0.3, 0.3);
+      }
+      if (a.side <= 0.5 && fr.half > W / 2) {
+        const e0 = -fr.half + W / 2, e1 = fr.half - W / 2;
+        strut(white, V(fr.x + fr.lx * e0, deckY + 0.8, fr.z + fr.lz * e0), V(fr.x + fr.lx * e1, deckY + 0.8, fr.z + fr.lz * e1), V(fr.q.ux, 0, fr.q.uz), 1.6, 1.6);
+      }
+    }
+  }
+  // Lamp posts: white, `lamp_height_m`, curving in over the road, along both outer edges.
+  for (const d of decks) {
+    const L = d.p[d.p.length - 1].s, hw = d.b.width_m / 2;
+    for (let s = st.lamp_spacing_m / 2; s < L; s += st.lamp_spacing_m) {
+      const q = at(d.p, s), fr = frame(project(q.x, q.z));
+      const out = (q.nx * (q.x - fr.x) + q.nz * (q.z - fr.z)) >= 0 ? 1 : -1; // the deck's outer side
+      const P = (o, h) => V(q.x + q.nx * out * o, q.y + h, q.z + q.nz * out * o);
+      const H = st.lamp_height_m, along = V(q.ux, 0, q.uz);
+      const pts = [P(hw - 0.4, PARAPET_M), P(hw - 0.4, H - 1.4), P(hw - 0.9, H - 0.2), P(hw - 2.0, H), P(hw - 2.8, H - 0.4)];
+      for (let k = 0; k + 1 < pts.length; k++) strut(white, pts[k], pts[k + 1], along, k ? 0.3 : 0.4, k ? 0.3 : 0.4);
+    }
+  }
+  return { s0: S0, s1: S1, onSpine: (x, z) => { const s = project(x, z); return s >= S0 - 10 && s <= S1 + 10; } };
 }
 
 // Al Maqta Bridge: a steel tied (bowstring) arch over each carriageway, spanning the
@@ -284,12 +384,13 @@ export class Bridges {
     this.group = new THREE.Group();
     scene.add(this.group);
     this.materials = {
-      road: new THREE.MeshStandardMaterial({ color: 0x4b4d50, roughness: 0.92, metalness: 0 }),
+      road: new THREE.MeshStandardMaterial({ color: 0x3a3c3f, roughness: 0.95, metalness: 0, envMapIntensity: 0.3 }), // asphalt
       concrete: stone(0xc7c2b6, { roughness: 0.75, key: "bridge-concrete" }),
       steel: steel(),
       paint: new THREE.MeshStandardMaterial({ color: 0x7d888c, roughness: 0.5, metalness: 0.6, envMapIntensity: 0.8 }),
+      // Sheikh Zayed Bridge's white painted steel and white concrete (project choice).
+      white: new THREE.MeshStandardMaterial({ color: 0xdcdad3, roughness: 0.6, metalness: 0, envMapIntensity: 0.5 }),
     };
-    this.materials.steel.color.setHex(0xe9e8e3); // Sheikh Zayed Bridge's white arches
   }
 
   build(list) {
@@ -299,7 +400,7 @@ export class Bridges {
       if (b.pts.length < 2) continue;
       const p = centreline(b), mid = p[Math.floor(p.length / 2)];
       const key = `${Math.floor(mid.x / TILE_M)},${Math.floor(mid.z / TILE_M)}`;
-      if (!tiles.has(key)) tiles.set(key, { road: new Collector(), concrete: new Collector(), steel: new Collector(), paint: new Collector(), tubes: [], x: (Math.floor(mid.x / TILE_M) + 0.5) * TILE_M, z: (Math.floor(mid.z / TILE_M) + 0.5) * TILE_M });
+      if (!tiles.has(key)) tiles.set(key, { road: new Collector(), concrete: new Collector(), steel: new Collector(), paint: new Collector(), white: new Collector(), tubes: [], x: (Math.floor(mid.x / TILE_M) + 0.5) * TILE_M, z: (Math.floor(mid.z / TILE_M) + 0.5) * TILE_M });
       const cols = tiles.get(key), d = { b, p };
       const kind = b.structure?.kind;
       b.depth_m ??= 1.8; // builds before 2026-10-10 did not record it (scenery_bridges.py DECK_DEPTH_M)
@@ -312,17 +413,30 @@ export class Bridges {
       }
       if (kind === "tied_arch") cols.tubes.push(...tiedArch(d, cols).map((g) => [g, "paint"]));
       if (kind === "wave_arch") {
+        // Its decks wait for the spine (which carries them: no ordinary piers there).
+        b.width_m = b.structure.deck_width_m ?? b.width_m;
         if (!landmarks.has(b.landmark)) landmarks.set(b.landmark, { cols, decks: [] });
-        landmarks.get(b.landmark).decks.push(d);
+        landmarks.get(b.landmark).decks.push({ ...d, cols });
+        continue;
       }
       piers ??= spacedPiers(p, p.some((q) => q.wet) ? PIER_SPACING_M.water : PIER_SPACING_M.land);
       deck(b, p, cols, depthAt, piers);
     }
-    for (const { cols, decks } of landmarks.values()) cols.tubes.push(...waveArch(decks, cols).map((g) => [g, "steel"]));
+    for (const { cols, decks } of landmarks.values()) {
+      for (const d of decks) d.p = centreline(d.b); // with the published width
+      const spine = waveArch(decks, cols.white);
+      for (const d of decks) {
+        const piers = spacedPiers(d.p, d.p.some((q) => q.wet) ? PIER_SPACING_M.water : PIER_SPACING_M.land).filter((s) => {
+          const q = at(d.p, s);
+          return !spine.onSpine(q.x, q.z);
+        });
+        deck(d.b, d.p, d.cols, () => d.b.depth_m, piers, d.cols.white);
+      }
+    }
     this.tiles = [];
     for (const t of tiles.values()) {
       const group = new THREE.Group();
-      for (const k of ["road", "concrete", "steel", "paint"]) {
+      for (const k of ["road", "concrete", "steel", "paint", "white"]) {
         const g = t[k].geometry();
         if (g) group.add(this.mesh(g, this.materials[k]));
       }

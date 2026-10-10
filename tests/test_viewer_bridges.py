@@ -1,6 +1,6 @@
 """Bridge models (flightsim/viewer/bridges.js), run with Node when available: a deck
 with its parapets and piers only where it stands high enough, and each landmark kind
-(Sheikh Zayed's wave of arches to its published 60 m, Al Maqta's tied arch over the
+(Sheikh Zayed's wave of box-rib arches to its published 60 m, its spine down to the water, Al Maqta's tied arch over the
 water, Sheikh Khalifa's haunched girder and V-piers) builds without gaps or NaNs."""
 
 import json
@@ -26,8 +26,11 @@ const line = (z, top, shape = (x) => Math.max(3, Math.min(top, 3 + 0.05 * Math.m
 const base = { kind: "roads", cls: "motorway", width_m: 17, depth_m: 2.5, length_m: 1000 };
 const cases = {
   plain: [{ ...base, ids: [1], pts: line(0, 12) }],
-  zayed: [0, 40].map((z, i) => ({ ...base, ids: [10 + i], pts: line(z, 18.5), landmark: "Z",
-           structure: { kind: "wave_arch", main_arch_m: 235, arch_top_m: 60, side_arch_m: 150, side_arch_top_m: 32 } })),
+  zayed: [0, 38].map((z, i) => ({ ...base, ids: [10 + i], pts: line(z, 20), landmark: "Z",
+           structure: { kind: "wave_arch", deck_width_m: 23.6, rib_width_m: 4, rib_depth_m: [8, 5], pier_low_m: 1.5, lamp_spacing_m: 25, lamp_height_m: 12,
+             arches: [{ centre_xz: [450, 19], span_m: 144, top_m: 60, ribs_apart_m: 9, side: 0, crown_at: 0.38 },
+                      { centre_xz: [610, 19], span_m: 74, top_m: 40, ribs_apart_m: 6, side: 0.15 },
+                      { centre_xz: [720, 19], span_m: 50, top_m: 30, ribs_apart_m: 4, side: 1 }] } })),
   maqta: [{ ...base, ids: [20], pts: line(0, 7.5), landmark: "M", structure: { kind: "tied_arch", arch_rise_ratio: 0.18 } }],
   khalifa: [{ ...base, ids: [30], depth_m: 3.5, pts: line(0, 35, (x) => Math.min(35, 3 + 0.1 * Math.min(x, 1000 - x))), landmark: "K",
              structure: { kind: "box_girder", main_spans_m: [110, 200, 135, 70, 45], girder_max_m: 10.25, v_pier_deg: 27.45 } }],
@@ -75,7 +78,8 @@ def test_all_kinds_build(result):
 
 
 def test_heights(result):
-    assert result["zayed"]["top"] == pytest.approx(60, abs=2)  # the principal arch above the water
+    assert result["zayed"]["top"] == pytest.approx(60, abs=0.5)  # the principal arch above the water
+    assert result["zayed"]["bottom"] > -8  # the spine's ends and dune piers, no piers to the sea floor beyond them
     assert result["maqta"]["top"] > 7.5 + 0.18 * 50  # the tied arch rises over the deck
     assert result["khalifa"]["top"] == pytest.approx(35 + 1.0, abs=0.2)  # deck 35 m + parapet
     assert result["plain"]["bottom"] == pytest.approx(-4)  # piers down into the water
