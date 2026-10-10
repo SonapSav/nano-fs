@@ -53,6 +53,18 @@ for (const [name, list] of Object.entries(cases)) {
   // Pier bottoms: lowest geometry (piers in water reach the sea floor at -4 m).
   out[name] = { nan, tris, meshes, top: box.max.y, bottom: box.min.y };
 }
+// A landmark whose structure is broken (no arches): it falls back to plain decks, and
+// the other bridges are still built.
+{
+  const scene = new THREE.Scene(), br = new Bridges(scene), warn = console.warn;
+  let warned = 0;
+  console.warn = () => warned++;
+  br.build([...cases.plain, ...cases.zayed.map((b) => ({ ...b, structure: { kind: "wave_arch" } })), ...cases.khalifa]);
+  console.warn = warn;
+  let tris = 0;
+  br.group.traverse((o) => { if (o.isMesh) tris += o.geometry.attributes.position.count / 3; });
+  out.broken = { warned, tris };
+}
 console.log(JSON.stringify(out));
 """
 
@@ -74,6 +86,8 @@ def result(tmp_path_factory):
 
 def test_all_kinds_build(result):
     for k, r in result.items():
+        if k == "broken":
+            continue
         assert not r["nan"] and r["tris"] > 0 and r["meshes"] >= 2, k
 
 
@@ -84,3 +98,11 @@ def test_heights(result):
     assert result["khalifa"]["top"] == pytest.approx(35 + 1.0, abs=0.2)  # deck 35 m + parapet
     assert result["plain"]["bottom"] == pytest.approx(-4)  # piers down into the water
     assert result["low"]["bottom"] > 0  # low over land: no piers, only the deck
+
+
+def test_one_broken_bridge_leaves_the_others(result):
+    # A landmark entry the code cannot draw (e.g. an older viewer meeting a newer
+    # bridges.json) is drawn as plain decks with a warning; the others are all built.
+    r = result["broken"]
+    assert r["warned"] == 1
+    assert r["tris"] > result["plain"]["tris"] + result["khalifa"]["tris"]  # both, plus the fallback decks

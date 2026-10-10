@@ -1438,6 +1438,15 @@ landmarks; later night lighting, shadows, haze.
     All of it merged into the tile's meshes (the old arches were separate tube meshes).
     Bridge decks everywhere: darker asphalt. The region file's bridge entry changed, so
     bridges.json must be rebuilt (a full build, or the features step).
+  - [x] All bridges disappeared (2026-10-10, the owner, after the Sheikh Zayed rework).
+    Verified: the server's files were consistent (a fresh page: 118 bridge tiles, 242
+    meshes); reproduced by running the previous bridges.js on the new bridges.json: its
+    Sheikh Zayed code throws, and Bridges.build had cleared everything first, so one bad
+    bridge removed them all. Most likely the owner's page still ran the old script (open
+    since before the redeploy) and fetched the new bridges.json with the next flight. Fix:
+    each bridge is built on its own (a failure leaves out only that bridge, with a console
+    warning); Sheikh Zayed's spine and decks are collected aside and fall back to plain
+    decks if the structure cannot be drawn (test_viewer_bridges.py).
   - [ ] Next in the owner's scenery plan (2026-10-10): lighting (shadows, haze), night
     lighting.
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the

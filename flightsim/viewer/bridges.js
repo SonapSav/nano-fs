@@ -42,6 +42,10 @@ class Collector {
     this.tri(a, b, c, hint);
     this.tri(a, c, d, hint);
   }
+  absorb(other) {
+    for (let i = 0; i < other.pos.length; i++) this.pos.push(other.pos[i]);
+    for (let i = 0; i < other.nrm.length; i++) this.nrm.push(other.nrm[i]);
+  }
   geometry() {
     if (!this.pos.length) return null;
     const g = new THREE.BufferGeometry();
@@ -398,41 +402,74 @@ export class Bridges {
     const tiles = new Map(), landmarks = new Map();
     for (const b of list ?? []) {
       if (b.pts.length < 2) continue;
-      const p = centreline(b), mid = p[Math.floor(p.length / 2)];
-      const key = `${Math.floor(mid.x / TILE_M)},${Math.floor(mid.z / TILE_M)}`;
-      if (!tiles.has(key)) tiles.set(key, { road: new Collector(), concrete: new Collector(), steel: new Collector(), paint: new Collector(), white: new Collector(), tubes: [], x: (Math.floor(mid.x / TILE_M) + 0.5) * TILE_M, z: (Math.floor(mid.z / TILE_M) + 0.5) * TILE_M });
-      const cols = tiles.get(key), d = { b, p };
-      const kind = b.structure?.kind;
-      b.depth_m ??= 1.8; // builds before 2026-10-10 did not record it (scenery_bridges.py DECK_DEPTH_M)
-      let depthAt = () => b.depth_m, piers = null;
-      if (kind === "box_girder") {
-        const g = boxGirder(d);
-        depthAt = g.depthAt;
-        piers = g.piers;
-        g.vPiers(cols);
-      }
-      if (kind === "tied_arch") cols.tubes.push(...tiedArch(d, cols).map((g) => [g, "paint"]));
-      if (kind === "wave_arch") {
-        // Its decks wait for the spine (which carries them: no ordinary piers there).
-        b.width_m = b.structure.deck_width_m ?? b.width_m;
-        if (!landmarks.has(b.landmark)) landmarks.set(b.landmark, { cols, decks: [] });
-        landmarks.get(b.landmark).decks.push({ ...d, cols });
-        continue;
-      }
-      piers ??= spacedPiers(p, p.some((q) => q.wet) ? PIER_SPACING_M.water : PIER_SPACING_M.land);
-      deck(b, p, cols, depthAt, piers);
-    }
-    for (const { cols, decks } of landmarks.values()) {
-      for (const d of decks) d.p = centreline(d.b); // with the published width
-      const spine = waveArch(decks, cols.white);
-      for (const d of decks) {
-        const piers = spacedPiers(d.p, d.p.some((q) => q.wet) ? PIER_SPACING_M.water : PIER_SPACING_M.land).filter((s) => {
-          const q = at(d.p, s);
-          return !spine.onSpine(q.x, q.z);
-        });
-        deck(d.b, d.p, d.cols, () => d.b.depth_m, piers, d.cols.white);
+      try {
+        this._one(b, tiles, landmarks);
+      } catch (e) {
+        console.warn(`bridge ${b.name ?? b.ids?.[0]}: ${e.message}`); // only this one is left out
       }
     }
+    for (const [name, { cols, decks }] of landmarks.entries()) {
+      try {
+        this._landmark(cols, decks);
+      } catch (e) {
+        console.warn(`bridge ${name}: ${e.message}; drawn as plain decks`);
+        for (const d of decks) deck(d.b, d.p, d.cols, () => d.b.depth_m, spacedPiers(d.p, PIER_SPACING_M.water));
+      }
+    }
+    this._meshes(tiles);
+  }
+
+  // One bridge's deck, piers and (Sheikh Khalifa, Al Maqta) structure into its tile's
+  // collectors; Sheikh Zayed's decks wait for its spine (`landmarks`).
+  _one(b, tiles, landmarks) {
+    const p = centreline(b), mid = p[Math.floor(p.length / 2)];
+    const key = `${Math.floor(mid.x / TILE_M)},${Math.floor(mid.z / TILE_M)}`;
+    if (!tiles.has(key)) tiles.set(key, { road: new Collector(), concrete: new Collector(), steel: new Collector(), paint: new Collector(), white: new Collector(), tubes: [], x: (Math.floor(mid.x / TILE_M) + 0.5) * TILE_M, z: (Math.floor(mid.z / TILE_M) + 0.5) * TILE_M });
+    const cols = tiles.get(key), d = { b, p };
+    const kind = b.structure?.kind;
+    b.depth_m ??= 1.8; // builds before 2026-10-10 did not record it (scenery_bridges.py DECK_DEPTH_M)
+    let depthAt = () => b.depth_m, piers = null;
+    if (kind === "box_girder") {
+      const g = boxGirder(d);
+      depthAt = g.depthAt;
+      piers = g.piers;
+      g.vPiers(cols);
+    }
+    if (kind === "tied_arch") cols.tubes.push(...tiedArch(d, cols).map((g) => [g, "paint"]));
+    if (kind === "wave_arch") {
+      // Its decks wait for the spine (which carries them: no ordinary piers there).
+      b.width_m = b.structure.deck_width_m ?? b.width_m;
+      if (!landmarks.has(b.landmark)) landmarks.set(b.landmark, { cols, decks: [] });
+      landmarks.get(b.landmark).decks.push({ ...d, cols });
+      return;
+    }
+    piers ??= spacedPiers(p, p.some((q) => q.wet) ? PIER_SPACING_M.water : PIER_SPACING_M.land);
+    deck(b, p, cols, depthAt, piers);
+  }
+
+  // Sheikh Zayed Bridge: the spine and arches, then its decks (white, no piers under the
+  // spine). Collected aside first, so a failure leaves nothing half drawn.
+  _landmark(cols, decks) {
+    for (const d of decks) d.p = centreline(d.b); // with the published width
+    const white = new Collector();
+    const spine = waveArch(decks, white);
+    const parts = decks.map((d) => {
+      const own = { road: new Collector(), white: new Collector() };
+      const piers = spacedPiers(d.p, d.p.some((q) => q.wet) ? PIER_SPACING_M.water : PIER_SPACING_M.land).filter((s) => {
+        const q = at(d.p, s);
+        return !spine.onSpine(q.x, q.z);
+      });
+      deck(d.b, d.p, { ...d.cols, ...own }, () => d.b.depth_m, piers, own.white);
+      return [d.cols, own];
+    });
+    cols.white.absorb(white);
+    for (const [c, own] of parts) {
+      c.road.absorb(own.road);
+      c.white.absorb(own.white);
+    }
+  }
+
+  _meshes(tiles) {
     this.tiles = [];
     for (const t of tiles.values()) {
       const group = new THREE.Group();
