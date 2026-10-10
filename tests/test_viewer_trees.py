@@ -25,6 +25,7 @@ const ids = b.userData.trees.ids, m = new THREE.Matrix4(), p = new THREE.Vector3
 const state = () => [0, 1, 2].map((i) => ({ visible: b.getVisibleAt(i), geometry: Object.keys(ids).find((k) => ids[k] === b.getGeometryIdAt(i)) }));
 const out = { count: b.instanceCount ?? null };
 out.scale = [0, 1].map((i) => { b.getMatrixAt(i, m); m.decompose(p, q, sc); return [p.y, sc.y]; });
+out.tint = (() => { const c = new THREE.Color(); b.getColorAt(1, c); return [c.r, c.g, c.b]; })();
 T.updateTreeBatch(b, 0, 0, 1, 0); // looking east, toward all three
 out.behind = (T.updateTreeBatch(b, 0, 0, -1, 0), [0, 1, 2].map((i) => b.getVisibleAt(i))); // looking west: only those within 300 m
 b.userData.trees.key = null; T.updateTreeBatch(b, 0, 0, 1, 0);
@@ -43,7 +44,8 @@ def result(tmp_path_factory):
     for f in ("three.module.js", "three.core.js"):
         shutil.copy(VIEWER / "vendor" / f, three / f)
     (three / "package.json").write_text('{"name":"three","type":"module","exports":{".":"./three.module.js"}}')
-    shutil.copy(VIEWER / "trees.js", d / "trees.js")
+    for f in ("trees.js", "treeInstances.js"):
+        shutil.copy(VIEWER / f, d / f)
     out = subprocess.run([NODE, "--input-type=module", "-e", SCRIPT], cwd=d, capture_output=True, text=True, timeout=60)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout)
@@ -52,6 +54,11 @@ def result(tmp_path_factory):
 def test_sizes(result):
     # The palm and the round tree scaled to their heights (geometry 10 m tall), bases 0.2 m into the ground.
     assert result["scale"] == [[pytest.approx(4.8), pytest.approx(1.2)], [pytest.approx(4.8), pytest.approx(0.4)]]
+
+
+def test_tints_from_the_worker_data(result):
+    r, g, b = result["tint"]
+    assert 0.85 <= r <= 1.15 and 0.9 <= g <= 1.1 and 0.85 <= b <= 1.05 and (r, g, b) != (1, 1, 1)
 
 
 def test_detail_by_distance(result):

@@ -665,10 +665,10 @@ export class Terrain {
     this.scene.add(mesh);
     this.onChange?.(); // new casters or receivers (the sun's shadow map is drawn again)
     // Measured trees (the canopy height map) replace the land cover's scattered palms.
-    const measured = NO_TREES ? null : featuresData?.trees?.data;
+    const measured = NO_TREES ? null : featuresData?.trees?.palm ? featuresData.trees : null;
     const objects = objectsData ? tileObjects(measured ? { ...objectsData, palms: null, bushes: null } : objectsData, this.shared, !w.objects) : null;
     let trees = null;
-    if (measured?.length) {
+    if (measured?.palm.length) {
       trees = treeBatch(measured);
       this.scene.add(trees);
       this.onChange?.(); // casters for the sun's shadow map

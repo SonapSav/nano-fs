@@ -9,6 +9,7 @@ import { tileGeometryData, tileObjectsData } from "./terrainCore.js";
 import { demTileGeometryData, demTileObjectsData, neededTiles } from "./demTiles.js";
 import { heightAt, heightsName, landcoverName, shoreName } from "./demCore.js";
 import { barrierData, buildingData, featureGroundData, lightData } from "./featureGeometry.js";
+import { treeInstances } from "./treeInstances.js";
 
 const featuresName = (ix, iz) => `tiles/f_${ix}_${iz}.json`;
 const imageryName = (ix, iz) => `tiles/i_${ix}_${iz}.jpg`;
@@ -71,11 +72,11 @@ async function demBuild(r) {
   return { geometry, objects, features };
 }
 
-// A tile's measured trees (the features file's [x, z, height]) on the ground: [x, groundY, z, height] x n.
+// A tile's measured trees (the features file's [x, z, height]) on the ground, as instances (treeInstances.js).
 function treeData(trees, tiles) {
   const out = new Float32Array(trees.length * 4);
   trees.forEach(([x, z, h], i) => out.set([x, heightAt(tiles, x, z), z, h], 4 * i));
-  return { data: out };
+  return treeInstances(out); // matrices and tints made here, off the page's main thread
 }
 
 const featureBuffers = (f) => Object.values(f ?? {}).filter(Boolean).flatMap((m) => Object.values(m).map((a) => a.buffer));

@@ -10,13 +10,12 @@
 // 8-20 m, crowns 6-9 m across, 15-25 fronds; here fewer, wider).
 
 import * as THREE from "three";
+import { BASE_H, PALM_FROM_M, treeInstances } from "./treeInstances.js";
 
 export const NEAR_M = 800; // trees nearer than this: detailed
 export const FAR_M = 2500; // ...then the simple ones; beyond, none (a palm is a pixel or two)
 const AROUND_M = 300; // always drawn (the view turns quickly close by)
 const CONE_COS = Math.cos((80 * Math.PI) / 180); // drawn within 80 deg of the view's heading
-const PALM_FROM_M = 5;
-const BASE_H = 10; // the geometry's height (scaled per tree)
 
 // --- The texture: frond (u 0..0.75) and bark (u 0.75..1) ---------------------------------------
 
@@ -177,39 +176,36 @@ function sharedParts() {
 
 // --- Per tile -----------------------------------------------------------------------------------
 
-// A tile's trees (Float32Array [x, groundY, z, height] x n, from the tile worker) as one
-// batched mesh: one draw call; each tree an instance whose shape (near, far) and
-// visibility update() sets by its distance from the camera.
-export function treeBatch(data) {
+// A tile's trees as one batched mesh: one draw call; each tree an instance whose shape
+// (near, far) and visibility update() sets by its distance from the camera. `t`: the
+// tile worker's treeInstances() (matrices, tints, palm flags, positions), or the trees
+// themselves (Float32Array [x, groundY, z, height] x n; tests). The matrices and tints go
+// straight into the batch's textures (three.js 0.186 BatchedMesh internals: one matrix
+// per instance id in `_matricesTexture`, RGBA per id in `_colorsTexture`), so the page's
+// main thread does no per-tree work but registering the instances.
+export function treeBatch(t) {
+  if (t instanceof Float32Array) t = treeInstances(t);
   const parts = sharedParts();
-  const n = data.length / 4;
+  const n = t.palm.length;
   const geos = [parts.near.palm, parts.near.round, parts.far.palm, parts.far.round];
-  const verts = geos.reduce((t, g) => t + g.attributes.position.count, 0), idx = geos.reduce((t, g) => t + g.index.count, 0);
-  const batch = new THREE.BatchedMesh(n, verts, idx, parts.material);
+  const verts = geos.reduce((a, g) => a + g.attributes.position.count, 0), idx = geos.reduce((a, g) => a + g.index.count, 0);
+  const batch = new THREE.BatchedMesh(Math.max(n, 1), verts, idx, parts.material);
   const [nearPalm, nearRound, farPalm, farRound] = geos.map((g) => batch.addGeometry(g));
-  batch.perObjectFrustumCulled = false; // (thousands of small instances: culled with the tile)
+  batch.perObjectFrustumCulled = false; // (thousands of small instances: culled with the tile, and by update())
   batch.sortObjects = false;
   // No sun shadows of their own: the 1 m imagery shows the real trees' shadows (and in the
   // shadow pass thousands of trees cost 10-45 ms whenever the map is drawn again).
   batch.castShadow = false;
   batch.receiveShadow = true;
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
-  const tint = new THREE.Color();
-  const trees = new Float32Array(n * 2), palm = new Uint8Array(n);
-  for (let i = 0; i < n; i++) {
-    const x = data[4 * i], y = data[4 * i + 1], z = data[4 * i + 2], h = data[4 * i + 3];
-    palm[i] = h >= PALM_FROM_M ? 1 : 0;
-    const id = batch.addInstance(palm[i] ? farPalm : farRound);
-    const hash = (Math.abs(Math.sin(x * 12.9898 + z * 78.233)) * 43758.5453) % 1;
-    q.setFromAxisAngle(up, hash * Math.PI * 2);
-    const k = h / BASE_H, w = palm[i] ? Math.min(1.25, Math.max(0.75, 0.8 + 0.04 * h)) : k;
-    batch.setMatrixAt(id, m.compose(p.set(x, y - 0.2, z), q, sc.set(w, k, w)));
-    batch.setColorAt(id, tint.setRGB(0.85 + 0.3 * hash, 0.9 + 0.2 * ((hash * 7.3) % 1), 0.85 + 0.2 * ((hash * 3.1) % 1)));
-    batch.setVisibleAt(id, false);
-    trees[2 * i] = x;
-    trees[2 * i + 1] = z;
+  for (let i = 0; i < n; i++) batch.addInstance(t.palm[i] ? farPalm : farRound); // ids 0..n-1
+  if (n) {
+    batch.setColorAt(0, new THREE.Color()); // creates the tints texture
+    batch._matricesTexture.image.data.set(t.matrices);
+    batch._matricesTexture.needsUpdate = true;
+    batch._colorsTexture.image.data.set(t.colors);
+    batch._colorsTexture.needsUpdate = true;
   }
-  batch.userData.trees = { xz: trees, palm, ids: { nearPalm, nearRound, farPalm, farRound }, key: null };
+  batch.userData.trees = { xz: t.xz, palm: t.palm, ids: { nearPalm, nearRound, farPalm, farRound }, key: null };
   return batch;
 }
 

@@ -1538,6 +1538,13 @@ landmarks; later night lighting, shadows, haze.
     with trees in the same test (as without trees before). Also found: every screenshot
     run left a ~160 MB Chromium profile in /tmp (a RAM disk): 14 GB of the laptop's
     memory; deleted, the scripts reuse one profile each.
+  - [x] Tree creation off the main thread (2026-10-11, the owner: "go ahead"; after the
+    fixes above the owner measured 65-70 fps): the tile worker computes each tree's
+    matrix and tint (`viewer/treeInstances.js`, no three.js); the page copies them
+    straight into the batch's matrix and tint textures (three.js 0.186 BatchedMesh
+    internals). A dense tile (18,000 trees): 28 ms -> 1.9 ms on the main thread (5.9 ms
+    in the worker). Flight test over the city: 59.8 fps (the headless 60 Hz cap), 5
+    frames over 30 ms in 25 s (was ~500).
   - [ ] Known: with the trees, a frame that redraws the sun's shadow map costs ~15 ms
     instead of ~5 ms in the dense city (not the shadow pass itself: the trees are
     skipped there; cause not found yet); such frames come every few seconds in flight.
