@@ -364,7 +364,7 @@ export function buildC172({ registration = REGISTRATION } = {}) {
   const white = new THREE.MeshLambertMaterial({ color: WHITE, side: THREE.DoubleSide });
   const grey = new THREE.MeshLambertMaterial({ color: 0x5c6166 });
   const dark = new THREE.MeshLambertMaterial({ color: 0x2a2d31 });
-  const tyre = new THREE.MeshLambertMaterial({ color: 0x1c1c1c });
+  const tyre = new THREE.MeshLambertMaterial({ color: 0x3a3a3a }); // dark grey rubber: black would vanish into the aircraft's shadow on asphalt
   const red = new THREE.MeshLambertMaterial({ color: STRIPE2 });
 
   // Fuselage: cowling, cabin under the wing, tail cone.

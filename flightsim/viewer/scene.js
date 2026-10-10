@@ -209,6 +209,7 @@ export class FlightScene {
   setVisual({ time_of_day = "afternoon", visibility = "normal", clouds = "few", cloud_seed = 0 } = {}) {
     this.skyLight.setTime(time_of_day);
     this.skyLight.setVisibility(visibility);
+    this.groundUnder = null; // the shadow follows the new sun (_followGround)
     this.landmarks.setEnvironment(this.renderer, this.skyLight.sky); // reflections of this sky
     const tint = new THREE.Color(TIMES[this.skyLight.time].sun).lerp(new THREE.Color(0xffffff), 0.55);
     this.clouds.setTint(tint);
@@ -408,9 +409,7 @@ export class FlightScene {
     const dt = this.lastT === null || row.t_s < this.lastT || row.t_s - this.lastT > 1 ? 0 : row.t_s - this.lastT;
     this.lastT = row.t_s;
     this.model.update(row, dt);
-    // Tyres on the drawn runway (a few cm above the physics' ground; on grass they float
-    // as much, unseen).
-    this.model.settle(this.aircraft.matrix, (x, z) => world.groundAt(x, z) + RUNWAY_LIFT_M);
+    this.groundUnder = null; // gear and shadow placed again on the next drawing (_followGround)
 
     // Trail: a point every 1/30 s of flight time at most (the view is drawn at the screen's
     // rate, between frames), so it keeps covering the same stretch of flight.
@@ -426,7 +425,6 @@ export class FlightScene {
       this.trailT = row.t_s;
     }
 
-    this.updateShadow();
     if (this.targets && !this.approach) {
       const h = this.targets.heading_rad - this.convergence;
       const start = new THREE.Vector3(this.position.x, this.targets.alt_msl_m, this.position.z);
@@ -441,6 +439,7 @@ export class FlightScene {
   // can be copied out in the same frame (copyCameraTo). widthPx: the picture's width in
   // canvas pixels (16:9), at most the canvas's. Returns the canvas region it occupies.
   renderCamera(gimbal, widthPx) {
+    this._followGround();
     const r = this.renderer, canvas = r.domElement, pr = r.getPixelRatio();
     let w = Math.min(widthPx, canvas.width), h = Math.round(w / ASPECT);
     if (h > canvas.height) {
@@ -510,7 +509,22 @@ export class FlightScene {
     if (k >= 1) this.recentre = null;
   }
 
+  // Gear and shadow on the ground under the aircraft: after each frame, and again whenever
+  // that ground changes without a new frame (a region's height tile arriving after the
+  // first frame, e.g. the preview shown before Play).
+  _followGround() {
+    if (!this.position) return;
+    const g = world.groundAt(this.position.x, this.position.z);
+    if (g === this.groundUnder) return;
+    this.groundUnder = g;
+    // Tyres on the drawn runway (a few cm above the physics' ground; on grass they float
+    // as much, unseen).
+    this.model.settle(this.aircraft.matrix, (x, z) => world.groundAt(x, z) + RUNWAY_LIFT_M);
+    this.updateShadow();
+  }
+
   render() {
+    this._followGround();
     waterUniforms.waterTime.value = (performance.now() / 1000) % 10000;
     this._stepRecentre();
     this._renderShadowMask();

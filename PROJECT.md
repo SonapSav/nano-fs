@@ -1281,6 +1281,12 @@ landmarks; later night lighting, shadows, haze.
     come first) was remembered as outside the region for the whole flight. Fixed (asked
     again once the manifest is here; test_viewer_dem.py); the shadow patch is now also
     drawn before the aircraft (opaque pass, render order), so it never darkens it.
+    Finally (the owner: "unless I hit play the wheel is submerged"): the preview shown
+    before Play is a single frame, placed before the runway's tile had arrived, and
+    nothing placed the gear or the shadow again. Now the scene re-places them whenever
+    the ground under the aircraft changes (or the sun), without waiting for a frame
+    (scene.js _followGround); reproduced on the preview and fixed
+    (data/shots/gear_preview.py). Tyres dark grey (0x3a3a3a), not black.
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the
     flown aircraft's static parts (45 meshes), palms and bushes across tiles (~50).
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings
