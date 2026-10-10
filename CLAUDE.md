@@ -114,6 +114,8 @@ flightsim/          # installable package (uv_build backend)
                     #     bridges.js (every OSM bridge's deck and piers, the landmark bridges' arches and girders)
                     #     imageryClip.js (a region's 1 m / 4 m imagery streamed around the camera: two fixed clipmap textures)
                     #     groundTextures.js (close-up sand, paving and plant detail blended into a region's imagery)
+                    #     sunShadows.js (a region's sun shadows: one map around the camera, drawn only when it moves)
+                    #   haze.js: height-aware haze in every material (replaces three's fog chunks)
   analysis/         # mode identification, validation maneuvers, validation checks
   atmosphere/       # Dryden turbulence (MIL-F-8785C)
   world/            # terrain height shared with the viewer (bit-identical port of viewer/terrainCore.js);

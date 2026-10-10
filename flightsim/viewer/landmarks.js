@@ -3,8 +3,8 @@
 // flightsim/world/scenery_build.py), modelled after published descriptions so the city is
 // recognisable from the air: a grand mosque, a leaning diagrid tower, a perforated flat
 // dome over a museum city, palaces with domes, glass towers. Materials are physically
-// based and lit by an environment map of the sky; the landmark nearest the camera casts
-// sun shadows (on itself and on a shadow-only ground plane). Shared materials, patterns
+// based and lit by an environment map of the sky; they cast and take the sun's shadows
+// (sunShadows.js). Shared materials, patterns
 // and geometry: landmarkKit.js. Proportions marked "project choice" were not published.
 // World frame: x east, y up, z south. Visual only.
 
@@ -355,14 +355,11 @@ const BUILDERS = { grand_mosque: grandMosque, leaning_tower: leaningTower, flat_
 
 // --- Landmarks ---------------------------------------------------------------------------------
 
-const SHADOW_MAP = 2048;
-
 export class Landmarks {
   constructor(scene) {
     this.group = new THREE.Group();
     scene.add(this.group);
-    this.sites = []; // per landmark: the centre {x, y, z} and the half size R its shadow covers
-    this.shadowSite = null;
+    this.sites = []; // per landmark: its centre {x, y, z} and half size R
   }
 
   build(list) {
@@ -374,50 +371,8 @@ export class Landmarks {
       this.group.add(g);
       const box = new THREE.Box3().setFromObject(g), c = box.getCenter(new THREE.Vector3()), s = box.getSize(new THREE.Vector3());
       const R = Math.max(Math.max(s.x, s.z) / 2, 0.9 * s.y) + 25;
-      const shadowOnly = new THREE.ShadowMaterial({ opacity: 0.42, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
-      const plane = mesh(new THREE.PlaneGeometry(2 * R, 2 * R).rotateX(-Math.PI / 2).translate(c.x, m.ground_m + 0.12, c.z), shadowOnly, { cast: false });
-      plane.visible = false; // only the landmark casting shadows needs it
-      g.add(plane);
-      this.sites.push({ x: c.x, y: m.ground_m + s.y / 3, z: c.z, R, plane });
+      this.sites.push({ x: c.x, y: m.ground_m + s.y / 3, z: c.z, R });
     }
-  }
-
-  // Sun shadows for the landmark nearest the camera: the sun (a directional light: only
-  // its direction lights the scene) is moved so its shadow camera frames that landmark.
-  update(cameraPos, sun, sunDir) {
-    if (!this.sites.length) {
-      if (sun.castShadow) {
-        sun.castShadow = false;
-        sun.target.position.set(0, 0, 0);
-        sun.target.updateMatrixWorld();
-        sun.position.copy(sunDir).multiplyScalar(10000);
-      }
-      return;
-    }
-    let best = null, bd = Infinity;
-    for (const s of this.sites) {
-      const d = Math.hypot(cameraPos.x - s.x, cameraPos.z - s.z) - s.R;
-      if (d < bd) [best, bd] = [s, d];
-    }
-    if (!sun.castShadow) {
-      sun.castShadow = true;
-      sun.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
-      sun.shadow.bias = -0.0003;
-      sun.shadow.normalBias = 0.4;
-    }
-    if (best !== this.shadowSite) {
-      if (this.shadowSite) this.shadowSite.plane.visible = false;
-      best.plane.visible = true;
-      this.shadowSite = best;
-      const cam = sun.shadow.camera;
-      [cam.left, cam.right, cam.top, cam.bottom] = [-best.R, best.R, best.R, -best.R];
-      cam.near = 1;
-      cam.far = 4 * best.R + 200;
-      cam.updateProjectionMatrix();
-    }
-    sun.target.position.set(best.x, best.y, best.z);
-    sun.target.updateMatrixWorld();
-    sun.position.copy(sun.target.position).addScaledVector(sunDir, 2 * best.R + 100);
   }
 
   clear() {
@@ -428,7 +383,6 @@ export class Landmarks {
     });
     this.group.clear();
     this.sites = [];
-    this.shadowSite = null;
   }
 
   // An environment map of the current sky (and a sand-coloured ground below the horizon)

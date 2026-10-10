@@ -1447,8 +1447,30 @@ landmarks; later night lighting, shadows, haze.
     each bridge is built on its own (a failure leaves out only that bridge, with a console
     warning); Sheikh Zayed's spine and decks are collected aside and fall back to plain
     decks if the structure cannot be drawn (test_viewer_bridges.py).
-  - [ ] Next in the owner's scenery plan (2026-10-10): lighting (shadows, haze), night
-    lighting.
+  - [x] Lighting (2026-10-10, the owner's go-ahead for lighting and night lighting):
+    - Sun shadows over the whole region (`viewer/sunShadows.js`; was: only the landmark
+      nearest the camera). One map for the sun framing a square of ground ahead of the
+      camera, 250 m to 2.5 km half size by height (sharp near the ground, wide from
+      altitude), 4096 px at high quality, 2048 medium, off at low. Drawn only when the
+      square moves (centre snapped to an eighth of its size, size to 25 % steps), new
+      tiles arrive or the sun changes: casters are static. Buildings, palms, bridges and
+      landmarks cast; the ground, roads, buildings and bridges receive; the flown
+      aircraft keeps its own shadow. Measured (headless Chromium, this iGPU, 5 views):
+      cached frames as without shadows (2.9-4.2 ms), a frame that redraws the map
+      +1-2.5 ms. From above the change is small: the 1 m imagery already holds the
+      afternoon shadows of its own pass (sun azimuth 218-236 deg, ours 215), and ours
+      fall on them; a 60 m test box shows ours at ~60 % of the sand's brightness
+      (theirs 20-30 %: our sky fills shadows more).
+    - Wall feet darkened (the facade shader: 60 % at the ground to full by 5 m), a cheap
+      ambient occlusion.
+    - Haze thinning with height (`viewer/haze.js`, replaces three's fog chunks in every
+      material): density falling off exponentially above sea level (900 m scale height,
+      project choice), integrated along the line of sight in closed form; clear to the
+      visibility's `near`, ~95 % at `far` near the ground. From altitude the ground below
+      is clearer than the horizon; mid-distances near the ground a little hazier than the
+      old linear fog.
+  - [ ] Night lighting (the owner's go-ahead 2026-10-10): dusk and night, lit city,
+    roads, airports, landmarks and bridges, night sky.
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the
     flown aircraft's static parts (45 meshes), palms and bushes across tiles (~50).
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings

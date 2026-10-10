@@ -238,6 +238,9 @@ function facadeMaterial() {
         `#include <color_fragment>
 float glassAmount = 0.0;
 if (vFacade.x >= 0.0) {
+  // Darker toward the foot of the wall (the ground and neighbours hide part of the sky
+  // there): a cheap ambient occlusion, strongest in the first metres (project choice).
+  diffuseColor.rgb *= mix(0.6, 1.0, smoothstep(0.0, 5.0, vFacade.y));
   float fade = 1.0 - smoothstep(500.0, 2500.0, length(vViewPosition));
   float tower = step(40.0, vFacade.z);
   float fy = fract(vFacade.y / 3.3), fx = fract(vFacade.x / 3.2);
@@ -302,7 +305,10 @@ function featureMeshes(f, mats) {
     if (data.color) g.setAttribute("color", new THREE.BufferAttribute(data.color, 3));
     if (data.facade) g.setAttribute("facade", new THREE.BufferAttribute(data.facade, 3));
     g.setIndex(new THREE.BufferAttribute(data.index, 1));
-    group.add(new THREE.Mesh(g, mats[kind]));
+    const m = new THREE.Mesh(g, mats[kind]);
+    m.receiveShadow = true; // the sun's shadows (sunShadows.js)
+    m.castShadow = kind === "buildings";
+    group.add(m);
   }
   return group;
 }
@@ -316,6 +322,7 @@ function tileObjects(data, shared, far) {
   if (palms?.length) {
     const n = palms.length / 4;
     const trees = new THREE.InstancedMesh(shared.palm, shared.palmMat, n);
+    trees.castShadow = true;
     for (let i = 0; i < n; i++) {
       const [x, h, z, k] = palms.subarray(4 * i, 4 * i + 4);
       q.setFromAxisAngle(up, (x * 13 + z * 7) % 6.283);
@@ -385,11 +392,11 @@ function tileObjects(data, shared, far) {
 export const QUALITY = {
   low: {
     rings: [{ maxRing: 1, segments: 48, objects: true }, { maxRing: 3, segments: 12, objects: false }],
-    maxTrees: 250, fog: [5000, 12000], pixelRatio: 1, groundDetail: 0,
+    maxTrees: 250, fog: [5000, 12000], pixelRatio: 1, groundDetail: 0, shadowMap: 0,
   },
   medium: {
     rings: [{ maxRing: 1, segments: 64, objects: true }, { maxRing: 2, segments: 32, objects: false, farTrees: true }, { maxRing: 4, segments: 12, objects: false }],
-    maxTrees: 550, fog: [7000, 17000], pixelRatio: 1.5, groundDetail: 1,
+    maxTrees: 550, fog: [7000, 17000], pixelRatio: 1.5, groundDetail: 1, shadowMap: 2048,
   },
   high: {
     rings: [
@@ -397,7 +404,7 @@ export const QUALITY = {
       { maxRing: 2, segments: 48, objects: false, farTrees: true },
       { maxRing: 5, segments: 16, objects: false }, // out to ~22 km, hidden in haze beyond
     ],
-    maxTrees: 900, fog: [9000, 21000], pixelRatio: 2, groundDetail: 1,
+    maxTrees: 900, fog: [9000, 21000], pixelRatio: 2, groundDetail: 1, shadowMap: 4096,
   },
 }; // fmt: skip
 
@@ -588,7 +595,9 @@ export class Terrain {
       water.position.set((w.tx + 0.5) * TILE_SIZE_M, this.scenery ? SEA_SURFACE_M : WATER_LEVEL_M, (w.tz + 0.5) * TILE_SIZE_M);
       mesh.add(water);
     }
+    mesh.receiveShadow = Boolean(this.scenery); // a region's ground takes the sun's shadows
     this.scene.add(mesh);
+    this.onChange?.(); // new casters or receivers (the sun's shadow map is drawn again)
     const objects = objectsData ? tileObjects(objectsData, this.shared, !w.objects) : null;
     if (objects) this.scene.add(objects);
     if (featuresData) mesh.add(featureMeshes(featuresData, this.featureMats)); // the tile's own geometries (disposed with it)

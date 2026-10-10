@@ -19,6 +19,8 @@ import { LIFT_M as RUNWAY_LIFT_M, RealAirfields } from "./realAirfields.js";
 import { Landmarks } from "./landmarks.js";
 import { Bridges } from "./bridges.js";
 import { ImageryClip } from "./imageryClip.js";
+import { SunShadows } from "./sunShadows.js";
+import "./haze.js"; // height-aware haze in every material (patches three's fog chunks)
 import { world } from "./world.js";
 import { groundDetailStrength } from "./groundDetail.js";
 import { buildC172 } from "./aircraft.js";
@@ -104,7 +106,7 @@ export class FlightScene {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, QUALITY[quality].pixelRatio));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping; // the physical sky is HDR
     this.renderer.toneMappingExposure = 0.55;
-    this.renderer.shadowMap.enabled = true; // only the landmarks cast (landmarks.js)
+    this.renderer.shadowMap.enabled = true; // a region's sun shadows (sunShadows.js)
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     container.prepend(this.renderer.domElement);
 
@@ -132,6 +134,8 @@ export class FlightScene {
     this.imageryClip = new ImageryClip(this.renderer); // a region's 1 m and 4 m imagery around the camera
     this.wind = [0, 0]; // the windsock's wind (from deg, kt), kept across a world change
     this.terrain = new Terrain(this.scene, quality);
+    this.sunShadows = new SunShadows(this.renderer, this.skyLight.sun);
+    this.terrain.onChange = () => this.sunShadows.invalidate();
     this._applyQuality(quality);
 
     this.model = buildC172();
@@ -212,6 +216,7 @@ export class FlightScene {
   // Viewer conditions: time of day, visibility, cloud amount and cloud layout seed.
   setVisual({ time_of_day = "afternoon", visibility = "normal", clouds = "few", cloud_seed = 0 } = {}) {
     this.skyLight.setTime(time_of_day);
+    this.sunShadows?.invalidate(); // the sun moved
     this.skyLight.setVisibility(visibility);
     this.groundUnder = null; // the shadow follows the new sun (_followGround)
     this._environment(); // reflections of this sky
@@ -236,6 +241,8 @@ export class FlightScene {
     this.renderer = r;
     this.skyLight.renderer = r;
     this.imageryClip.setRenderer(r); // its textures lived in the old context
+    this.sunShadows.renderer = r;
+    this.sunShadows.set(this.sunShadows.enabled, QUALITY[this.quality].shadowMap); // its map too
     this.shadowMaskDirty = true; // the mask texture lived in the old context
     this._environment();
     this._bindPointer();
@@ -262,6 +269,7 @@ export class FlightScene {
   _applyQuality(quality) {
     const q = QUALITY[quality];
     groundDetailStrength.value = q.groundDetail;
+    this.sunShadows.set(Boolean(world.real), q.shadowMap);
     this.skyLight.setVisibility(this.skyLight.visibility, q.fog);
   }
 
@@ -319,6 +327,7 @@ export class FlightScene {
     this.landmarks.build(real ? w.landmarks : null);
     this.bridges.build(real ? w.bridges : null);
     this.imageryClip.set(w.scenery, real ? w.hires : null);
+    this.sunShadows.set(real, QUALITY[this.quality].shadowMap);
     this._environment();
     const home = real ? this.realAirfields.nearest(near.x, near.z) : null;
     if (home) {
@@ -553,7 +562,7 @@ export class FlightScene {
       this.terrain.update(this.camera.position.x, this.camera.position.z);
       this.clouds.update(this.camera.position.x, this.camera.position.z);
       if (this.procedural.visible) this.roads.update(this.camera.position.x, this.camera.position.z);
-      this.landmarks.update(this.camera.position, this.skyLight.sun, this.sunDir);
+      this.sunShadows.update(this.camera, world.groundAt(this.camera.position.x, this.camera.position.z), this.sunDir);
       this.renderer.render(this.scene, this.camera);
       return;
     }
@@ -567,7 +576,7 @@ export class FlightScene {
     this.terrain.update(this.camera.position.x, this.camera.position.z);
     this.clouds.update(this.camera.position.x, this.camera.position.z);
     if (this.procedural.visible) this.roads.update(this.camera.position.x, this.camera.position.z);
-    this.landmarks.update(this.camera.position, this.skyLight.sun, this.sunDir);
+    this.sunShadows.update(this.camera, world.groundAt(this.camera.position.x, this.camera.position.z), this.sunDir);
     this.renderer.render(this.scene, this.camera);
   }
 

@@ -1,8 +1,7 @@
 """Landmark models (flightsim/viewer/landmarks.js, landmarkKit.js), run with Node when
 available: walls face out of a footprint (into a courtyard for inner rings) and carry the
 facade coordinates; a leaning tower's top sits where its average lean puts it; every kind
-builds from a landmarks.json-like entry; the sun's shadow camera frames the landmark
-nearest the camera without changing the light's direction."""
+builds from a landmarks.json-like entry. (Their sun shadows: test_viewer_sun_shadows.py.)"""
 
 import json
 import math
@@ -63,19 +62,6 @@ for (const m of marks) {
   out.leanTop = c.toArray();
 }
 // Shadows: two landmarks far apart; the camera near the second.
-{
-  const scene = new THREE.Scene();
-  const lm = new Landmarks(scene);
-  lm.build([marks[4], { ...marks[1], ring: ring.map((v, i) => v + (i % 2 ? 0 : 5000)), centre: [5000, 0] }]);
-  const sun = new THREE.DirectionalLight();
-  scene.add(sun, sun.target);
-  const dir = new THREE.Vector3(0.3, 0.8, -0.5).normalize();
-  lm.update(new THREE.Vector3(4900, 100, 50), sun, dir);
-  out.shadow = { cast: sun.castShadow, target: sun.target.position.toArray(), dir: sun.position.clone().sub(sun.target.position).normalize().toArray() };
-  lm.build([]);
-  lm.update(new THREE.Vector3(), sun, dir);
-  out.shadowOff = { cast: sun.castShadow, pos: sun.position.toArray() };
-}
 // Static merging (staticMerge.js): two placements of a group with two materials, one part
 // mirrored, one transparent, one hidden: one mesh per opaque material, every triangle
 // still facing away from the part's centre.
@@ -146,14 +132,6 @@ def test_every_kind_builds(result):
     assert result["L"]["max"][0] - result["L"]["min"][0] >= 180
     for k in "MTLPE":
         assert result[k]["meshes"] >= 2
-
-
-def test_shadow_frames_the_nearest_landmark(result):
-    s = result["shadow"]
-    assert s["cast"] and s["target"][0] == pytest.approx(5000, abs=50)
-    assert s["dir"] == pytest.approx([v / math.sqrt(0.98) for v in (0.3, 0.8, -0.5)], abs=1e-6)  # the light's direction unchanged
-    off = result["shadowOff"]
-    assert not off["cast"] and off["pos"] == pytest.approx([v / math.sqrt(0.98) * 10000 for v in (0.3, 0.8, -0.5)], abs=1e-3)
 
 
 def test_static_merge_joins_per_material(result):

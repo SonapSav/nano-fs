@@ -488,6 +488,7 @@ export class Bridges {
   mesh(g, material) {
     const m = new THREE.Mesh(g, material);
     m.castShadow = true;
+    m.receiveShadow = true;
     return m;
   }
 
