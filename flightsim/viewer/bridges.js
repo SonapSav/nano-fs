@@ -109,7 +109,7 @@ function bendData(bend, pos) {
     w[k] = bend[3 * k + 2];
     y0[k] = pos[3 * idx[k] + 1];
   }
-  return { idx, end, w, y0 };
+  return { idx, end, w, y0, ends: [...new Set(end)] };
 }
 
 // The tag of a bridge's geometry (Collector.tag): its nearest end on land within reach
@@ -715,8 +715,15 @@ export class Bridges {
     }
     if (!changed) return false;
     for (const g of this.bent) {
-      const { idx, end, w, y0 } = g.userData.bend, pos = g.getAttribute("position");
+      const { idx, end, w, y0, ends } = g.userData.bend, pos = g.getAttribute("position");
+      // Only geometries with a vertex at an end that moved (each end's last applied dy).
+      g.userData.applied ??= new Map();
+      const ap = g.userData.applied;
+      let moved = false;
+      for (const e of ends) if (ap.get(e) !== this.ends[e].dy) moved = true;
+      if (!moved) continue;
       for (let k = 0; k < idx.length; k++) pos.array[3 * idx[k] + 1] = y0[k] + w[k] * this.ends[end[k]].dy;
+      for (const e of ends) ap.set(e, this.ends[e].dy);
       pos.needsUpdate = true;
       g.computeBoundingSphere();
     }

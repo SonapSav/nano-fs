@@ -1665,8 +1665,10 @@ landmarks; later night lighting, shadows, haze.
     loops, skipped under a pixel; lit at night as the ribbons were (glowAtNight, decks too).
     City flight 1080p: 100.2 / 100.6 fps (p95 15.5-15.9 ms, 20-24 frames over 30 ms, worst
     45-52 ms) vs old ribbons 104.8 (13.4 ms, 12, 51 ms).
-  - [ ] Roads: frames over 30 ms 20-24 vs 12 with the ribbons (the tiles' meshes made on
-    the main thread on arrival?); roundabout lane markings, gore borders, per-road snapping
+  - [ ] Roads: frames over 30 ms 14-16 vs 12 with the ribbons after bridges.bendEnds
+    redoes only the geometries whose ends moved (it redid all: 18-23 ms frames at the
+    start of a flight; 101.2 fps both runs, worst 34-45 ms); the rest are graphics-chip
+    frames (new tiles' buffers); roundabout lane markings, gore borders, per-road snapping
     (median 3 m off the imagery's roads), two-way decks' dash phase; markings colours
     against the UAE road marking manual.
   - [x] Grand Mosque too bright at night (2026-10-11, the owner): the landmarks' floodlight
