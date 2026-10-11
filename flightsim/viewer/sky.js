@@ -4,6 +4,13 @@
 // light colours, the sky shader's scattering, the haze colour and the exposure.
 // "afternoon" is the original look. Visibility scales the haze distances; the quality
 // setting caps how far terrain is drawn, so "clear" cannot see beyond it.
+//
+// The sky (three's Sky addon: scattering and its cloud layer, per pixel) depends only on
+// the view direction and its settings (its clouds do not drift: the addon's `time` stays
+// 0), so it is drawn once into a cube map when a setting changes (SKY_CUBE_PX a face,
+// half float: the sun disc stays bright for the tone mapping) and shown as the scene's
+// background (2026-10-11: the city flight from 90 to 101 fps; a dome drawn after the
+// opaque scene instead, only where sky shows, measured the same).
 
 import * as THREE from "three";
 import { Sky } from "three/addons/objects/Sky.js";
@@ -27,6 +34,7 @@ export const TIMES = {
 // reached) per cloud amount: its coverage (0-1). "few" is the addon's default, the look
 // before 2026-10-11; the others: project choices.
 export const SKY_CLOUDS = { clear: 0, few: 0.4, scattered: 0.5, broken: 0.6 };
+export const SKY_CUBE_PX = 1024;
 
 // Haze (fog near, far) in metres; "normal" is the original, also the quality "high" values.
 export const VISIBILITY = { clear: [16000, 30000], normal: [9000, 21000], hazy: [1500, 7000] };
@@ -71,11 +79,17 @@ export class SkyController {
     this.scene = scene;
     this.renderer = renderer;
     this.sky = new Sky();
-    this.sky.scale.setScalar(450000);
     const u = this.sky.material.uniforms;
     u.mieCoefficient.value = 0.004;
     u.mieDirectionalG.value = 0.8;
-    scene.add(this.sky);
+    // Drawn into the cube (the dome alone in its own scene, around the cube camera).
+    this.skyScene = new THREE.Scene();
+    this.skyScene.add(this.sky);
+    this.sky.scale.setScalar(1000);
+    this.cube = new THREE.WebGLCubeRenderTarget(SKY_CUBE_PX, { type: THREE.HalfFloatType });
+    this.cubeCamera = new THREE.CubeCamera(1, 10000, this.cube);
+    scene.background = this.cube.texture;
+    this.dirty = true;
     this.sun = new THREE.DirectionalLight(0xffffff, 1);
     scene.add(this.sun, this.sun.target);
     this.hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 1);
@@ -110,11 +124,21 @@ export class SkyController {
     this.hemi.intensity = t.hemiI;
     this.scene.fog.color.setHex(t.haze);
     this.renderer.toneMappingExposure = t.exposure;
+    this.dirty = true;
+  }
+
+  // Redraws the sky's cube when a setting changed (or `force`, e.g. a new renderer);
+  // called before each frame.
+  update(force = false) {
+    if (!this.dirty && !force) return;
+    this.dirty = false;
+    this.cubeCamera.update(this.renderer, this.skyScene);
   }
 
   // The sky layer's clouds for a cloud amount (clear, few, scattered, broken).
   setClouds(amount) {
     this.sky.material.uniforms.cloudCoverage.value = SKY_CLOUDS[amount] ?? SKY_CLOUDS.few;
+    this.dirty = true;
   }
 
   // Haze for a visibility, never beyond the quality setting's reach (`cap`, [near, far]).

@@ -1616,7 +1616,14 @@ landmarks; later night lighting, shadows, haze.
     rim toward the sun, thinning out close up (clouds.js); the sky layer now follows the
     cloud amount (clear none, few 40 % as before, scattered 50 %, broken 60 %; sky.js).
     Cost: clouds on vs off within the measurement noise (~0.3-0.6 ms) in two views with
-    large clouds. (82145c9)
+    large clouds. (82145c9) Correction (2026-10-11, measured in the city flight): the
+    puffs cost about 2 fps and the sky layer's clouds about 8 fps (of ~110).
+  - [x] Sky cached (2026-10-11, the owner): the sky (scattering and its cloud layer, which
+    does not drift) drawn once into a 1024 px half-float cube map when the time of day or
+    cloud amount changes, shown as the scene's background (sky.js). Looks the same (day,
+    dusk, night shots before and after); city flight 89.9 -> 100.5-101.5 fps, measured
+    back to back; the sky's clouds now cost nothing (the puffs still ~2 fps). A dome drawn
+    after the opaque scene instead measured the same. (COMMIT)
   - [ ] Decide later (the owner, 2026-10-11): the clouds' whiteness and softness (clouds.js
     PUFF: ambient, direct, base, noise, scale; easy to tune), after flying with them.
   - [ ] Road network with markings (2026-10-11, the owner: option 2, drawn roads replacing the

@@ -271,6 +271,7 @@ export class FlightScene {
     old.forceContextLoss();
     this.renderer = r;
     this.skyLight.renderer = r;
+    this.skyLight.dirty = true; // its cube lived in the old context
     this.imageryClip.setRenderer(r); // its textures lived in the old context
     this.sunShadows.renderer = r;
     this.sunShadows.set(this.sunShadows.enabled, QUALITY[this.quality].shadowMap); // its map too
@@ -581,6 +582,7 @@ export class FlightScene {
   }
 
   render() {
+    this.skyLight.update();
     this._followGround();
     this.bridges.update(this.camera.position, this.terrain);
     this.imageryClip.update(this.camera.position.x, this.camera.position.z); // last frame's camera
