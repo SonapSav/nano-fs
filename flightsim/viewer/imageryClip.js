@@ -58,9 +58,21 @@ float clipHas(int level, float chunkM, vec2 p) {
   vec4 idx = texelFetch(clipIndex, ivec2(slot) + ivec2(0, level * ${SLOTS}), 0);
   return idx.b * (1.0 - step(0.5, abs(idx.r - c.x) + abs(idx.g - c.y)));
 }
-// The level's colour at world (x, z) and whether its slot holds that chunk (a).
-vec4 clipSample(sampler2D tex, int level, float chunkM, vec2 p) {
-  vec3 c = texture2D(tex, p / (chunkM * ${SLOTS}.0)).rgb;
+// The level's colour at world (x, z) and whether its slot holds that chunk (a); dx, dy:
+// p's screen derivatives. Filtering reaches across a chunk's edge into the next slot,
+// which holds another place's chunk where the neighbour does not exist (the edge of the
+// imagery) or is not loaded: there the sample is kept inside the chunk by its footprint
+// (wider at coarse mip levels and low angles, else a dotted line along the edge).
+vec4 clipSample(sampler2D tex, int level, float chunkM, vec2 p, vec2 dx, vec2 dy) {
+  vec2 cell = floor(p / chunkM), f = p / chunkM - cell;
+  float m = min(0.5, max(length(dx), length(dy)) / chunkM + 0.5 * ${SLOTS}.0 / float(textureSize(tex, 0).x));
+  vec2 lo = vec2(0.0), hi = vec2(1.0);
+  if (f.x < m && clipHas(level, chunkM, (cell + vec2(-0.5, 0.5)) * chunkM) < 0.5) lo.x = m;
+  if (f.x > 1.0 - m && clipHas(level, chunkM, (cell + vec2(1.5, 0.5)) * chunkM) < 0.5) hi.x = 1.0 - m;
+  if (f.y < m && clipHas(level, chunkM, (cell + vec2(0.5, -0.5)) * chunkM) < 0.5) lo.y = m;
+  if (f.y > 1.0 - m && clipHas(level, chunkM, (cell + vec2(0.5, 1.5)) * chunkM) < 0.5) hi.y = 1.0 - m;
+  float k = 1.0 / (chunkM * ${SLOTS}.0);
+  vec3 c = textureGrad(tex, (cell + clamp(f, lo, hi)) / ${SLOTS}.0, dx * k, dy * k).rgb;
   c = mix(c * 0.0773993808, pow(c * 0.9478672986 + 0.0521327014, vec3(2.4)), step(0.04045, c)); // sRGB to linear
   return vec4(c, clipHas(level, chunkM, p));
 }
@@ -105,7 +117,7 @@ if (clipShown(vClipXZ) * (1.0 - nightLevel) > fract(52.9829189 * fract(dot(gl_Fr
 // level 0 does not fully cover (beyond its fade, or its chunk not loaded).
 export const CLIP_FRAGMENT = `
 if (clipOn > 0.5) {
-  vec2 clipP = vWaterPos.xz;
+  vec2 clipP = vWaterPos.xz, clipDx = dFdx(clipP), clipDy = dFdy(clipP); // outside the branches below (derivatives)
   float clipD = max(abs(clipP.x - cameraPosition.x), abs(clipP.y - cameraPosition.z));
   float w0 = 1.0 - smoothstep(${FADE_M[0][0]}.0, ${FADE_M[0][1]}.0, clipD);
   float h0 = w0 > 0.0 ? clipHas(0, clipChunk.x, clipP) : 0.0;
@@ -113,11 +125,11 @@ if (clipOn > 0.5) {
   if (a0 < 0.999) {
     float w1 = 1.0 - smoothstep(${FADE_M[1][0]}.0, ${FADE_M[1][1]}.0, clipD);
     if (w1 > 0.0) {
-      vec4 c1 = clipSample(clip1, 1, clipChunk.y, clipP);
+      vec4 c1 = clipSample(clip1, 1, clipChunk.y, clipP, clipDx, clipDy);
       diffuseColor.rgb = mix(diffuseColor.rgb, c1.rgb, c1.a * w1);
     }
   }
-  if (a0 > 0.0) diffuseColor.rgb = mix(diffuseColor.rgb, clipSample(clip0, 0, clipChunk.x, clipP).rgb, a0);
+  if (a0 > 0.0) diffuseColor.rgb = mix(diffuseColor.rgb, clipSample(clip0, 0, clipChunk.x, clipP, clipDx, clipDy).rgb, a0);
 }`;
 
 export class ImageryClip {

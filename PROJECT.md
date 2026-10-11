@@ -1577,6 +1577,13 @@ landmarks; later night lighting, shadows, haze.
     and extended centreline behind the aircraft were drawn mirrored in front. hud.js now
     judges behind / beyond in the camera's own frame (as scene.js's boresight check);
     test with a reversed-depth camera (fails on the old code). (0dc705d)
+  - [x] Dotted line across the ground (2026-10-11, the owner, on the runway 31 approach):
+    the 1 m imagery's chunks stop on the 512 m grid where its coverage ends (here 4608 m
+    east), and texture filtering reached across a chunk's edge into the next clipmap slot,
+    which held another place's chunk (wider at coarse mip levels: a dotted line from a
+    distance). The shader now keeps the sample inside the chunk by its footprint where the
+    neighbouring chunk is missing or not loaded (imageryClip.js clipSample); seamless
+    where it is present. (commit SEAMFIX)
   - [ ] Known: drawing with the sun's shadows costs ~3-4 ms a frame more than without in
     the dense city (sampling on the receivers; a redraw of the map adds more, every few
     seconds in flight). Filter types and map sizes measured too noisily to choose
