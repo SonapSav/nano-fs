@@ -1609,7 +1609,7 @@ landmarks; later night lighting, shadows, haze.
     east of the 74 m arch rises above the deck. (7091fa9)
   - [x] Settings, On screen (2026-10-11, the owner): switches for the instructions and
     messages box (top left, with the gamepad status) and the keys box (top right),
-    remembered in this browser. (5553f3e)
+    remembered in this browser (5553f3e); keys N and Y toggle them (07f9ea6).
   - [ ] Known: drawing with the sun's shadows costs ~3-4 ms a frame more than without in
     the dense city (sampling on the receivers; a redraw of the map adds more, every few
     seconds in flight). Filter types and map sizes measured too noisily to choose
