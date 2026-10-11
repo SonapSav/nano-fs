@@ -1634,6 +1634,10 @@ landmarks; later night lighting, shadows, haze.
     Also found: the bridge decks' road mirrored the sky (environment map), part of why
     decks read lighter than roads; off for the road material. Next: the owner judges the
     look; per-road snapping (not just a shift field) and junction shapes before a full build.
+    10 x 10 km around OMAD (2026-10-11): 2,643 roads, 1,123 crossings and stop lines, 6,989
+    alignment findings (|offset| 4.0 -> 2.9 m), ~9 min to build; frame time with the roads
+    shown vs hidden within noise (8.1 vs 8.2 ms, 7.5 vs 8.1 ms). Service roads (41,000 ways)
+    not included.
   - [ ] Known: drawing with the sun's shadows costs ~3-4 ms a frame more than without in
     the dense city (sampling on the receivers; a redraw of the map adds more, every few
     seconds in flight). Filter types and map sizes measured too noisily to choose
