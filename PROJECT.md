@@ -1643,8 +1643,12 @@ landmarks; later night lighting, shadows, haze.
     markings and tyre tracks stop where roads overlap at junctions, how far from the angle
     between them (ramp splits up to 150 m); run ends at shared nodes extended half their
     width; deck dashes continue the network's (two-way bridges: phase may jump). Level B
-    (junction shapes, painted gore areas, roundabout markings; Shapely in the scenery
-    group) to decide after the owner's look.
+    (2026-10-11, commit LEVELB; Shapely added to the scenery group): kerb fillets where
+    roads meet (closing of their surfaces, radius 8 m), painted gores with diagonal
+    hatching where a road splits off within 30 deg (until the gap reaches 3 m), give-way
+    lines at roundabout entries; 10 x 10 km: 5,483 fillets, 515 gores, 262 give-way lines;
+    frame time shown vs hidden within noise (9.3 / 10.1 vs 8.2 / 11.1 ms). Next: the
+    owner's look, then the 25 km build.
   - [ ] Known: drawing with the sun's shadows costs ~3-4 ms a frame more than without in
     the dense city (sampling on the receivers; a redraw of the map adds more, every few
     seconds in flight). Filter types and map sizes measured too noisily to choose

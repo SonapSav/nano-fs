@@ -100,7 +100,15 @@ function marksMaterial() {
         `#include <color_fragment>
 {
   float aa = fwidth(vRoad.y) * 0.75 + 0.01;
-  float bars = vRoad.z > 0.5 ? 1.0 : smoothstep(0.25 - aa, 0.25 + aa, abs(fract(vRoad.y / 1.0) - 0.5)); // 0.5 m bars, 0.5 m gaps
+  float bars;
+  if (vRoad.z < 0.5) bars = smoothstep(0.25 - aa, 0.25 + aa, abs(fract(vRoad.y / 1.0) - 0.5)); // zebra: 0.5 m bars, 0.5 m gaps
+  else if (vRoad.z < 1.5) bars = 1.0; // stop line
+  else if (vRoad.z < 2.5) bars = smoothstep(0.25 - aa, 0.25 + aa, abs(fract(vRoad.y / 1.2) - 0.5)); // give way: 0.6 m dashes
+  else { // gore: diagonal stripes 0.6 m wide every 3 m (vRoad.xy: metres along and across)
+    float aad = fwidth(vRoad.x + vRoad.y) * 0.5 + 0.02;
+    float d = fract((vRoad.x + vRoad.y) * 0.7071 / 3.0) * 3.0;
+    bars = smoothstep(0.0, aad, d) * (1.0 - smoothstep(0.6 - aad, 0.6, d));
+  }
   diffuseColor.a *= bars;
 }`,
       );
@@ -211,23 +219,47 @@ export class RegionRoads {
     const height = (x, z) => ground.height(x, z);
     const a = { pos: [], nrm: [], col: [], road: [], mark: [], idx: [] };
     for (const r of this.data.roads) ribbon(r.pts, r.width, r.lanes, r.oneway, r.s0 ?? 0, height, a);
+    // Kerb fillets and gores (scenery_roads.py junction_shapes): plain asphalt, no markings.
+    const polygon = (t, into, road) => {
+      const base = into.pos.length / 3;
+      for (let i = 0; i < t.v.length; i += 2) {
+        const x = t.v[i], z = t.v[i + 1];
+        into.pos.push(x, height(x, z) + LIFT_M, z);
+        into.nrm.push(0, 1, 0);
+        into.road.push(...road(x, z));
+        into.mark?.push(0);
+      }
+      for (let i = 0; i < t.t.length; i += 3) {
+        const [p, q, r] = [t.t[i], t.t[i + 1], t.t[i + 2]];
+        const ux = t.v[2 * q] - t.v[2 * p], uz = t.v[2 * q + 1] - t.v[2 * p + 1], vx = t.v[2 * r] - t.v[2 * p], vz = t.v[2 * r + 1] - t.v[2 * p + 1];
+        if (uz * vx - ux * vz > 0) into.idx.push(base + p, base + q, base + r); // facing up
+        else into.idx.push(base + p, base + r, base + q);
+      }
+    };
+    for (const t of [...(this.data.fills ?? []), ...(this.data.gores ?? [])]) polygon(t, a, () => [0, 0, 0, 0]);
     const roads = new THREE.Mesh(geometry(a), this.material);
     roads.receiveShadow = true;
     this.group.add(roads);
     const m = { pos: [], nrm: [], road: [], idx: [] };
     for (const k of this.data.marks) {
-      const depth = k.kind === "stop" ? 0.4 : 4.0, hw = k.width / 2 - 0.5;
+      const depth = k.kind === "stop" ? 0.4 : k.kind === "giveway" ? 0.3 : 4.0, hw = k.width / 2 - 0.5;
       const rx = -k.uz, rz = k.ux; // across the road
-      const corners = [[-depth / 2, -hw], [depth / 2, -hw], [-depth / 2, hw], [depth / 2, hw]];
+      const a0 = Math.max(k.a0 ?? -hw, -hw), a1 = Math.min(k.a1 ?? hw, hw);
+      const corners = [[-depth / 2, a0], [depth / 2, a0], [-depth / 2, a1], [depth / 2, a1]];
       const v = m.pos.length / 3;
       for (const [along, across] of corners) {
         const x = k.x + k.ux * along + rx * across, z = k.z + k.uz * along + rz * across;
         m.pos.push(x, height(x, z) + LIFT_M + 0.02, z);
         m.nrm.push(0, 1, 0);
-        m.road.push(along, across + hw, k.kind === "stop" ? 1 : 0, 0);
+        m.road.push(along, across + hw, { zebra: 0, stop: 1, giveway: 2 }[k.kind] ?? 0, 0);
       }
       m.idx.push(v, v + 1, v + 2, v + 1, v + 3, v + 2);
     }
+    for (const t of this.data.gores ?? []) {
+      const [ux, uz] = t.u;
+      polygon(t, m, (x, z) => [x * ux + z * uz, -x * uz + z * ux, 3, 0]);
+    }
+    for (let i = 0; i < m.pos.length; i += 3) m.pos[i + 1] += 0.02;
     if (m.idx.length) this.group.add(new THREE.Mesh(geometry(m), this.marksMaterial));
     this.built = true;
   }
