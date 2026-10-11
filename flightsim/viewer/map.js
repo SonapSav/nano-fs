@@ -18,7 +18,7 @@ const DEG = 180 / Math.PI;
 
 const C = {
   ground: "#1d2a22", ring: "rgba(255, 255, 255, 0.35)", ringText: "rgba(255, 255, 255, 0.85)", runway: "#d9dcd6", centreline: "#c7c9c2",
-  pattern: "#d23cc8", track: "#5fd3f3", predict: "#e070d8", aircraft: "#f2a33a", text: "#ecede8", dim: "#9aa3a9",
+  pattern: "#d23cc8", track: "#5fd3f3", predict: "#e070d8", aircraft: "#f2a33a", text: "#f4f4f0", dim: "#c9ced1",
 };
 
 // The flown track: map points [north, east] at most every TRACK_STEP_S; cleared when time
@@ -109,12 +109,20 @@ export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northU
   ctx.fillStyle = C.ground;
   ctx.fillRect(0, 0, w, h);
   const font = (size, weight = 500) => `${weight} ${size}px "Barlow Condensed", "Roboto Condensed", "Arial Narrow", sans-serif`;
+  // Text with a dark outline, as the belly camera's overlay (camera.js): legible over
+  // water, sand and roads alike.
   const text = (s, x, y, size, color, align = "center", weight = 500) => {
+    ctx.save(); // (the outline's stroke style stays here)
     ctx.font = font(compact ? Math.round(size * 0.78) : size, weight);
-    ctx.fillStyle = color;
     ctx.textAlign = align;
     ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = compact ? 2.5 : 3.5;
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.7)";
+    ctx.strokeText(s, x, y);
+    ctx.fillStyle = color;
     ctx.fillText(s, x, y);
+    ctx.restore();
   };
   if (!row) {
     text("Waiting for a flight…", w / 2, h / 2, 22, C.dim);
