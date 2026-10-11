@@ -1657,7 +1657,7 @@ landmarks; later night lighting, shadows, haze.
     fps, p95 14.4 ms, 22 frames over 30 ms (worst 126 ms) vs off 103.0, 13.8 ms, 12 (60 ms):
     ~0.7 ms a frame and hitches when a road tile is built on the main thread (to move to the
     tile worker). Not yet: roads at night (the old ribbons glowed under the street lamps).
-    Default (2026-10-11, commit ROADSDEFAULT; `?oldroads` for OSM's ribbons): road tiles
+    Default (2026-10-11, commit bcb8e5e; `?oldroads` for OSM's ribbons): road tiles
     built in the tile worker (viewer/roadGeometry.js, with the terrain tile at its detail,
     on tiles drawn at 32+ segments: within ~10 km); centrelines simplified (0.3 m) and cut
     where they cross the drawn ground's edges (1.04 M -> 0.59 M triangles in view over the
