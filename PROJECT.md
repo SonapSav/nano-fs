@@ -1575,7 +1575,7 @@ landmarks; later night lighting, shadows, haze.
     most 45 % of it) to the drawn ground under its end, at the detail its terrain tile is
     drawn at (moved when that changes; deck, sides, piers, spine, lamps together), and
     gives low decks over land abutment walls and closed ends going 3 m into the ground
-    (Sheikh Zayed's spine ends too) instead of daylight under them. (commit BENDFIX)
+    (Sheikh Zayed's spine ends too) instead of daylight under them. (120d01c)
   - [x] Bridges a distinct light grey (2026-10-11, the owner): the sides, parapets, underside
     and piers were a light concrete (0xc7c2b6) that read as a white band, and the decks'
     colour, measured along each bridge, picked up the shade and planting beside it
