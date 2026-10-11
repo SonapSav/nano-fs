@@ -1572,9 +1572,13 @@ landmarks; later night lighting, shadows, haze.
     (the colour the roads it joins are drawn in), and its concrete a tone mixed from it
     (per bridge, vertex colours); Sheikh Zayed Bridge stays white. A deck and the road on
     the ground beside it now render alike (~(85, 97, 94) in a test view).
-  - [ ] Known: with the trees, a frame that redraws the sun's shadow map costs ~15 ms
-    instead of ~5 ms in the dense city (not the shadow pass itself: the trees are
-    skipped there; cause not found yet); such frames come every few seconds in flight.
+  - [ ] Known: drawing with the sun's shadows costs ~3-4 ms a frame more than without in
+    the dense city (sampling on the receivers; a redraw of the map adds more, every few
+    seconds in flight). Filter types and map sizes measured too noisily to choose
+    (tiles loading); final flight test 2026-10-11 with everything on: 107.7 / 107.9 fps
+    (two runs; 89 before the reversed depth buffer), p95 14 ms. On the owner's laptop
+    the same build was 70-80 fps before the depth change (the test's 89): expected
+    roughly 85-95 now, to be confirmed by the owner.
   - [ ] Discuss later (the owner, 2026-10-10): surface textures for the Grand Mosque (and
     then other landmarks and ordinary buildings). Options put forward: (1) galleries as
     open arcades in the shader (dark pointed-arch recesses on paired columns, faked
