@@ -1643,7 +1643,7 @@ landmarks; later night lighting, shadows, haze.
     markings and tyre tracks stop where roads overlap at junctions, how far from the angle
     between them (ramp splits up to 150 m); run ends at shared nodes extended half their
     width; deck dashes continue the network's (two-way bridges: phase may jump). Level B
-    (2026-10-11, commit LEVELB; Shapely added to the scenery group): kerb fillets where
+    (2026-10-11, commit ab13bdf; Shapely added to the scenery group): kerb fillets where
     roads meet (closing of their surfaces, radius 8 m), painted gores with diagonal
     hatching where a road splits off within 30 deg (until the gap reaches 3 m), give-way
     lines at roundabout entries; 10 x 10 km: 5,483 fillets, 515 gores, 262 give-way lines;
