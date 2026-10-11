@@ -1641,7 +1641,7 @@ landmarks; later night lighting, shadows, haze.
     reflectance 0.048 (slope 0.33) instead of the clip (region file `imagery.toe`):
     mangroves dark green; 5 chunks left with black (2 near x -21 km: no data in either
     source). New `--imagery-only` build (Sentinel, 1 m imagery, roof colours, roads,
-    manifest: 29 min); scenery hash now c4e1692299bba524. (COMMIT)
+    manifest: 29 min); scenery hash now c4e1692299bba524. (3da93e2)
   - [ ] Decide later (the owner, 2026-10-11): the clouds' whiteness and softness (clouds.js
     PUFF: ambient, direct, base, noise, scale; easy to tune), after flying with them.
   - [ ] Road network with markings (2026-10-11, the owner: option 2, drawn roads replacing the
