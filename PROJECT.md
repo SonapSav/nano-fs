@@ -1583,7 +1583,7 @@ landmarks; later night lighting, shadows, haze.
     which held another place's chunk (wider at coarse mip levels: a dotted line from a
     distance). The shader now keeps the sample inside the chunk by its footprint where the
     neighbouring chunk is missing or not loaded (imageryClip.js clipSample); seamless
-    where it is present. (commit SEAMFIX)
+    where it is present. (8c937b6)
   - [ ] Known: drawing with the sun's shadows costs ~3-4 ms a frame more than without in
     the dense city (sampling on the receivers; a redraw of the map adds more, every few
     seconds in flight). Filter types and map sizes measured too noisily to choose
