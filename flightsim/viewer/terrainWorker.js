@@ -10,8 +10,10 @@ import { demTileGeometryData, demTileObjectsData, neededTiles } from "./demTiles
 import { heightAt, heightsName, landcoverName, shoreName } from "./demCore.js";
 import { barrierData, buildingData, featureGroundData, lightData } from "./featureGeometry.js";
 import { treeInstances } from "./treeInstances.js";
+import { roadTileArrays } from "./roadGeometry.js";
 
 const featuresName = (ix, iz) => `tiles/f_${ix}_${iz}.json`;
+const roadsName = (ix, iz) => `tiles/rd_${ix}_${iz}.json`;
 const imageryName = (ix, iz) => `tiles/i_${ix}_${iz}.jpg`;
 
 // A tile's imagery (a JPEG, decoded here; distant tiles smaller), or null (none built).
@@ -47,7 +49,7 @@ async function fetchTile(store, name, Type, ix, iz) {
 
 async function demBuild(r) {
   if (!region || region.scenery.hash !== r.scenery.hash) {
-    region = { scenery: r.scenery, tiles: r.tiles, heights: new Map(), landcover: new Map(), shore: new Map(), features: new Map() };
+    region = { scenery: r.scenery, tiles: r.tiles, heights: new Map(), landcover: new Map(), shore: new Map(), features: new Map(), roads: new Map() };
   }
   const h = new Map(), lc = new Map();
   const shore = await fetchTile(region.shore, shoreName, Uint8Array, r.tx, r.tz);
@@ -68,6 +70,11 @@ async function demBuild(r) {
   if (geometry && r.buildingsMinM !== null) {
     const f = await fetchTile(region.features, featuresName, "json", r.tx, r.tz);
     if (f) features = { ...(r.ground ? featureGroundData(f, tiles, r.segments) : {}), buildings: buildingData(f, tiles, r.buildingsMinM), lights: lightData(f, tiles), ...(r.ground ? barrierData(f, tiles, r.segments) : {}), trees: (r.objects || r.farTrees) && f.trees?.length ? treeData(f.trees, tiles) : null }; // ground features draped on this tile's own mesh; lights for the night
+  }
+  // The drawn road network (roadGeometry.js) on this tile, at its detail.
+  if (geometry && r.roads) {
+    const rd = await fetchTile(region.roads, roadsName, "json", r.tx, r.tz);
+    if (rd) features = { ...(features ?? {}), ...roadTileArrays(rd, tiles, r.segments) };
   }
   return { geometry, objects, features };
 }

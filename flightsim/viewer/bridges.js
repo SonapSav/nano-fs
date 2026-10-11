@@ -9,10 +9,10 @@
 
 import * as THREE from "three";
 import { steel, stone } from "./landmarkKit.js";
-import { lightMaterial, lightPoints } from "./nightLights.js";
+import { glowAtNight, lightMaterial, lightPoints } from "./nightLights.js";
 import { drawnGround, imageryColour } from "./featureGeometry.js";
 import { world } from "./world.js";
-import { ROAD_PROTO, roadMaterial } from "./roadNetwork.js";
+import { ROADS, roadMaterial } from "./roadNetwork.js";
 
 const TILE_M = 4000;
 const VIEW_M = 16000;
@@ -522,14 +522,14 @@ export class Bridges {
       white: new THREE.MeshStandardMaterial({ color: 0xdcdad3, roughness: 0.6, metalness: 0, envMapIntensity: 0.5 }),
     };
     this.materials.concrete.vertexColors = true;
-    if (ROAD_PROTO) this.materials.road = roadMaterial(); // the roads' asphalt and markings (prototype)
+    if (ROADS) this.materials.road = glowAtNight(roadMaterial(), [1.0, 0.72, 0.45], 0.05); // the roads' asphalt and markings, lit at night as they are
     this.roadInfo = null; // (bridge) -> {lanes, oneway, dx, dz} from the road network, or null
   }
 
   // A deck's road collector set for its markings: lanes, one-way, and which way it is
   // travelled along the deck's points (the deck may be built the other way).
   _roadSetup(col, b, p) {
-    if (!ROAD_PROTO) return;
+    if (!ROADS) return;
     col.road ??= [];
     const info = this.roadInfo?.(b);
     const lanes = info?.lanes ?? Math.max(1, Math.round((b.width_m - 2.8) / 3.65));

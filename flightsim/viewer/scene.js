@@ -18,10 +18,10 @@ import { QUALITY, Terrain, waterUniforms } from "./terrain.js";
 import { LIFT_M as RUNWAY_LIFT_M, RealAirfields } from "./realAirfields.js";
 import { Landmarks } from "./landmarks.js";
 import { Bridges } from "./bridges.js";
-import { ROAD_PROTO, RegionRoads } from "./roadNetwork.js";
+import { ROADS, RegionRoads, marksMaterial, roadMaterial } from "./roadNetwork.js";
 import { ImageryClip } from "./imageryClip.js";
 import { SunShadows } from "./sunShadows.js";
-import { pointScale } from "./nightLights.js";
+import { glowAtNight, pointScale } from "./nightLights.js";
 import "./haze.js"; // height-aware haze in every material (patches three's fog chunks)
 import { world } from "./world.js";
 import { groundDetailStrength } from "./groundDetail.js";
@@ -147,9 +147,9 @@ export class FlightScene {
     this.realAirfields = new RealAirfields(this.scene);
     this.landmarks = new Landmarks(this.scene);
     this.bridges = new Bridges(this.scene);
-    this.roadNet = new RegionRoads(this.scene); // drawn roads with markings (prototype, ?roadproto)
+    this.roadNet = new RegionRoads(); // the drawn road network: the bridges' lanes and alignment
     this.bridges.roadInfo = (b) => this.roadNet.bridgeLanes(b.ids);
-    if (ROAD_PROTO) {
+    if (ROADS) {
       this.bridges.shift = (q) => this.roadNet.shift(q);
       this.bridges.roadS = (x, z) => this.roadNet.sAt(x, z);
     }
@@ -158,6 +158,10 @@ export class FlightScene {
     this.terrain = new Terrain(this.scene, quality);
     this.sunShadows = new SunShadows(this.renderer, this.skyLight.sun);
     this.terrain.onChange = () => this.sunShadows.invalidate();
+    // The drawn road network's materials (its tiles come with the terrain's); lit at night
+    // by the street lamps as OSM's ribbons were.
+    this.terrain.featureMats.roadnet = glowAtNight(roadMaterial(), [1.0, 0.72, 0.45], 0.05);
+    this.terrain.featureMats.roadmarks = marksMaterial();
     this.bridges.onChange = () => this.sunShadows.invalidate();
     this._applyQuality(quality);
 
@@ -353,7 +357,7 @@ export class FlightScene {
     this.realAirfields.build(real ? w.airfields : null);
     this.landmarks.build(real ? w.landmarks : null);
     this.bridges.build(real ? w.bridges : null);
-    if (ROAD_PROTO) this.roadNet.load(real ? w.scenery : null).then(() => real && this.bridges.build(w.bridges)); // the decks again, with their lanes
+    if (ROADS) this.roadNet.load(real ? w.scenery : null).then(() => real && this.bridges.build(w.bridges)); // the decks again, with their lanes
     this.landmarks.setNight(this.skyLight.night);
     this.bridges.setNight(this.skyLight.night);
     this.imageryClip.set(w.scenery, real ? w.hires : null);
@@ -579,7 +583,6 @@ export class FlightScene {
   render() {
     this._followGround();
     this.bridges.update(this.camera.position, this.terrain);
-    this.roadNet.update(this.terrain);
     this.imageryClip.update(this.camera.position.x, this.camera.position.z); // last frame's camera
     waterUniforms.waterTime.value = (performance.now() / 1000) % 10000;
     this._stepRecentre();

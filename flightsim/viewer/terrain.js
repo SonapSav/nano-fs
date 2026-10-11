@@ -362,7 +362,10 @@ function featureMeshes(f, mats, near = true) {
     g.setAttribute("normal", new THREE.BufferAttribute(data.normal, 3));
     if (data.color) g.setAttribute("color", new THREE.BufferAttribute(data.color, 3));
     if (data.facade) g.setAttribute("facade", new THREE.BufferAttribute(data.facade, 3));
+    if (data.aRoad) g.setAttribute("aRoad", new THREE.BufferAttribute(data.aRoad, 4));
+    if (data.aMark) g.setAttribute("aMark", new THREE.BufferAttribute(data.aMark, 1));
     g.setIndex(new THREE.BufferAttribute(data.index, 1));
+    if (!mats[kind]) continue; // (the road network's materials: set by scene.js)
     const m = new THREE.Mesh(g, mats[kind]);
     // The sun's shadows (sunShadows.js) only on the near tiles: its square never reaches
     // farther, and receiving costs a shadow-map lookup in every pixel of every far tile.
@@ -450,8 +453,8 @@ function tileObjects(data, shared, far) {
 // near tile, haze distances, pixel ratio and the close-up ground detail. "high" is the
 // original setting.
 // ?notrees in the viewer's URL: no measured trees (performance comparisons).
-// ?roadproto: the drawn road network (roadNetwork.js, as its ROAD_PROTO) replaces OSM's ribbons.
-const ROAD_PROTO = typeof location !== "undefined" && new URLSearchParams(location.search).has("roadproto");
+// The drawn road network (roadNetwork.js ROADS: unless ?oldroads) replaces OSM's ribbons.
+const ROADS = !(typeof location !== "undefined" && new URLSearchParams(location.search).has("oldroads"));
 const NO_TREES = typeof location !== "undefined" && new URLSearchParams(location.search).has("notrees");
 
 export const QUALITY = {
@@ -515,7 +518,7 @@ export class Terrain {
       buildings: facadeMaterial(),
       taxilines: new THREE.MeshBasicMaterial({ color: 0xd9a92b, side: THREE.DoubleSide, ...pulled, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }),
     };
-    if (ROAD_PROTO) this.featureMats.roads.visible = false; // the drawn road network replaces OSM's ribbons (roadNetwork.js)
+    if (ROADS) this.featureMats.roads.visible = false; // the drawn road network replaces OSM's ribbons (roadNetwork.js)
     this.shared = {
       crown: new THREE.ConeGeometry(4, 14, 6),
       farCrown: new THREE.ConeGeometry(4.5, 14, 4), // far ring: fewer faces
@@ -637,6 +640,7 @@ export class Terrain {
         key, spec: this._spec(w), tx: w.tx, tz: w.tz, segments: w.segments, objects: Boolean(w.objects || w.farTrees), far: !w.objects,
         maxTrees: this.shared.maxTrees, scenery: this.scenery?.scenery ?? null, tiles: this.scenery?.tiles ?? null,
         textureSize: w.objects ? NEAR_TEXTURE : FAR_TEXTURE, buildingsMinM: this.scenery ? buildingsMinM(w) : null, ground: Boolean(w.objects),
+        roads: Boolean(this.scenery && ROADS && w.segments >= 32), // the drawn road network (roadGeometry.js): within about 10 km
       });  // fmt: skip
     }
   }

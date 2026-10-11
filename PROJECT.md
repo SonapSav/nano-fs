@@ -1657,6 +1657,18 @@ landmarks; later night lighting, shadows, haze.
     fps, p95 14.4 ms, 22 frames over 30 ms (worst 126 ms) vs off 103.0, 13.8 ms, 12 (60 ms):
     ~0.7 ms a frame and hitches when a road tile is built on the main thread (to move to the
     tile worker). Not yet: roads at night (the old ribbons glowed under the street lamps).
+    Default (2026-10-11, commit ROADSDEFAULT; `?oldroads` for OSM's ribbons): road tiles
+    built in the tile worker (viewer/roadGeometry.js, with the terrain tile at its detail,
+    on tiles drawn at 32+ segments: within ~10 km); centrelines simplified (0.3 m) and cut
+    where they cross the drawn ground's edges (1.04 M -> 0.59 M triangles in view over the
+    city), fillets outlined every 25 m (gores 10 m); markings found per pixel without
+    loops, skipped under a pixel; lit at night as the ribbons were (glowAtNight, decks too).
+    City flight 1080p: 100.2 / 100.6 fps (p95 15.5-15.9 ms, 20-24 frames over 30 ms, worst
+    45-52 ms) vs old ribbons 104.8 (13.4 ms, 12, 51 ms).
+  - [ ] Roads: frames over 30 ms 20-24 vs 12 with the ribbons (the tiles' meshes made on
+    the main thread on arrival?); roundabout lane markings, gore borders, per-road snapping
+    (median 3 m off the imagery's roads), two-way decks' dash phase; markings colours
+    against the UAE road marking manual.
   - [x] Grand Mosque too bright at night (2026-10-11, the owner): the landmarks' floodlight
     glow (emissive 0.55 x their colour) came out near white through the night exposure and
     ACES; now 0.075, a bluer white (dim blue-grey most of the lunar month: Speirs + Major's

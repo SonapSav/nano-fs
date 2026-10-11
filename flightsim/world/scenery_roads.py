@@ -348,15 +348,16 @@ GORE_GAP_M = 3.0  # a ramp's painted gore ends where the gap between the edges r
 GIVEWAY_BACK_M = 1.0  # give-way line this far before the roundabout's edge
 
 
-def _tris(poly) -> dict | None:
+def _tris(poly, edge_m: float = 25.0) -> dict | None:
     """A polygon as triangles for the viewer: {"v": [x, z, ...], "t": [i, ...]}; edges at
-    most 6 m (the viewer drapes each vertex on the ground)."""
+    most `edge_m` (the viewer drapes each vertex on the ground: fillets are small, gores
+    longer)."""
     import shapely
 
-    poly = shapely.make_valid(poly.simplify(0.05)).buffer(0)
+    poly = shapely.make_valid(poly.simplify(0.25)).buffer(0)
     if poly.is_empty or poly.geom_type not in ("Polygon", "MultiPolygon"):
         return None
-    poly = shapely.segmentize(poly, 6.0)
+    poly = shapely.segmentize(poly, edge_m)
     try:
         tri = shapely.constrained_delaunay_triangles(poly)
     except shapely.errors.GEOSException:
@@ -456,7 +457,7 @@ def junction_shapes(lines: list[dict], incid: dict):
                 g = max(parts, key=lambda q: q.area)
                 if g.distance(Point(*centre)) > (wa + wb) / 2 / max(2 * np.sin(th / 2), 0.02) + 15:
                     continue
-                t = _tris(g)
+                t = _tris(g, 10.0)
                 if t:
                     u = (a[3] + b[3]) / np.hypot(*(a[3] + b[3]))
                     t["u"] = [round(float(u[0]), 4), round(float(u[1]), 4)]
