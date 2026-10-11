@@ -1576,7 +1576,7 @@ landmarks; later night lighting, shadows, haze.
     broke the HUD's behind-the-camera test (NDC depth in [-1, 1]), so the runway outline
     and extended centreline behind the aircraft were drawn mirrored in front. hud.js now
     judges behind / beyond in the camera's own frame (as scene.js's boresight check);
-    test with a reversed-depth camera (fails on the old code). (commit HUDFIX)
+    test with a reversed-depth camera (fails on the old code). (0dc705d)
   - [ ] Known: drawing with the sun's shadows costs ~3-4 ms a frame more than without in
     the dense city (sampling on the receivers; a redraw of the map adds more, every few
     seconds in flight). Filter types and map sizes measured too noisily to choose
