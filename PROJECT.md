@@ -1623,7 +1623,7 @@ landmarks; later night lighting, shadows, haze.
     cloud amount changes, shown as the scene's background (sky.js). Looks the same (day,
     dusk, night shots before and after); city flight 89.9 -> 100.5-101.5 fps, measured
     back to back; the sky's clouds now cost nothing (the puffs still ~2 fps). A dome drawn
-    after the opaque scene instead measured the same. (COMMIT)
+    after the opaque scene instead measured the same. (ff7f6ff)
   - [ ] Decide later (the owner, 2026-10-11): the clouds' whiteness and softness (clouds.js
     PUFF: ambient, direct, base, noise, scale; easy to tune), after flying with them.
   - [ ] Road network with markings (2026-10-11, the owner: option 2, drawn roads replacing the
