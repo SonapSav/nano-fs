@@ -105,7 +105,7 @@ export function ringStepNm(rangeNm) {
 // `compact`: the corner map in the 3D view (smaller text, no key help, a short info line).
 // `camera`: what the belly camera sees ({origin, ground, corners}: map [north, east]
 // metres; app.js), drawn as a translucent patch with a line to the point under its crosshair.
-export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northUp, background = null, nav = null, compact = false, camera = null }) {
+export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northUp, background = null, nav = null, compact = false, camera = null, credit = false }) {
   ctx.fillStyle = C.ground;
   ctx.fillRect(0, 0, w, h);
   const font = (size, weight = 500) => `${weight} ${size}px "Barlow Condensed", "Roboto Condensed", "Arial Narrow", sans-serif`;
@@ -269,6 +269,20 @@ export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northU
     text(`${g.target} ${g.distNm < 10 ? g.distNm.toFixed(1) : g.distNm.toFixed(0)} nm ${pad3(g.bearingDeg)}°${nav ? `  XTK ${(Math.abs(g.xtkM) / M_PER_NM).toFixed(2)}` : ""}`, 8, h - 12, 16, C.text, "left", 600);
     return;
   }
-  text(`GS ${Math.round(g.gsKt)} kt   TRK ${g.trackDeg === null ? "---" : pad3(g.trackDeg)}°   ${g.target} ${g.distNm < 10 ? g.distNm.toFixed(2) : g.distNm.toFixed(1)} nm ${pad3(g.bearingDeg)}°${xtk}`, 14, h - 18, 17, C.text, "left", 600);
-  text("+ / − zoom   N north up / track up", w - 14, h - 18, 14, C.dim, "right");
+  // The data credit (`credit`: the map window and the combo panel; the corner map has the
+  // viewer's own line beside it) as the bottom line, the GPS line above it.
+  const creditLine = credit ? background?.credit ?? "" : "";
+  const y = creditLine ? h - 34 : h - 18;
+  if (creditLine) {
+    ctx.font = font(12);
+    const tw = Math.min(w - 8, ctx.measureText(creditLine).width);
+    ctx.fillStyle = "rgba(30, 33, 36, 0.6)";
+    ctx.fillRect(w / 2 - tw / 2 - 5, h - 18, tw + 10, 16);
+    ctx.fillStyle = C.text;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(creditLine, w / 2, h - 10, w - 8);
+  }
+  text(`GS ${Math.round(g.gsKt)} kt   TRK ${g.trackDeg === null ? "---" : pad3(g.trackDeg)}°   ${g.target} ${g.distNm < 10 ? g.distNm.toFixed(2) : g.distNm.toFixed(1)} nm ${pad3(g.bearingDeg)}°${xtk}`, 14, y, 17, C.text, "left", 600);
+  text("+ / − zoom   N north up / track up", w - 14, y, 14, C.dim, "right");
 }

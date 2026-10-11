@@ -72,6 +72,14 @@ export class MapBackground {
       .catch(() => {});
   }
 
+  // The credit for what the map draws (at its bottom): the region's credits (manifest
+  // credit_short) for its roads (OpenStreetMap), land cover (WorldCover), relief (FABDEM)
+  // and water index (Sentinel); empty for the procedural world.
+  get credit() {
+    const parts = (this.scenery?.manifest?.credit_short ?? "").split(" · ");
+    return parts.filter((p) => /^© OpenStreetMap|^ESA WorldCover|^FABDEM|^Contains modified Copernicus Sentinel/.test(p)).join(" · ");
+  }
+
   // A region tile's features (roads), loaded on demand.
   _features(ix, iz) {
     const s = this.scenery, key = `${ix},${iz}`, t = s.manifest.tiles;

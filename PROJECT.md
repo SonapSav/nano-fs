@@ -1129,7 +1129,10 @@ water, mangroves and irrigated green: classes the procedural generator does not 
   ODbL) in the region file and manifest; the viewer shows the short line at the bottom of
   the 3D view (full text as its tooltip) and the map window's top (the corner map: the
   OpenStreetMap notice; both map credits removed 2026-10-11, the owner: the 3D view's
-  line suffices); full text in the README. Performance test: an "Abu Dhabi
+  line suffices; the same day back at the bottom of the moving map (map window and combo
+  panel, not the corner map), short: only what the map draws: OpenStreetMap, ESA
+  WorldCover, FABDEM, Copernicus Sentinel 2025, from the manifest's credit_short);
+  full text in the README. Performance test: an "Abu Dhabi
   scenery" case (the region's approach start; skipped when the region is not built).
   Headless (AMD Renoir, 1600 x 477 view): 60 fps in both views, script 3.2-3.7 ms per
   frame against 4.0-4.3 ms on the procedural approach start (fewer draw calls); free

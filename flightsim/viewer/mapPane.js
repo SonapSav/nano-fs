@@ -98,7 +98,7 @@ export class MapPane {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (w && h) {
       const { hello, row, geodesy, track, nav, camera, background } = this;
-      drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm: RANGES_NM[this.settings.rangeIndex], northUp: this.settings.northUp, background, nav, camera });
+      drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm: RANGES_NM[this.settings.rangeIndex], northUp: this.settings.northUp, background, nav, camera, credit: true });
     }
   }
 }
