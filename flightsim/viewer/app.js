@@ -120,8 +120,8 @@ const LANDING_FAILURES = {
   off_course: "too far off the route (the task's cross-track limit)",
 };
 const INPUT_SEND_HZ = 30;
-const VIEW_HINT = "L for flights, I for the corner map, K for the belly camera; drag to look around, scroll to zoom, R or double-click to re-centre, space to pause, C for cockpit view (H: HUD), M for sound";
-const FLY_HINT = "Arrows pitch and roll; Z/X rudder and nosewheel; W/S throttle; F/V flaps; T/G trim; B brakes; hold a key to build it up, Shift for full deflection; R re-centres the view, H HUD (cockpit view). Gamepad: LB/RB flaps, D-pad trim, B brakes, Y view, X HUD (buttons: Stick settings)";
+const VIEW_HINT = "L for flights, I for the corner map, K for the belly camera; drag to look around, scroll to zoom, R or double-click to re-centre, space to pause, C for cockpit view (H: HUD), M for sound, N / Y to hide the instructions / this box";
+const FLY_HINT = "Arrows pitch and roll; Z/X rudder and nosewheel; W/S throttle; F/V flaps; T/G trim; B brakes; hold a key to build it up, Shift for full deflection; R re-centres the view, H HUD (cockpit view), N / Y hide the instructions / this box. Gamepad: LB/RB flaps, D-pad trim, B brakes, Y view, X HUD (buttons: Stick settings)";
 
 // Graphics quality (terrain.js QUALITY), remembered in this browser only.
 const QUALITY_KEY = "flightsim.quality";
@@ -169,17 +169,17 @@ function showHints() {
   $("show-message").checked = hints.message;
   $("show-keys").checked = hints.keys;
 }
-for (const [id, key] of [["show-message", "message"], ["show-keys", "keys"]]) {
-  $(id).addEventListener("change", (e) => {
-    hints[key] = e.target.checked;
-    showHints();
-    try {
-      localStorage.setItem(HINTS_KEY, JSON.stringify(hints));
-    } catch {
-      // not remembered
-    }
-  });
+// Settings' switches, or N (instructions) and Y (keys).
+function setHint(key, on) {
+  hints[key] = on;
+  showHints();
+  try {
+    localStorage.setItem(HINTS_KEY, JSON.stringify(hints));
+  } catch {
+    // not remembered
+  }
 }
+for (const [id, key] of [["show-message", "message"], ["show-keys", "keys"]]) $(id).addEventListener("change", (e) => setHint(key, e.target.checked));
 showHints();
 // Screenshots and checks from a test browser (?debug in the URL): the scene and the frame shown.
 if (new URLSearchParams(location.search).has("debug")) window.flightDebug = { scene, shown: () => shown };
@@ -803,6 +803,10 @@ function keyDown(e, inForm) {
   }
   if (e.code === "KeyI" && !inForm && !e.repeat) {
     setMinimap($("minimap").hidden);
+    return;
+  }
+  if ((e.code === "KeyN" || e.code === "KeyY") && !inForm && !e.repeat) {
+    setHint(e.code === "KeyN" ? "message" : "keys", e.code === "KeyN" ? !hints.message : !hints.keys);
     return;
   }
   if (e.code === "KeyP" && !inForm && !e.repeat) {
