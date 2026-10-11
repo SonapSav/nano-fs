@@ -192,6 +192,10 @@ const deckPaint = (b) => (b.colour !== undefined ? imageryColour(b.colour) : [0.
 // lighter and greyer (a light concrete read as a white band beside dark roads; project
 // choice, by eye).
 const CONCRETE_GREY = [0.2, 0.2, 0.19];
+// Sheikh Zayed Bridge's deck edges: dark grey-green (the owner's photo from the south
+// shore, 2026-10-11: about sRGB (40, 60, 58) in sunlight; here (50, 70, 67), linear);
+// white only the arches, the spine and the lamp posts.
+const ZAYED_EDGE = [0.0319, 0.0612, 0.0561];
 const sidePaint = (b) => deckPaint(b).map((v, k) => Math.min(1, 0.55 * v * 1.5 + 0.45 * CONCRETE_GREY[k]));
 
 // --- Deck and piers -----------------------------------------------------------------------
@@ -606,14 +610,16 @@ export class Bridges {
     white.tag = all; // the spine and arches: bent by the nearest deck end
     const spine = waveArch(decks, white);
     const parts = decks.map((d) => {
-      const own = { road: new Collector(true), white: new Collector() };
+      const own = { road: new Collector(true), white: new Collector(), edge: new Collector(true) };
       own.road.paint = deckPaint(d.b);
-      own.road.tag = own.white.tag = d.cols.concrete.tag = endTag(d.ends);
+      own.edge.paint = ZAYED_EDGE;
+      d.cols.concrete.paint = sidePaint(d.b); // its piers outside the spine: concrete
+      own.road.tag = own.white.tag = own.edge.tag = d.cols.concrete.tag = endTag(d.ends);
       const piers = spacedPiers(d.p, d.p.some((q) => q.wet) ? PIER_SPACING_M.water : PIER_SPACING_M.land).filter((s) => {
         const q = at(d.p, s);
         return !spine.onSpine(q.x, q.z);
       });
-      deck(d.b, d.p, { ...d.cols, ...own }, () => d.b.depth_m, piers, own.white, null);
+      deck(d.b, d.p, { ...d.cols, ...own }, () => d.b.depth_m, piers, own.edge, null);
       return [d.cols, own];
     });
     cols.white.absorb(white);
@@ -625,6 +631,7 @@ export class Bridges {
     for (const [c, own] of parts) {
       c.road.absorb(own.road);
       c.white.absorb(own.white);
+      c.concrete.absorb(own.edge);
     }
   }
 

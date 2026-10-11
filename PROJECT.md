@@ -1595,6 +1595,16 @@ landmarks; later night lighting, shadows, haze.
     distance). The shader now keeps the sample inside the chunk by its footprint where the
     neighbouring chunk is missing or not loaded (imageryClip.js clipSample); seamless
     where it is present. (8c937b6)
+  - [x] Sheikh Zayed Bridge's deck edges dark grey-green (2026-10-11, the owner's photo from
+    the south shore: about sRGB (40, 60, 58) in sunlight), white only the arches, the
+    spine and the lamp posts; its piers outside the spine concrete. (commit EDGEFIX)
+  - [ ] Sheikh Zayed Bridge's east end against the owner's photo (2026-10-11), to decide:
+    (1) the deck there stays nearly level onto a bank about as high as the deck, but the
+    ground model (FABDEM) has the bank at 11.6 m (northern deck) and 8.4 m (southern) where
+    the deck is 20 m, so ours ramps down 8-11 m over the last ~150 m; raising the drawn
+    bank would part the viewer's ground from the physics' (same tiles today). (2) The
+    marina arch (top 30 m, a project choice from the 2026-10-10 photos) rises ~16 m above
+    the deck there; in this photo nothing east of the 74 m arch rises above the deck.
   - [ ] Known: drawing with the sun's shadows costs ~3-4 ms a frame more than without in
     the dense city (sampling on the receivers; a redraw of the map adds more, every few
     seconds in flight). Filter types and map sizes measured too noisily to choose
