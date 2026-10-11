@@ -153,6 +153,34 @@ $("antialias").addEventListener("change", (e) => {
     // not remembered
   }
 });
+// The hint boxes (Settings, On screen), remembered in this browser: the instructions and
+// messages top left, the keys top right; both shown unless switched off.
+const HINTS_KEY = "flightsim.hints";
+const hints = (() => {
+  try {
+    return { message: true, keys: true, ...JSON.parse(localStorage.getItem(HINTS_KEY) ?? "{}") };
+  } catch {
+    return { message: true, keys: true };
+  }
+})();
+function showHints() {
+  $("top-left").hidden = !hints.message;
+  $("hint").hidden = !hints.keys;
+  $("show-message").checked = hints.message;
+  $("show-keys").checked = hints.keys;
+}
+for (const [id, key] of [["show-message", "message"], ["show-keys", "keys"]]) {
+  $(id).addEventListener("change", (e) => {
+    hints[key] = e.target.checked;
+    showHints();
+    try {
+      localStorage.setItem(HINTS_KEY, JSON.stringify(hints));
+    } catch {
+      // not remembered
+    }
+  });
+}
+showHints();
 // Screenshots and checks from a test browser (?debug in the URL): the scene and the frame shown.
 if (new URLSearchParams(location.search).has("debug")) window.flightDebug = { scene, shown: () => shown };
 $("quality").value = initialQuality;
