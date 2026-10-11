@@ -1616,7 +1616,7 @@ landmarks; later night lighting, shadows, haze.
     rim toward the sun, thinning out close up (clouds.js); the sky layer now follows the
     cloud amount (clear none, few 40 % as before, scattered 50 %, broken 60 %; sky.js).
     Cost: clouds on vs off within the measurement noise (~0.3-0.6 ms) in two views with
-    large clouds. (commit CLOUDFIX)
+    large clouds. (82145c9)
   - [ ] Known: drawing with the sun's shadows costs ~3-4 ms a frame more than without in
     the dense city (sampling on the receivers; a redraw of the map adds more, every few
     seconds in flight). Filter types and map sizes measured too noisily to choose
