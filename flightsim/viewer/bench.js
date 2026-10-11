@@ -16,7 +16,7 @@ const MEASURE_MS = 3000;
 // pixelRatio1, hud, panel, camera}) or on ({camera}: the belly camera's picture in the view).
 export const BENCH_CASES = [
   { label: "as set", off: {} },
-  { label: "no logarithmic depth", off: { logDepth: true } },
+  { label: "plain depth buffer", off: { logDepth: true } },
   { label: "no antialiasing", off: { antialias: true } },
   { label: "no fields / rivers", off: { effects: true } },
   { label: "no close-up texture", off: { detail: true } },

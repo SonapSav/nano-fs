@@ -1545,6 +1545,18 @@ landmarks; later night lighting, shadows, haze.
     internals). A dense tile (18,000 trees): 28 ms -> 1.9 ms on the main thread (5.9 ms
     in the worker). Flight test over the city: 59.8 fps (the headless 60 Hz cap), 5
     frames over 30 ms in 25 s (was ~500).
+  - [x] Toward the owner's 85-90 fps target (2026-10-11, the owner at 70-80 fps; "resolve
+    them while I am away"). Measured without the 60 Hz cap (Chromium
+    --disable-gpu-vsync --disable-frame-rate-limit), flying over the city at 1920 x 1080:
+    89 fps with everything on; off one at a time: buildings 102, sun shadows 98, trees
+    96.5, 1 m imagery 94, close-up detail 90. The biggest single cost was the
+    logarithmic depth buffer: it writes depth in every pixel's shader, which disables the
+    graphics chip's early depth test, so every hidden surface was shaded. Now a reversed
+    depth buffer (EXT_clip_control; the same far-range precision; logarithmic as the
+    fallback without the extension; scene.js makeRenderer): 89 -> 108 fps. Checked: no
+    depth artifacts at the runway markings, roads, shadows, coast, mosque, bridges. Also
+    the sun's shadows are received and cast only by the near tiles (no change measured;
+    the square never reaches farther), the facade pattern skipped where faded out by day.
   - [ ] Known: with the trees, a frame that redraws the sun's shadow map costs ~15 ms
     instead of ~5 ms in the dense city (not the shadow pass itself: the trees are
     skipped there; cause not found yet); such frames come every few seconds in flight.

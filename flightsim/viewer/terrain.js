@@ -274,10 +274,12 @@ function facadeMaterial() {
 float glassAmount = 0.0;
 vec3 nightGlow = vec3(0.0);
 if (vFacade.x >= 0.0) {
+  // (Far off, where the pattern has faded and it is day, only the wall-foot shading.)
   // Darker toward the foot of the wall (the ground and neighbours hide part of the sky
   // there): a cheap ambient occlusion, strongest in the first metres (project choice).
   diffuseColor.rgb *= mix(0.6, 1.0, smoothstep(0.0, 5.0, vFacade.y));
   float fade = 1.0 - smoothstep(500.0, 2500.0, length(vViewPosition));
+  if (fade > 0.0 || nightLevel > 0.001) {
   float tower = step(40.0, vFacade.z);
   float fy = fract(vFacade.y / 3.3), fx = fract(vFacade.x / 3.2);
   float aa = clamp(fwidth(vFacade.y / 3.3) * 1.5, 0.002, 0.2);
@@ -298,6 +300,7 @@ if (vFacade.x >= 0.0) {
     float share = fract(sin(dot(floor(vFacadePos.xz / 37.0), vec2(39.3468, 11.1353))) * 24634.6345);
     float far = mix(0.33, 0.8, tower) * 0.4 * share * share;
     nightGlow = tint * mix(far, near, fade) * 1.6;
+  }
   }
 }`,
       )
@@ -346,7 +349,7 @@ const NEAR_TEXTURE = 256, FAR_TEXTURE = 64; // land cover texels per tile side (
 const buildingsMinM = (w) => (w.objects ? 0 : w.farTrees ? 30 : 60);
 
 // Meshes of a tile's features (featureGeometry.js arrays) with the shared materials.
-function featureMeshes(f, mats) {
+function featureMeshes(f, mats, near = true) {
   const group = new THREE.Group();
   for (const [kind, data] of Object.entries(f)) {
     if (!data) continue;
@@ -361,8 +364,10 @@ function featureMeshes(f, mats) {
     if (data.facade) g.setAttribute("facade", new THREE.BufferAttribute(data.facade, 3));
     g.setIndex(new THREE.BufferAttribute(data.index, 1));
     const m = new THREE.Mesh(g, mats[kind]);
-    m.receiveShadow = true; // the sun's shadows (sunShadows.js)
-    m.castShadow = kind === "buildings" || kind === "wall" || kind === "fence";
+    // The sun's shadows (sunShadows.js) only on the near tiles: its square never reaches
+    // farther, and receiving costs a shadow-map lookup in every pixel of every far tile.
+    m.receiveShadow = near;
+    m.castShadow = near && (kind === "buildings" || kind === "wall" || kind === "fence");
     group.add(m);
   }
   return group;
@@ -661,7 +666,7 @@ export class Terrain {
       water.position.set((w.tx + 0.5) * TILE_SIZE_M, this.scenery ? SEA_SURFACE_M : WATER_LEVEL_M, (w.tz + 0.5) * TILE_SIZE_M);
       mesh.add(water);
     }
-    mesh.receiveShadow = Boolean(this.scenery); // a region's ground takes the sun's shadows
+    mesh.receiveShadow = Boolean(this.scenery && w.objects); // a region's near ground takes the sun's shadows (far: see featureMeshes)
     this.scene.add(mesh);
     this.onChange?.(); // new casters or receivers (the sun's shadow map is drawn again)
     // Measured trees (the canopy height map) replace the land cover's scattered palms.
@@ -674,7 +679,7 @@ export class Terrain {
       this.onChange?.(); // casters for the sun's shadow map
     }
     if (objects) this.scene.add(objects);
-    if (featuresData) mesh.add(featureMeshes({ ...featuresData, trees: null }, this.featureMats)); // the tile's own geometries (disposed with it)
+    if (featuresData) mesh.add(featureMeshes({ ...featuresData, trees: null }, this.featureMats, Boolean(w.objects))); // the tile's own geometries (disposed with it)
     this.tiles.set(`${w.tx},${w.tz}`, { mesh, objects, trees, segments: w.segments, near: Boolean(w.objects), far: Boolean(w.farTrees) });
   }
 

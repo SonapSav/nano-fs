@@ -97,13 +97,27 @@ function buildShadow(model) {
   return { flat, maskScene, target, camera, patch, corners, corner: new THREE.Vector3() };
 }
 
+// A renderer with far-reaching depth: reversed where the browser has EXT_clip_control,
+// else logarithmic; `depth` false: plain (comparisons).
+function makeRenderer({ antialias = true, depth = true } = {}) {
+  if (!depth) return new THREE.WebGLRenderer({ antialias });
+  const r = new THREE.WebGLRenderer({ antialias, reversedDepthBuffer: true });
+  if (r.capabilities.reversedDepthBuffer) return r;
+  r.dispose();
+  r.forceContextLoss();
+  return new THREE.WebGLRenderer({ antialias, logarithmicDepthBuffer: true });
+}
+
 export class FlightScene {
   constructor(container, quality = "high", { antialias = true } = {}) {
     this.container = container;
     this.quality = quality;
     this.antialias = antialias; // the viewer's setting (the performance test may switch it for a while)
-    // Logarithmic depth: from 0.5 m to 100+ km without distant surfaces flickering.
-    this.renderer = new THREE.WebGLRenderer({ antialias, logarithmicDepthBuffer: true });
+    // Depth from 0.5 m to 100+ km without distant surfaces flickering: a reversed depth
+    // buffer (EXT_clip_control), else a logarithmic one. The logarithmic buffer writes
+    // depth in every pixel's shader, which turns off the graphics chip's early depth test:
+    // every hidden surface was shaded (flight over the city: 90 -> 107 fps reversed).
+    this.renderer = makeRenderer({ antialias });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, QUALITY[quality].pixelRatio));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping; // the physical sky is HDR
     this.renderer.toneMappingExposure = 0.55;
@@ -232,7 +246,7 @@ export class FlightScene {
   // smoothing and logarithmic depth can only be chosen when the WebGL context is created.
   rebuildRenderer({ antialias = true, logDepth = true } = {}) {
     const old = this.renderer;
-    const r = new THREE.WebGLRenderer({ antialias, logarithmicDepthBuffer: logDepth });
+    const r = makeRenderer({ antialias, depth: logDepth }); // logDepth false: a plain depth buffer (the performance test)
     r.setPixelRatio(old.getPixelRatio());
     r.toneMapping = old.toneMapping;
     r.toneMappingExposure = old.toneMappingExposure;
