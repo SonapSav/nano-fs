@@ -1661,7 +1661,7 @@ landmarks; later night lighting, shadows, haze.
     glow (emissive 0.55 x their colour) came out near white through the night exposure and
     ACES; now 0.075, a bluer white (dim blue-grey most of the lunar month: Speirs + Major's
     lunar lighting, Visit Abu Dhabi), shaped as ground floodlights: fading with height
-    (45 m, at least 30 %), less on surfaces facing up (landmarks.js floodlit). (commit MOSQUENIGHT)
+    (45 m, at least 30 %), less on surfaces facing up (landmarks.js floodlit). (7001018)
   - [ ] Known: drawing with the sun's shadows costs ~3-4 ms a frame more than without in
     the dense city (sampling on the receivers; a redraw of the map adds more, every few
     seconds in flight). Filter types and map sizes measured too noisily to choose
