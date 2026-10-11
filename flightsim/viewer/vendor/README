@@ -1,4 +1,9 @@
-three.js 0.186.1 (npm 'three'), unmodified. MIT license: three.LICENSE
+three.js 0.186.1 (npm 'three'). MIT license: three.LICENSE
+One local patch (2026-10-11), to re-apply on an update: build/three.module.js
+WebGLState.setPolygonOffset negates `units` as well as `factor` with a reversed depth
+buffer. Unpatched, a negative units (meant to pull a surface toward the camera) pushed it
+away; with a fixed-point depth buffer, the belly camera's 5 cm near plane and a narrow
+zoom, the drawn roads fell behind the ground (the owner's screenshot).
 - build/three.module.js, build/three.core.js
 - addons/objects/Sky.js (examples/jsm/objects/Sky.js), imported as three/addons/objects/Sky.js
 

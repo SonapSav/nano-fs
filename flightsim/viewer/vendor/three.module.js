@@ -10526,6 +10526,7 @@ function WebGLState( gl, extensions ) {
 				if ( depthBuffer.getReversed() ) {
 
 					factor = - factor;
+					units = - units; // nano-fs patch (see README): both terms toward the camera
 
 				}
 

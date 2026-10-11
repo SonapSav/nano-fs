@@ -31,7 +31,12 @@ float roadNoise(vec2 p) {
 }
 // Coverage of a line across the road at t = c, w wide (antialiased).
 float roadLine(float t, float c, float w, float aa) { return 1.0 - smoothstep(w * 0.5 - aa, w * 0.5 + aa, abs(t - c)); }
-float roadDash(float s, float aa) { float f = fract(s / 9.0) * 9.0; return smoothstep(0.0, aa, f) * (1.0 - smoothstep(3.0 - aa, 3.0, f)); }`;
+// The share of a pixel f metres across (centred on t) covered by a line w wide at c: the
+// exact box filter, so a line well under a pixel shows faint (w / f) as in the imagery.
+float roadBox(float t, float c, float w, float f) { return clamp((min(t + f * 0.5, c + w * 0.5) - max(t - f * 0.5, c - w * 0.5)) / f, 0.0, 1.0); }
+// The same for the dashes along (3 m in 9 m): a third far away.
+float roadDashLen(float x) { return floor(x / 9.0) * 3.0 + min(fract(x / 9.0) * 9.0, 3.0); }
+float roadDash(float s, float f) { return clamp((roadDashLen(s + f * 0.5) - roadDashLen(s - f * 0.5)) / f, 0.0, 1.0); }`;
 
 // The roads' (and decks') material: vertex colour the asphalt; attributes aRoad (metres
 // along, metres across (+ right of travel), lanes, one-way) and aMark (marking weight).
@@ -48,30 +53,31 @@ export function roadMaterial() {
         `#include <color_fragment>
 {
   float s = vRoad.x, t = vRoad.y, lanes = vRoad.z, oneway = vRoad.w;
-  float aa = fwidth(t) * 0.75 + 0.01, aas = fwidth(s) * 0.75 + 0.01;
+  float f = fwidth(t) + 0.01, fs = fwidth(s) + 0.01; // the pixel's metres across and along
   // Asphalt: patches and grain; darker where the tyres run (two tracks a lane).
   float n = roadNoise(vRoadXZ * 0.08) * 0.6 + roadNoise(vRoadXZ * 0.9) * 0.4;
   float L = lanes * ${LANE_M.toFixed(2)};
   float lane = fract((t + L * 0.5) / ${LANE_M.toFixed(2)}) * ${LANE_M.toFixed(2)} - ${(LANE_M / 2).toFixed(3)};
   float tracks = (roadLine(lane, -0.85, 0.7, 0.3) + roadLine(lane, 0.85, 0.7, 0.3)) * step(abs(t), L * 0.5);
   diffuseColor.rgb = ASPHALT * (0.9 + 0.2 * n) * (1.0 - 0.07 * tracks * vMarkW);
-  // Markings, skipped where a line is well under a pixel (fading out over aa 0.35-0.6 m).
-  float far = 1.0 - smoothstep(0.35, 0.6, aa);
+  // Markings, averaged over the pixel (faint where a line is under one), skipped where a
+  // pixel is 2-3 m across (a line under 8 % of it).
+  float far = 1.0 - smoothstep(2.0, 3.0, f);
   float white = 0.0, yellow = 0.0;
   if (far > 0.0) {
     float LN = ${LANE_M.toFixed(2)};
-    white = roadLine(t, L * 0.5, 0.2, aa); // right edge
+    white = roadBox(t, L * 0.5, 0.2, f); // right edge
     if (oneway > 0.5) {
-      yellow = roadLine(t, -L * 0.5, 0.2, aa);
+      yellow = roadBox(t, -L * 0.5, 0.2, f);
       // The nearest lane line between lanes (k = 1 .. lanes - 1 from the left edge).
       float k = clamp(floor((t + L * 0.5) / LN + 0.5), 1.0, max(lanes - 1.0, 1.0));
-      white += roadLine(t, -L * 0.5 + k * LN, 0.15, aa) * roadDash(s, aas) * step(1.5, lanes);
+      white += roadBox(t, -L * 0.5 + k * LN, 0.15, f) * roadDash(s, fs) * step(1.5, lanes);
     } else {
-      white += roadLine(t, -L * 0.5, 0.2, aa) + roadLine(t, 0.0, 0.15, aa) * roadDash(s, aas);
+      white += roadBox(t, -L * 0.5, 0.2, f) + roadBox(t, 0.0, 0.15, f) * roadDash(s, fs);
       // The nearest lane line within each half (k = 1 .. lanes / 2 - 1 from the centre).
       float halves = floor(lanes * 0.5);
       float k = clamp(floor(abs(t) / LN + 0.5), 1.0, max(halves - 1.0, 1.0));
-      white += roadLine(abs(t), k * LN, 0.15, aa) * roadDash(s, aas) * step(1.5, halves);
+      white += roadBox(abs(t), k * LN, 0.15, f) * roadDash(s, fs) * step(1.5, halves);
     }
     float wear = 0.75 + 0.25 * roadNoise(vRoadXZ * 1.7);
     white = clamp(white, 0.0, 1.0) * vMarkW * wear * far;
