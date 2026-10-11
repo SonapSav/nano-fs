@@ -1557,6 +1557,21 @@ landmarks; later night lighting, shadows, haze.
     depth artifacts at the runway markings, roads, shadows, coast, mosque, bridges. Also
     the sun's shadows are received and cast only by the near tiles (no change measured;
     the square never reaches farther), the facade pattern skipped where faded out by day.
+  - [x] Wing strut not reaching the wing (2026-10-11, the owner's photo): its top end was
+    3 in under the chord line where the wing's lower surface is 2.65 in under it (a
+    0.35 in gap, more under the slanted end face); now 0.5 in above the chord line,
+    inside the wing; a test checks both struts' ends lie within the airfoil.
+  - [x] Sheikh Zayed Bridge's east end (the owner's telephoto photo, taken 2026-10-10 23:03,
+    before the deck-profile fix that evening): checked from the photo's position (4.8 km
+    on the 150 deg bearing, 5 deg field of view) and from the side: both decks now ramp
+    down to the shore road.
+  - [x] Bridges a distinct light grey (2026-10-11, the owner): the sides, parapets, underside
+    and piers were a light concrete (0xc7c2b6) that read as a white band, and the decks'
+    colour, measured along each bridge, picked up the shade and planting beside it
+    (brownish). Now a bridge's road takes its class's colour in the tile at its middle
+    (the colour the roads it joins are drawn in), and its concrete a tone mixed from it
+    (per bridge, vertex colours); Sheikh Zayed Bridge stays white. A deck and the road on
+    the ground beside it now render alike (~(85, 97, 94) in a test view).
   - [ ] Known: with the trees, a frame that redraws the sun's shadow map costs ~15 ms
     instead of ~5 ms in the dense city (not the shadow pass itself: the trees are
     skipped there; cause not found yet); such frames come every few seconds in flight.

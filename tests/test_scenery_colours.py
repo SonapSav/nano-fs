@@ -26,7 +26,7 @@ def test_roof_colours():
 
 
 def test_road_samples_and_water():
-    from flightsim.world.scenery_colours import _along, _runs, _samples
+    from flightsim.world.scenery_colours import _along, _samples
 
     pts = _along([1000.0, 2000.0, 1010.0, 2000.0])  # 10 m east, every 2 m
     assert len(pts) == 6 and pts[-1].tolist() == [1010.0, 2000.0]
@@ -36,8 +36,6 @@ def test_road_samples_and_water():
     mask[:, :8] = True  # only the first 8 m are 1 m imagery
     rows = _samples(img, mask, pts, 1000.0, 2000.0)
     assert len(rows) == 4 and (rows == [70, 66, 58]).all()
-    pts = [[0, 0, 5, 5, 0], [10, 0, 6, 5, 0], [20, 0, 9, 0, 1], [30, 0, 9, 0, 1], [40, 0, 6, 5, 0], [50, 0, 5, 5, 0]]
-    assert _runs(pts) == [pts[:2], pts[4:]]  # the bridge's stretches over land
 
 
 def test_apron_points_inside_only():

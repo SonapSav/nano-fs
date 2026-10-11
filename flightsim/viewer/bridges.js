@@ -139,6 +139,11 @@ function waterRun(p) {
 // A deck's road colour: the bridge's colour in the imagery, brightened as the ground's
 // imagery (featureGeometry.js imageryColour); older builds dark asphalt.
 const deckPaint = (b) => (b.colour !== undefined ? imageryColour(b.colour) : [0.042, 0.045, 0.048]);
+// Its sides, parapets, underside and piers: weathered concrete in the road's tone, a little
+// lighter and greyer (a light concrete read as a white band beside dark roads; project
+// choice, by eye).
+const CONCRETE_GREY = [0.2, 0.2, 0.19];
+const sidePaint = (b) => deckPaint(b).map((v, k) => Math.min(1, 0.55 * v * 1.5 + 0.45 * CONCRETE_GREY[k]));
 
 // --- Deck and piers -----------------------------------------------------------------------
 
@@ -416,12 +421,13 @@ export class Bridges {
       // The deck's road: each bridge's colour in the imagery (bridges.json `colour`,
       // scenery_colours.py), lit as the ground's imagery (vertex colours, Lambert).
       road: new THREE.MeshLambertMaterial({ vertexColors: true }),
-      concrete: stone(0xc7c2b6, { roughness: 0.75, key: "bridge-concrete" }),
+      concrete: stone(0xffffff, { roughness: 0.75, key: "bridge-concrete" }), // tinted per bridge (vertex colours: sidePaint)
       steel: steel(),
       paint: new THREE.MeshStandardMaterial({ color: 0x7d888c, roughness: 0.5, metalness: 0.6, envMapIntensity: 0.8 }),
       // Sheikh Zayed Bridge's white painted steel and white concrete (project choice).
       white: new THREE.MeshStandardMaterial({ color: 0xdcdad3, roughness: 0.6, metalness: 0, envMapIntensity: 0.5 }),
     };
+    this.materials.concrete.vertexColors = true;
   }
 
   build(list) {
@@ -468,9 +474,10 @@ export class Bridges {
   _one(b, tiles, landmarks) {
     const p = centreline(b), mid = p[Math.floor(p.length / 2)];
     const key = `${Math.floor(mid.x / TILE_M)},${Math.floor(mid.z / TILE_M)}`;
-    if (!tiles.has(key)) tiles.set(key, { road: new Collector(true), concrete: new Collector(), steel: new Collector(), paint: new Collector(), white: new Collector(), tubes: [], x: (Math.floor(mid.x / TILE_M) + 0.5) * TILE_M, z: (Math.floor(mid.z / TILE_M) + 0.5) * TILE_M });
+    if (!tiles.has(key)) tiles.set(key, { road: new Collector(true), concrete: new Collector(true), steel: new Collector(), paint: new Collector(), white: new Collector(), tubes: [], x: (Math.floor(mid.x / TILE_M) + 0.5) * TILE_M, z: (Math.floor(mid.z / TILE_M) + 0.5) * TILE_M });
     const cols = { ...tiles.get(key), lamps: this.lamps }, d = { b, p };
     const kind = b.structure?.kind;
+    cols.concrete.paint = sidePaint(b); // (before the girders and piers, which use it too)
     b.depth_m ??= 1.8; // builds before 2026-10-10 did not record it (scenery_bridges.py DECK_DEPTH_M)
     let depthAt = () => b.depth_m, piers = null;
     if (kind === "box_girder") {

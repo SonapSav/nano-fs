@@ -339,6 +339,7 @@ function beam(a, b, width, thick, material) {
   m.position.copy(pa).add(pb).multiplyScalar(0.5);
   m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), pb.clone().sub(pa).normalize());
   m.userData.root = pa; // its root end (body metres): inside the fuselage (tests)
+  m.userData.tipStruct = b; // its other end (structural inches; tests)
   return m;
 }
 
@@ -464,7 +465,9 @@ export function buildC172({ registration = REGISTRATION } = {}) {
     // together: settle()).
     // Roots inside the fuselage's skin (at x 48-58 and 5-7 in up it is only ~13-16 in
     // wide each side: a root further out hung in the air).
-    group.add(beam([48, yy(14), 7], [45, yy(102), wingZ(102) - 3], 4.5, 1.6, white));
+    // Its top end inside the wing (the lower surface is 2.65 in under the chord line here:
+    // an end 3 in under it left a gap).
+    group.add(beam([48, yy(14), 7], [45, yy(102), wingZ(102) + 0.5], 4.5, 1.6, white));
     const main = new THREE.Group();
     main.add(beam([58, yy(10), 6], [58, yy(41), -7], 4, 1.2, grey));
     main.add(wheel([58.2, yy(43), -8], 7.5, 5, tyre));

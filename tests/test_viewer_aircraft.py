@@ -3,6 +3,7 @@ overall dimensions against the POH and JSBSim, and control surfaces deflecting t
 the logged positions mean (positive = trailing edge down; rudder: trailing edge left)."""
 
 import json
+import math
 import shutil
 import subprocess
 from pathlib import Path
@@ -91,6 +92,12 @@ out.shadow = m.gears.map((g) => { g.shadow.updateMatrix = () => {}; m.group.matr
     return [a, rc.intersectObject(fus).length];
   });
 }
+// Wing struts: their top ends (structural inches) in the wing (tests compare with the airfoil).
+{
+  const tips = [];
+  m.group.traverse((o) => { if (o.userData.tipStruct && Math.abs(o.userData.tipStruct[1]) > 60) tips.push(o.userData.tipStruct); });
+  out.strutTips = tips;
+}
 console.log(JSON.stringify(out));
 """
 
@@ -145,3 +152,18 @@ def test_struts_and_legs_start_inside_the_fuselage(model):
     assert len(model["roots"]) == 5  # two wing struts, two main legs, the nose leg
     for out_side, in_side in model["roots"]:
         assert out_side % 2 == 1  # inside the skin: one crossing outward
+
+
+def test_wing_struts_end_inside_the_wing(model):
+    # The airfoil (aircraft.js naca: NACA 2412-like, t 0.12, m 0.02, p 0.4) at the strut's
+    # station: its top end between the lower and upper surface, not under the wing.
+    t, m_, p = 0.12, 0.02, 0.4
+    assert len(model["strutTips"]) == 2
+    for x, y, z in model["strutTips"]:
+        le, chord = 26, 64  # inner panel (|y| <= 100: constant chord); y 102: 64.1 in, LE 26.07
+        f = (x - le) / chord
+        yt = 5 * t * (0.2969 * math.sqrt(f) - 0.126 * f - 0.3516 * f**2 + 0.2843 * f**3 - 0.1036 * f**4)
+        yc = (m_ / p**2) * (2 * p * f - f * f) if f < p else (m_ / (1 - p) ** 2) * (1 - 2 * p + 2 * p * f - f * f)
+        chord_z = 65 + abs(y) * math.tan(math.radians(1.73))
+        lower, upper = chord_z + (yc - yt) * chord, chord_z + (yc + yt) * chord
+        assert lower + 0.8 < z < upper  # (half the strut's 1.6 in thickness inside too)

@@ -104,12 +104,11 @@ def roof_colours(buildings: list, img: np.ndarray, x0: float, z0: float) -> list
 # Drawn roads, taxiways, aprons, bridge decks and runways take the colour the 1 m imagery
 # shows for them, so they match the imagery's own roads where those show (and where the
 # viewer hides the drawn ones): the median under their centrelines, per tile and road
-# class; per bridge along its deck; per runway along lines at a quarter of its width from
-# the centreline (beside the markings). Where the 1 m imagery has too few samples (outside
-# its area, where 10 m pixels mix the road with its surroundings) the region's median for
-# the class. Bridges are measured over land only (a high deck seen at an angle lies beside
-# its true position in the imagery, over the water); without enough samples their class's
-# region colour.
+# class; per runway along lines at a quarter of its width from the centreline (beside the
+# markings). Where the 1 m imagery has too few samples (outside its area, where 10 m
+# pixels mix the road with its surroundings) the region's median for the class. A bridge
+# takes its class's colour in the tile at its middle: the colour of the roads it joins
+# (measured along the deck it picked up the shade and planting beside it).
 
 STEP_M = 2.0  # sampling along lines
 MIN_SAMPLES = 40  # 1 m samples for a measured colour
@@ -164,25 +163,10 @@ def _median(rows: list) -> tuple | None:
     return (np.median(a, axis=0), len(a)) if len(a) else None
 
 
-def _runs(pts: list) -> list:
-    """The runs of a bridge's profile points over land (water flag 0), as point lists."""
-    runs, cur = [], []
-    for p in pts:
-        if p[4]:
-            if len(cur) > 1:
-                runs.append(cur)
-            cur = []
-        else:
-            cur.append(p)
-    if len(cur) > 1:
-        runs.append(cur)
-    return runs
-
-
 def _tile(args):
-    """Building roof colours (written), and the tile's road, bridge and runway samples
-    (returned for colour_features)."""
-    out, ix, iz, hires, bridge_pts, runway_pts = args
+    """Building roof colours (written), and the tile's road and runway samples (returned
+    for colour_features)."""
+    out, ix, iz, hires, runway_pts = args
     path = out / features_name(ix, iz)
     f = json.loads(path.read_text())
     x0, z0 = ix * TILE_SIZE_M, iz * TILE_SIZE_M
@@ -196,10 +180,9 @@ def _tile(args):
     roads = {cls: [_samples(img, mask, _along(line), x0, z0) for line in lines] for cls, lines in f["roads"].items()}
     taxi = [_samples(img, mask, _along(line), x0, z0) for line in f["taxiway"]]
     apron = [_samples(img, mask, _apron_points(r), x0, z0) for r in f["apron"]]
-    bridges = {i: _samples(img, mask, p, x0, z0) for i, p in bridge_pts.items()}
     runways = {i: _samples(img, mask, p, x0, z0) for i, p in runway_pts.items()}
     cat = lambda v: np.concatenate(v) if v else np.zeros((0, 3))  # noqa: E731
-    return n, {**{cls: cat(v) for cls, v in roads.items()}, "_taxiway": cat(taxi), "_apron": cat(apron)}, bridges, runways
+    return n, {**{cls: cat(v) for cls, v in roads.items()}, "_taxiway": cat(taxi), "_apron": cat(apron)}, runways
 
 
 def colour_features(spec, out: Path, log=print, workers: int | None = None) -> None:
@@ -210,44 +193,37 @@ def colour_features(spec, out: Path, log=print, workers: int | None = None) -> N
     lo, hi = spec.ix_range
     bridges = json.loads((out / "bridges.json").read_text()) if (out / "bridges.json").exists() else []
     fields = json.loads((out / "airfields.json").read_text())
-    # Sample points per tile: bridge decks along their centrelines; runways at a quarter
+    # Sample points per tile: runways at a quarter
     # of their width either side of theirs.
     by_tile: dict = {}
 
-    def assign(kind, key, pts):
+    def assign(key, pts):
         t = np.floor(pts / TILE_SIZE_M).astype(int)
         for k in {tuple(v) for v in t}:
             sel = (t[:, 0] == k[0]) & (t[:, 1] == k[1])
-            by_tile.setdefault(k, ({}, {}))[kind][key] = pts[sel]
+            by_tile.setdefault(k, {})[key] = pts[sel]
 
-    for i, b in enumerate(bridges):
-        # Over land only: there the deck is low and lies where it is in the imagery (a
-        # high deck seen at an angle appears beside its true place, over the water).
-        dry = [[p[:2] for p in run] for run in _runs(b["pts"])]
-        if dry:
-            assign(0, i, np.concatenate([_along(r) for r in dry]))
     for i, rw in enumerate(fields.get("runways", [])):
         (ax, az), (bx, bz) = [(e["pavement"][1], -e["pavement"][0]) for e in rw["ends"]]  # ends are [north, east]
         L = math.hypot(bx - ax, bz - az)
         nx, nz = -(bz - az) / L, (bx - ax) / L
         pts = np.concatenate([_along([ax + nx * o, az + nz * o, bx + nx * o, bz + nz * o]) for o in (-rw["width_m"] / 4, rw["width_m"] / 4)])
-        assign(1, i, pts)
-    jobs = [(out, ix, iz, hires, *by_tile.get((ix, iz), ({}, {}))) for iz in range(lo, hi + 1) for ix in range(lo, hi + 1) if (out / imagery_name(ix, iz)).exists()]
+        assign(i, pts)
+    jobs = [(out, ix, iz, hires, by_tile.get((ix, iz), {})) for iz in range(lo, hi + 1) for ix in range(lo, hi + 1) if (out / imagery_name(ix, iz)).exists()]
     with concurrent.futures.ProcessPoolExecutor(workers, mp_context=multiprocessing.get_context("fork")) as ex:
         results = list(ex.map(_tile, jobs, chunksize=4))
     log(f"building colours: {sum(r[0] for r in results)} buildings coloured from the imagery")
     # Region medians per road class (and paved), from every tile's 1 m samples.
     pooled: dict = {}
-    for _, roads, _, _ in results:
+    for _, roads, _ in results:
         for cls, a in roads.items():
             pooled.setdefault(cls, []).append(a)
     region = {cls: np.median(np.concatenate(v), axis=0) for cls, v in pooled.items() if sum(len(a) for a in v) >= MIN_SAMPLES}
     fallback = np.median(np.concatenate([np.concatenate(v) for k, v in pooled.items() if not k.startswith("_")]), axis=0)
     log("road colours, region medians: " + ", ".join(f"{k} #{_hex(v):06x}" for k, v in sorted(region.items())))
-    bridge_rows: dict = {}
     runway_rows: dict = {}
     measured = 0
-    for (job, (_, roads, br, rws)) in zip(jobs, results):
+    for (job, (_, roads, rws)) in zip(jobs, results):
         _, ix, iz = job[:3]
         path = out / features_name(ix, iz)
         f = json.loads(path.read_text())
@@ -261,13 +237,19 @@ def colour_features(spec, out: Path, log=print, workers: int | None = None) -> N
             measured += ok
         f["colours"] = {"roads": cols, "taxiway": pick("_taxiway")[0], "apron": pick("_apron")[0]}
         path.write_text(json.dumps(f, separators=(",", ":"), sort_keys=True))
-        for i, a in br.items():
-            bridge_rows.setdefault(i, []).append(a)
         for i, a in rws.items():
             runway_rows.setdefault(i, []).append(a)
-    for i, b in enumerate(bridges):
-        m = _median(bridge_rows.get(i, []))
-        b["colour"] = _hex(m[0] if m and m[1] >= MIN_SAMPLES / 4 else region.get(b["cls"], fallback))
+    # A bridge's road: the colour its class has in the tile around its middle (the colour
+    # the roads it joins are drawn in). Measured along the bridge it picked up the shade
+    # and planting beside it (brownish decks between grey roads).
+    tile_cols = {}
+    for job in jobs:
+        _, ix, iz = job[:3]
+        tile_cols[(ix, iz)] = json.loads((out / features_name(ix, iz)).read_text()).get("colours", {}).get("roads", {})
+    for b in bridges:
+        mid = b["pts"][len(b["pts"]) // 2]
+        cols = tile_cols.get((math.floor(mid[0] / TILE_SIZE_M), math.floor(mid[1] / TILE_SIZE_M)), {})
+        b["colour"] = cols.get(b["cls"]) if b["cls"] in cols else _hex(region.get(b["cls"], fallback))
     (out / "bridges.json").write_text(json.dumps(bridges, separators=(",", ":"), sort_keys=True) + "\n")
     for i, rw in enumerate(fields.get("runways", [])):
         m = _median(runway_rows.get(i, []))
