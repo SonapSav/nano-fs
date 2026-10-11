@@ -1606,7 +1606,7 @@ landmarks; later night lighting, shadows, haze.
     (world/scenery_embankments.py; physics and viewer read the same tiles): ends now
     17.1 / 17.0 m, west end 9.8 m; the deck runs 20 -> ~17 m. The marina arch's top
     lowered from 30 m (a project choice) to 18 m, the parapet there: in the photo nothing
-    east of the 74 m arch rises above the deck. (commit EMBANKFIX)
+    east of the 74 m arch rises above the deck. (7091fa9)
   - [ ] Known: drawing with the sun's shadows costs ~3-4 ms a frame more than without in
     the dense city (sampling on the receivers; a redraw of the map adds more, every few
     seconds in flight). Filter types and map sizes measured too noisily to choose
