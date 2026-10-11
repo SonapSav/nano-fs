@@ -19,7 +19,6 @@ import { sceneryUrl, world } from "./world.js";
 
 export const ROAD_PROTO = typeof location !== "undefined" && new URLSearchParams(location.search).has("roadproto");
 export const LANE_M = 3.65; // as scenery_roads.py
-const NEAR_SEGMENTS = 96; // the terrain's near tiles (terrain.js QUALITY.high)
 const LIFT_M = 0.06;
 
 const MARKINGS_GLSL = `
@@ -155,15 +154,78 @@ function geometry(a) {
 }
 
 
+// One 4 km tile's roads (rd_<ix>_<iz>.json), draped on the ground as the terrain draws
+// that tile (`segments`): its ribbons, kerb fillets and gores (asphalt), its markings.
+function tileGroup(data, segments, materials) {
+  const ground = drawnGround(world.tiles, segments);
+  const height = (x, z) => ground.height(x, z);
+  const stride = segments >= 96 ? 1 : segments >= 48 ? 2 : 6; // fewer points on coarser ground
+  const a = { pos: [], nrm: [], road: [], mark: [], idx: [] };
+  for (const r of data.roads) {
+    const pts = stride === 1 ? r.pts : r.pts.filter((_, i) => i % stride === 0 || i === r.pts.length - 1);
+    if (pts.length >= 2) ribbon(pts, r.width, r.lanes, r.oneway, r.s0 ?? 0, height, a);
+  }
+  const polygon = (t, into, road) => {
+    const base = into.pos.length / 3;
+    for (let i = 0; i < t.v.length; i += 2) {
+      const x = t.v[i], z = t.v[i + 1];
+      into.pos.push(x, height(x, z) + LIFT_M, z);
+      into.nrm.push(0, 1, 0);
+      into.road.push(...road(x, z));
+      into.mark?.push(0);
+    }
+    for (let i = 0; i < t.t.length; i += 3) {
+      const [p, q, r] = [t.t[i], t.t[i + 1], t.t[i + 2]];
+      const ux = t.v[2 * q] - t.v[2 * p], uz = t.v[2 * q + 1] - t.v[2 * p + 1], vx = t.v[2 * r] - t.v[2 * p], vz = t.v[2 * r + 1] - t.v[2 * p + 1];
+      if (uz * vx - ux * vz > 0) into.idx.push(base + p, base + q, base + r); // facing up
+      else into.idx.push(base + p, base + r, base + q);
+    }
+  };
+  // Kerb fillets and gores (scenery_roads.py junction_shapes): plain asphalt, no markings.
+  for (const t of [...data.fills, ...data.gores]) polygon(t, a, () => [0, 0, 0, 0]);
+  const group = new THREE.Group();
+  if (a.idx.length) {
+    const roads = new THREE.Mesh(geometry(a), materials.road);
+    roads.receiveShadow = true;
+    group.add(roads);
+  }
+  if (segments < 48) return group; // far away: no zebras, stop lines or hatching
+  const m = { pos: [], nrm: [], road: [], idx: [] };
+  for (const k of data.marks) {
+    const depth = k.kind === "stop" ? 0.4 : k.kind === "giveway" ? 0.3 : 4.0, hw = k.width / 2 - 0.5;
+    const rx = -k.uz, rz = k.ux; // across the road
+    const a0 = Math.max(k.a0 ?? -hw, -hw), a1 = Math.min(k.a1 ?? hw, hw);
+    const corners = [[-depth / 2, a0], [depth / 2, a0], [-depth / 2, a1], [depth / 2, a1]];
+    const v = m.pos.length / 3;
+    for (const [along, across] of corners) {
+      const x = k.x + k.ux * along + rx * across, z = k.z + k.uz * along + rz * across;
+      m.pos.push(x, height(x, z) + LIFT_M, z);
+      m.nrm.push(0, 1, 0);
+      m.road.push(along, across + hw, { zebra: 0, stop: 1, giveway: 2 }[k.kind] ?? 0, 0);
+    }
+    m.idx.push(v, v + 1, v + 2, v + 1, v + 3, v + 2);
+  }
+  for (const t of data.gores) {
+    const [ux, uz] = t.u;
+    polygon(t, m, (x, z) => [x * ux + z * uz, -x * uz + z * ux, 3, 0]);
+  }
+  for (let i = 0; i < m.pos.length; i += 3) m.pos[i + 1] += 0.02;
+  if (m.idx.length) group.add(new THREE.Mesh(geometry(m), materials.marks));
+  return group;
+}
+
+export const ROAD_RING = 2; // roads on the terrain tiles this many tiles out (about 10 km)
+
 export class RegionRoads {
   constructor(scene) {
     this.scene = scene;
     this.group = new THREE.Group();
     scene.add(this.group);
-    this.material = roadMaterial();
-    this.marksMaterial = marksMaterial();
-    this.data = null;
-    this.built = false;
+    this.materials = { road: roadMaterial(), marks: marksMaterial() };
+    this.data = null; // roads.json
+    this.scenery = null;
+    this.files = new Map(); // "ix,iz" -> tile data, "loading" or null (none)
+    this.built = new Map(); // "ix,iz" -> {group, segments}
   }
 
   // Lanes and one-way of a bridge's OSM ways (bridges.js), or null.
@@ -185,7 +247,8 @@ export class RegionRoads {
     return best?.s ?? null;
   }
 
-  // A bridge point [x, z, ...] moved by the network's shift field (scenery_roads.py), or as is.
+  // A bridge point [x, z, ...] moved by the network's shift field (scenery_roads.py; held
+  // at its edge beyond the 1 m imagery, as the roads).
   shift(q) {
     const f = this.data?.field;
     if (!f) return q;
@@ -194,79 +257,73 @@ export class RegionRoads {
     const i = Math.floor(u), j = Math.floor(v), fx = u - i, fz = v - j;
     const at = (r, c, k) => d[(r * cols + c) * 2 + k];
     const lerp = (k) => (at(j, i, k) * (1 - fx) + at(j, i + 1, k) * fx) * (1 - fz) + (at(j + 1, i, k) * (1 - fx) + at(j + 1, i + 1, k) * fx) * fz;
-    const [x0b, z0b, x1b, z1b] = this.data.box;
-    if (q[0] < x0b - 300 || q[0] > x1b + 300 || q[1] < z0b - 300 || q[1] > z1b + 300) return q;
     return [q[0] + lerp(0), q[1] + lerp(1), ...q.slice(2)];
+  }
+
+  get active() {
+    return Boolean(this.data);
   }
 
   async load(scenery) {
     this.clear();
+    this.data = null;
+    this.files.clear();
+    this.scenery = scenery;
     if (!ROAD_PROTO || !scenery) return;
     try {
-      const r = await fetch(sceneryUrl(scenery, "proto_roads.json"));
+      const r = await fetch(sceneryUrl(scenery, "roads.json"));
       this.data = r.ok ? await r.json() : null;
     } catch {
       this.data = null;
     }
+    this.have = new Set((this.data?.tiles ?? []).map(([ix, iz]) => `${ix},${iz}`));
   }
 
-  // Builds once the height tiles under the box are here.
-  update() {
-    if (!this.data || this.built) return;
-    const [x0, z0, x1, z1] = this.data.box;
-    for (let tz = Math.floor(z0 / 4000); tz <= Math.floor(z1 / 4000); tz++) for (let tx = Math.floor(x0 / 4000); tx <= Math.floor(x1 / 4000); tx++) if (!world.tileReady(tx, tz)) return;
-    const ground = drawnGround(world.tiles, NEAR_SEGMENTS);
-    const height = (x, z) => ground.height(x, z);
-    const a = { pos: [], nrm: [], col: [], road: [], mark: [], idx: [] };
-    for (const r of this.data.roads) ribbon(r.pts, r.width, r.lanes, r.oneway, r.s0 ?? 0, height, a);
-    // Kerb fillets and gores (scenery_roads.py junction_shapes): plain asphalt, no markings.
-    const polygon = (t, into, road) => {
-      const base = into.pos.length / 3;
-      for (let i = 0; i < t.v.length; i += 2) {
-        const x = t.v[i], z = t.v[i + 1];
-        into.pos.push(x, height(x, z) + LIFT_M, z);
-        into.nrm.push(0, 1, 0);
-        into.road.push(...road(x, z));
-        into.mark?.push(0);
-      }
-      for (let i = 0; i < t.t.length; i += 3) {
-        const [p, q, r] = [t.t[i], t.t[i + 1], t.t[i + 2]];
-        const ux = t.v[2 * q] - t.v[2 * p], uz = t.v[2 * q + 1] - t.v[2 * p + 1], vx = t.v[2 * r] - t.v[2 * p], vz = t.v[2 * r + 1] - t.v[2 * p + 1];
-        if (uz * vx - ux * vz > 0) into.idx.push(base + p, base + q, base + r); // facing up
-        else into.idx.push(base + p, base + r, base + q);
-      }
-    };
-    for (const t of [...(this.data.fills ?? []), ...(this.data.gores ?? [])]) polygon(t, a, () => [0, 0, 0, 0]);
-    const roads = new THREE.Mesh(geometry(a), this.material);
-    roads.receiveShadow = true;
-    this.group.add(roads);
-    const m = { pos: [], nrm: [], road: [], idx: [] };
-    for (const k of this.data.marks) {
-      const depth = k.kind === "stop" ? 0.4 : k.kind === "giveway" ? 0.3 : 4.0, hw = k.width / 2 - 0.5;
-      const rx = -k.uz, rz = k.ux; // across the road
-      const a0 = Math.max(k.a0 ?? -hw, -hw), a1 = Math.min(k.a1 ?? hw, hw);
-      const corners = [[-depth / 2, a0], [depth / 2, a0], [-depth / 2, a1], [depth / 2, a1]];
-      const v = m.pos.length / 3;
-      for (const [along, across] of corners) {
-        const x = k.x + k.ux * along + rx * across, z = k.z + k.uz * along + rz * across;
-        m.pos.push(x, height(x, z) + LIFT_M + 0.02, z);
-        m.nrm.push(0, 1, 0);
-        m.road.push(along, across + hw, { zebra: 0, stop: 1, giveway: 2 }[k.kind] ?? 0, 0);
-      }
-      m.idx.push(v, v + 1, v + 2, v + 1, v + 3, v + 2);
+  _fetch(key) {
+    this.files.set(key, "loading");
+    const [ix, iz] = key.split(",");
+    fetch(sceneryUrl(this.scenery, `tiles/rd_${ix}_${iz}.json`))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => this.files.set(key, d))
+      .catch(() => this.files.set(key, null));
+  }
+
+  // Each frame: road tiles on the terrain tiles drawn within ROAD_RING of the camera's
+  // tile, at their detail; at most one built a frame.
+  update(terrain) {
+    if (!this.data || !terrain?.centre) return;
+    const [cx, cz] = terrain.centre;
+    const want = new Map();
+    for (const [key, t] of terrain.tiles) {
+      if (!t.mesh || !this.have.has(key)) continue;
+      const [ix, iz] = key.split(",").map(Number);
+      if (Math.max(Math.abs(ix - cx), Math.abs(iz - cz)) <= ROAD_RING) want.set(key, t.segments);
     }
-    for (const t of this.data.gores ?? []) {
-      const [ux, uz] = t.u;
-      polygon(t, m, (x, z) => [x * ux + z * uz, -x * uz + z * ux, 3, 0]);
+    for (const [key, b] of this.built) {
+      if (want.get(key) !== b.segments) {
+        this.group.remove(b.group);
+        b.group.traverse((o) => o.geometry?.dispose());
+        this.built.delete(key);
+      }
     }
-    for (let i = 0; i < m.pos.length; i += 3) m.pos[i + 1] += 0.02;
-    if (m.idx.length) this.group.add(new THREE.Mesh(geometry(m), this.marksMaterial));
-    this.built = true;
+    let budget = 1;
+    for (const [key, segments] of want) {
+      if (this.built.has(key)) continue;
+      const f = this.files.get(key);
+      if (f === undefined) this._fetch(key);
+      if (!f || f === "loading" || budget <= 0) continue;
+      const [ix, iz] = key.split(",").map(Number);
+      if (!world.tileReady(ix, iz)) continue;
+      const group = tileGroup(f, segments, this.materials);
+      this.group.add(group);
+      this.built.set(key, { group, segments });
+      budget--;
+    }
   }
 
   clear() {
     this.group.traverse((o) => o.geometry?.dispose());
     this.group.clear();
-    this.built = false;
+    this.built.clear();
   }
 }

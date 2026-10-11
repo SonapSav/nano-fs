@@ -579,7 +579,7 @@ export class FlightScene {
   render() {
     this._followGround();
     this.bridges.update(this.camera.position, this.terrain);
-    this.roadNet.update();
+    this.roadNet.update(this.terrain);
     this.imageryClip.update(this.camera.position.x, this.camera.position.z); // last frame's camera
     waterUniforms.waterTime.value = (performance.now() / 1000) % 10000;
     this._stepRecentre();

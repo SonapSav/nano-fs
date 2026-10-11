@@ -1647,8 +1647,16 @@ landmarks; later night lighting, shadows, haze.
     roads meet (closing of their surfaces, radius 8 m), painted gores with diagonal
     hatching where a road splits off within 30 deg (until the gap reaches 3 m), give-way
     lines at roundabout entries; 10 x 10 km: 5,483 fillets, 515 gores, 262 give-way lines;
-    frame time shown vs hidden within noise (9.3 / 10.1 vs 8.2 / 11.1 ms). Next: the
-    owner's look, then the 25 km build.
+    frame time shown vs hidden within noise (9.3 / 10.1 vs 8.2 / 11.1 ms).
+    Whole region (2026-10-11, commit REGIONROADS): scenery_roads.build_roads writes
+    tiles/rd_<ix>_<iz>.json (355 tiles) and roads.json; aligned within the 1 m imagery (128
+    tiles in parallel; 41,625 findings, 4.0 -> 3.0 m), 41,965 roads, 104,012 fillets, 7,295
+    gores, 20,768 marks; 6 min. Viewer: road tiles on terrain tiles within 2 of the camera's,
+    draped at each tile's drawn detail (fewer points on coarser tiles), one built a frame;
+    OSM's ribbons hidden with ?roadproto. Flight test over the city (1080p): roads on 96.1
+    fps, p95 14.4 ms, 22 frames over 30 ms (worst 126 ms) vs off 103.0, 13.8 ms, 12 (60 ms):
+    ~0.7 ms a frame and hitches when a road tile is built on the main thread (to move to the
+    tile worker). Not yet: roads at night (the old ribbons glowed under the street lamps).
   - [ ] Known: drawing with the sun's shadows costs ~3-4 ms a frame more than without in
     the dense city (sampling on the receivers; a redraw of the map adds more, every few
     seconds in flight). Filter types and map sizes measured too noisily to choose

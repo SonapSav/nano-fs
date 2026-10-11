@@ -11,8 +11,9 @@ far the road lies along its normal. A shift per 200 m cell is fitted to the find
 within 300 m (least squares on the normal components, Gaussian weights), and every node
 moves by the field there (bilinear), so roads stay joined at their junctions.
 
-Run: uv run --group scenery python -m flightsim.world.scenery_roads configs/scenery/abu_dhabi.yaml x0 z0 x1 z1
-(writes data/scenery/<region>/proto_roads.json).
+Run: uv run --group scenery python -m flightsim.world.scenery_roads configs/scenery/abu_dhabi.yaml
+(writes data/scenery/<region>/roads.json and tiles/rd_<ix>_<iz>.json; the whole region,
+aligned where the 1 m imagery covers).
 """
 
 from __future__ import annotations
@@ -485,56 +486,137 @@ def junction_shapes(lines: list[dict], incid: dict):
     return fills, gores, giveway
 
 
-def main(argv: list[str]) -> None:
-    from flightsim.world import geo
+_JOB: dict = {}
+
+
+def _tile_findings(key) -> np.ndarray:
+    """Alignment findings of the roads crossing one tile of the 1 m imagery (a worker)."""
     from flightsim.world.scenery import TILE_SIZE_M
-    from flightsim.world.scenery_build import SCENERY_DIR, load_spec
     from flightsim.world.scenery_colours import tile_picture
 
-    spec = load_spec(argv[0])
-    box = tuple(float(v) for v in argv[1:5])
-    out = SCENERY_DIR / spec.name
-    g = geo.Geodesy("wgs84", spec.origin_lat_deg, spec.origin_lon_deg)
-    pbf = next((out / "sources").glob("*.osm.pbf"))
-    roads, points = extract(pbf, g, box)
-    print(f"{len(roads)} roads, {len(points)} crossings and signals")
-    hires = json.loads((out / "hires.json").read_text())
-    tiles: dict = {}
+    ix, iz = key
+    img, mask = tile_picture(_JOB["out"], ix, iz, _JOB["hires"], with_mask=True)
+    if not mask.any():
+        return np.zeros((0, 5))
+    lum = img.astype(np.float32).mean(0)
+    x0, z0 = ix * TILE_SIZE_M, iz * TILE_SIZE_M
 
     def picture(xs, zs):
-        lum = np.zeros(len(xs), np.float32)
-        ok = np.zeros(len(xs), bool)
-        ix, iz = np.floor(xs / TILE_SIZE_M).astype(int), np.floor(zs / TILE_SIZE_M).astype(int)
-        for key in set(zip(ix.tolist(), iz.tolist())):
-            if key not in tiles:
-                img, mask = tile_picture(out, key[0], key[1], hires, with_mask=True)
-                tiles[key] = (img.astype(np.float32).mean(0), mask)
-            lm, mk = tiles[key]
-            sel = (ix == key[0]) & (iz == key[1])
-            c = np.clip(np.round(xs[sel] - key[0] * TILE_SIZE_M).astype(int), 0, 3999)
-            r = np.clip(np.round(zs[sel] - key[1] * TILE_SIZE_M).astype(int), 0, 3999)
-            lum[sel], ok[sel] = lm[r, c], mk[r, c]
-        return lum, ok
+        c, r = np.round(xs - x0).astype(int), np.round(zs - z0).astype(int)
+        inside = (c >= 0) & (c < 4000) & (r >= 0) & (r < 4000)
+        out_l, out_ok = np.zeros(len(xs), np.float32), np.zeros(len(xs), bool)
+        out_l[inside], out_ok[inside] = lum[r[inside], c[inside]], mask[r[inside], c[inside]]
+        return out_l, out_ok
 
-    found = find_offsets(roads, picture)
-    field = shift_field(found, box)
-    before = np.median(np.abs(found[:, 4]))
-    moved = np.array([f[4] - np.dot(f[2:4], apply_field(f[None, :2], field)[0] - f[:2]) for f in found])
-    print(f"{len(found)} findings; |offset| median {before:.1f} m before, {np.median(np.abs(moved)):.1f} m after the shift field; "
-          f"field {field[3].reshape(-1, 2).mean(0).round(1)} m (mean east, south)")  # fmt: skip
+    mine = [r for r in _JOB["roads"] if ((r["pts"][:, 0] >= x0 - 30) & (r["pts"][:, 0] < x0 + TILE_SIZE_M + 30) & (r["pts"][:, 1] >= z0 - 30) & (r["pts"][:, 1] < z0 + TILE_SIZE_M + 30)).any()]
+    f = find_offsets(mine, picture)
+    keep = (f[:, 0] >= x0) & (f[:, 0] < x0 + TILE_SIZE_M) & (f[:, 1] >= z0) & (f[:, 1] < z0 + TILE_SIZE_M)
+    return f[keep]
+
+
+def shift_field_fast(found: np.ndarray, box, cell_m: float = CELL_M, reach_m: float = 300.0, min_n: int = 30):
+    """shift_field with a k-d tree (the whole imagery area)."""
+    from scipy.spatial import cKDTree
+
+    x0, z0, x1, z1 = box
+    gx0, gz0 = np.floor(x0 / cell_m) * cell_m - cell_m, np.floor(z0 / cell_m) * cell_m - cell_m
+    cols, rows = int(np.ceil((x1 - gx0) / cell_m)) + 2, int(np.ceil((z1 - gz0) / cell_m)) + 2
+    N, d = found[:, 2:4], found[:, 4]
+    every, *_ = np.linalg.lstsq(N, d, rcond=None)
+    grid = np.tile(every, (rows, cols, 1))
+    tree = cKDTree(found[:, :2])
+    lam = 5.0
+    for r in range(rows):
+        for c in range(cols):
+            cx, cz = gx0 + c * cell_m, gz0 + r * cell_m
+            near = tree.query_ball_point((cx, cz), reach_m)
+            if len(near) < min_n:
+                continue
+            near = np.array(near)
+            dist = np.hypot(found[near, 0] - cx, found[near, 1] - cz)
+            wgt = np.exp(-0.5 * (dist / (reach_m / 2)) ** 2)
+            A = N[near] * wgt[:, None]
+            grid[r, c] = np.linalg.solve(A.T @ N[near] + lam * np.eye(2), A.T @ d[near] + lam * every)
+    return gx0, gz0, cell_m, grid
+
+
+def _tile_of(x: float, z: float) -> tuple[int, int]:
+    from flightsim.world.scenery import TILE_SIZE_M
+
+    return int(np.floor(x / TILE_SIZE_M)), int(np.floor(z / TILE_SIZE_M))
+
+
+def build_roads(spec, out: Path, log=print, workers: int | None = None) -> None:
+    """The region's road network (every OSM road in the region), aligned to the 1 m
+    imagery where it covers: tiles/rd_<ix>_<iz>.json per 4 km tile (roads by their middle,
+    fills, gores and marks by position) and roads.json (the shift field, bridges' lanes
+    and arc lengths, the tiles written)."""
+    import concurrent.futures
+    import multiprocessing
+    import time
+
+    from flightsim.world import geo
+    from flightsim.world.scenery import TILE_SIZE_M
+
+    t0 = time.time()
+    g = geo.Geodesy("wgs84", spec.origin_lat_deg, spec.origin_lon_deg)
+    lo, hi = spec.ix_range
+    box = (lo * TILE_SIZE_M, lo * TILE_SIZE_M, (hi + 1) * TILE_SIZE_M, (hi + 1) * TILE_SIZE_M)
+    pbf = next((out / "sources").glob("*.osm.pbf"))
+    roads, points = extract(pbf, g, box, margin_m=0.0)
+    log(f"roads: {len(roads)} OSM roads, {len(points)} crossings and signals ({time.time() - t0:.0f} s)")
+    hires = json.loads((out / "hires.json").read_text())
+    cm = float(hires["levels"][0]["chunk_m"])
+    keys = sorted({_tile_of(int(k.split(",")[0]) * cm + 1, int(k.split(",")[1]) * cm + 1) for k in hires["levels"][0]["chunks"]})
+    _JOB.update(out=out, hires=hires, roads=[r for r in roads if not r["bridge"]])
+    found = []
+    with concurrent.futures.ProcessPoolExecutor(workers, mp_context=multiprocessing.get_context("fork")) as ex:
+        for n, f in enumerate(ex.map(_tile_findings, keys), 1):
+            found.append(f)
+            if n % 10 == 0 or n == len(keys):
+                log(f"roads: alignment {n} of {len(keys)} imagery tiles ({time.time() - t0:.0f} s)")
+    found = np.vstack(found)
+    xs = [k[0] * TILE_SIZE_M for k in keys]
+    zs = [k[1] * TILE_SIZE_M for k in keys]
+    field = shift_field_fast(found, (min(xs), min(zs), max(xs) + TILE_SIZE_M, max(zs) + TILE_SIZE_M))
+    moved = found[:, 4] - np.einsum("ij,ij->i", found[:, 2:4], apply_field(found[:, :2], field) - found[:, :2])
+    log(f"roads: {len(found)} findings; |offset| median {np.median(np.abs(found[:, 4])):.1f} m before, {np.median(np.abs(moved)):.1f} m after ({time.time() - t0:.0f} s)")
     for r in roads:
         r["pts"] = apply_field(r["pts"], field)
     for p in points:
         p["x"], p["z"] = apply_field(np.array([[p["x"], p["z"]]]), field)[0]
-
     net = network(roads, points)
-    net["box"] = list(box)
+    log(f"roads: network {len(net['roads'])} roads, {len(net['fills'])} fills, {len(net['gores'])} gores, {len(net['marks'])} marks ({time.time() - t0:.0f} s)")
+    tiles: dict[tuple[int, int], dict] = {}
+
+    def tile(k):
+        return tiles.setdefault(k, {"roads": [], "fills": [], "gores": [], "marks": []})
+
+    for r in net["roads"]:
+        m = r["pts"][len(r["pts"]) // 2]
+        tile(_tile_of(m[0], m[1]))["roads"].append(r)
+    for kind in ("fills", "gores"):
+        for t in net[kind]:
+            tile(_tile_of(t["v"][0], t["v"][1]))[kind].append(t)
+    for m in net["marks"]:
+        tile(_tile_of(m["x"], m["z"]))["marks"].append(m)
+    for old in (out / "tiles").glob("rd_*.json"):
+        old.unlink()
+    for (ix, iz), t in tiles.items():
+        (out / "tiles" / f"rd_{ix}_{iz}.json").write_text(json.dumps(t, separators=(",", ":")))
     gx0, gz0, cell, grid = field
-    net["field"] = {"x0": gx0, "z0": gz0, "cell": cell, "rows": grid.shape[0], "cols": grid.shape[1], "d": np.round(grid, 2).ravel().tolist()}
-    # Bridges' lanes, one-way and direction of travel (the deck may run the other way).
-    net["bridge_lanes"] = {str(r["id"]): [r["lanes"], r["oneway"], *np.round(r["pts"][-1] - r["pts"][0], 1).tolist()] for r in roads if r["bridge"]}
-    (out / "proto_roads.json").write_text(json.dumps(net, separators=(",", ":")))
-    print(f"proto_roads.json: {len(net['roads'])} roads, {len(net['marks'])} crossings and stop lines")
+    index = {"format": 1, "tiles": sorted([list(k) for k in tiles]), "bridge_s": net["bridge_s"],
+             "field": {"x0": gx0, "z0": gz0, "cell": cell, "rows": grid.shape[0], "cols": grid.shape[1], "d": np.round(grid, 2).ravel().tolist()},
+             "bridge_lanes": {str(r["id"]): [r["lanes"], r["oneway"], *np.round(r["pts"][-1] - r["pts"][0], 1).tolist()] for r in roads if r["bridge"]}}  # fmt: skip
+    (out / "roads.json").write_text(json.dumps(index, separators=(",", ":")))
+    log(f"roads: {len(tiles)} tiles written ({time.time() - t0:.0f} s)")
+
+
+def main(argv: list[str]) -> None:
+    from flightsim.world.scenery_build import SCENERY_DIR, load_spec
+
+    spec = load_spec(argv[0])
+    build_roads(spec, SCENERY_DIR / spec.name)
 
 
 if __name__ == "__main__":

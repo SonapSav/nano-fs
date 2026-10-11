@@ -450,6 +450,8 @@ function tileObjects(data, shared, far) {
 // near tile, haze distances, pixel ratio and the close-up ground detail. "high" is the
 // original setting.
 // ?notrees in the viewer's URL: no measured trees (performance comparisons).
+// ?roadproto: the drawn road network (roadNetwork.js, as its ROAD_PROTO) replaces OSM's ribbons.
+const ROAD_PROTO = typeof location !== "undefined" && new URLSearchParams(location.search).has("roadproto");
 const NO_TREES = typeof location !== "undefined" && new URLSearchParams(location.search).has("notrees");
 
 export const QUALITY = {
@@ -513,6 +515,7 @@ export class Terrain {
       buildings: facadeMaterial(),
       taxilines: new THREE.MeshBasicMaterial({ color: 0xd9a92b, side: THREE.DoubleSide, ...pulled, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }),
     };
+    if (ROAD_PROTO) this.featureMats.roads.visible = false; // the drawn road network replaces OSM's ribbons (roadNetwork.js)
     this.shared = {
       crown: new THREE.ConeGeometry(4, 14, 6),
       farCrown: new THREE.ConeGeometry(4.5, 14, 4), // far ring: fewer faces
