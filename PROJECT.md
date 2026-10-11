@@ -1626,7 +1626,7 @@ landmarks; later night lighting, shadows, haze.
     1,057 signals. Alignment against the 1 m imagery (dark-band fit across the road every
     25 m, 36 tiles): OSM centrelines |offset| median 4-6 m, 42-53 % within 4 m; a smooth
     shift field (200 m cells) brings it only 4.0 -> 3.2 m (most of the offset is per road,
-    not a shift of the imagery). Prototype `?roadproto` (commit ROADPROTO): world/scenery_roads.py
+    not a shift of the imagery). Prototype `?roadproto` (43047b2): world/scenery_roads.py
     (a box east of Sheikh Zayed Bridge: 105 roads, lanes, one-way, markings stopped at
     junctions, zebra crossings and stop lines, the shift field) and viewer/roadNetwork.js
     (one asphalt: neutral grey from the measured colour, floor linear 0.10; lane lines,
