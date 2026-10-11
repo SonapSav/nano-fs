@@ -21,6 +21,7 @@ and the viewer read the built files through scenery.py. Steps, each repeatable:
    Copernicus GLO-30) are raised in the height tiles, then the bridges profiled.
 5b. high-resolution imagery (scenery_hires.py), where the region file asks for it.
 5c. building, road, bridge and runway colours from the imagery (scenery_colours.py).
+5d. the drawn road network (scenery_roads.py): roads.json and tiles/rd_*.json.
 6. manifest.json: the region, its sources, every file's sha256.
 
 The same sources and code give byte-identical files.
@@ -862,6 +863,9 @@ def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print) -> dict:
         from flightsim.world.scenery_colours import colour_features
 
         colour_features(spec, out, log)
+    from flightsim.world.scenery_roads import build_roads
+
+    build_roads(spec, out, log)  # the drawn road network (after the 1 m imagery: aligned to it)
     return write_manifest(spec, sources, out)
 
 

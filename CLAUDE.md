@@ -129,6 +129,7 @@ flightsim/          # installable package (uv_build backend)
                     #   scenery_heights.py: building heights per building (GlobalBuildingAtlas)
                     #   scenery_trees.py: trees from the canopy height map (Meta and WRI); viewer/trees.js draws them
                     #   scenery_embankments.py: approach banks at landmark bridges' ends (Copernicus GLO-30), in the height tiles
+                    #   scenery_roads.py: the drawn road network (OSM roads aligned to the 1 m imagery, junction shapes); viewer/roadGeometry.js, roadNetwork.js
   batch.py          # parallel seeded episode batches
   config.py         # YAML loading (base: inheritance, overrides) + config hash
   runner.py         # headless run loop
