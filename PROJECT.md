@@ -1648,7 +1648,7 @@ landmarks; later night lighting, shadows, haze.
     hatching where a road splits off within 30 deg (until the gap reaches 3 m), give-way
     lines at roundabout entries; 10 x 10 km: 5,483 fillets, 515 gores, 262 give-way lines;
     frame time shown vs hidden within noise (9.3 / 10.1 vs 8.2 / 11.1 ms).
-    Whole region (2026-10-11, commit REGIONROADS): scenery_roads.build_roads writes
+    Whole region (2026-10-11, commit be1519d): scenery_roads.build_roads writes
     tiles/rd_<ix>_<iz>.json (355 tiles) and roads.json; aligned within the 1 m imagery (128
     tiles in parallel; 41,625 findings, 4.0 -> 3.0 m), 41,965 roads, 104,012 fillets, 7,295
     gores, 20,768 marks; 6 min. Viewer: road tiles on terrain tiles within 2 of the camera's,
