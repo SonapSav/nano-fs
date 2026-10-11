@@ -2,9 +2,11 @@
 // URL): a region's proto_roads.json (flightsim/world/scenery_roads.py: OSM roads in a box,
 // moved onto the imagery's roads, lanes and one-way, where markings stop for junctions,
 // marked crossings and stop lines) draped on the ground as the terrain draws it near the
-// aircraft. One asphalt for these roads and the bridge decks (bridges.js uses roadMaterial):
-// the tile's measured road colour, varied by noise, darker tyre tracks; markings drawn per
-// pixel from the road's own coordinates (metres along, metres across). Visual only.
+// aircraft. One asphalt for every road, ramp and bridge deck (bridges.js uses roadMaterial):
+// ASPHALT, varied by noise fixed to the ground (overlapping roads at junctions merge),
+// darker tyre tracks; markings drawn per pixel from the road's own coordinates (metres
+// along the network, metres across). Markings and tracks fade out where roads overlap at
+// junctions (aMark, scenery_roads.py). Visual only.
 //
 // Markings (project choices; UAE practice from memory, to be checked against the UAE road
 // marking manual): lane lines white, dashed 3 m in 9 m; edge lines solid, on one-way
@@ -12,7 +14,7 @@
 // dashed white centre line; zebra crossings 0.5 m bars; stop lines 0.4 m.
 
 import * as THREE from "three";
-import { drawnGround, imageryColour } from "./featureGeometry.js";
+import { drawnGround } from "./featureGeometry.js";
 import { sceneryUrl, world } from "./world.js";
 
 export const ROAD_PROTO = typeof location !== "undefined" && new URLSearchParams(location.search).has("roadproto");
@@ -21,6 +23,7 @@ const NEAR_SEGMENTS = 96; // the terrain's near tiles (terrain.js QUALITY.high)
 const LIFT_M = 0.06;
 
 const MARKINGS_GLSL = `
+const vec3 ASPHALT = vec3(0.099, 0.10, 0.102); // linear, about sRGB (88, 89, 89): worn asphalt (project choice)
 float roadHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float roadNoise(vec2 p) {
   vec2 i = floor(p), f = fract(p);
@@ -34,7 +37,7 @@ float roadDash(float s, float aa) { float f = fract(s / 9.0) * 9.0; return smoot
 // The roads' (and decks') material: vertex colour the asphalt; attributes aRoad (metres
 // along, metres across (+ right of travel), lanes, one-way) and aMark (marking weight).
 export function roadMaterial() {
-  const m = new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+  const m = new THREE.MeshLambertMaterial({ polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
   m.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nattribute vec4 aRoad;\nattribute float aMark;\nvarying vec4 vRoad;\nvarying float vMarkW;\nvarying vec2 vRoadXZ;")
@@ -52,11 +55,7 @@ export function roadMaterial() {
   float L = lanes * ${LANE_M.toFixed(2)};
   float lane = fract((t + L * 0.5) / ${LANE_M.toFixed(2)}) * ${LANE_M.toFixed(2)} - ${(LANE_M / 2).toFixed(3)};
   float tracks = (roadLine(lane, -0.85, 0.7, 0.3) + roadLine(lane, 0.85, 0.7, 0.3)) * step(abs(t), L * 0.5);
-  // Neutral grey from the measured colour (shade and cars in the imagery make it dark and
-  // tinted), no darker than worn asphalt (project choice: linear 0.10, about sRGB 89).
-  float lum = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-  diffuseColor.rgb = vec3(max(lum, 0.10)) * vec3(0.99, 1.0, 1.02);
-  diffuseColor.rgb *= (0.9 + 0.2 * n) * (1.0 - 0.07 * tracks);
+  diffuseColor.rgb = ASPHALT * (0.9 + 0.2 * n) * (1.0 - 0.07 * tracks * vMarkW);
   // Markings.
   float white = roadLine(t, L * 0.5, 0.2, aa); // right edge
   float yellow = 0.0;
@@ -112,9 +111,9 @@ function marksMaterial() {
 
 // A road ribbon: points [[x, z, mark], ...] (centreline, densified), its width; heights from
 // `height(x, z)`. Returns arrays for a BufferGeometry.
-export function ribbon(points, widthM, lanes, oneway, colour, height, into) {
+export function ribbon(points, widthM, lanes, oneway, s0, height, into) {
   const hw = widthM / 2, n = points.length;
-  let s = 0;
+  let s = s0;
   for (let i = 0; i < n; i++) {
     const [x, z, mark] = points[i];
     if (i) s += Math.hypot(x - points[i - 1][0], z - points[i - 1][1]);
@@ -125,7 +124,6 @@ export function ribbon(points, widthM, lanes, oneway, colour, height, into) {
       const px = x + rx * hw * side, pz = z + rz * hw * side;
       into.pos.push(px, height(px, pz) + LIFT_M, pz);
       into.nrm.push(0, 1, 0);
-      into.col.push(...colour);
       into.road.push(s, hw * side, lanes, oneway ? 1 : 0);
       into.mark.push(mark);
     }
@@ -140,7 +138,7 @@ function geometry(a) {
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(a.pos, 3));
   g.setAttribute("normal", new THREE.Float32BufferAttribute(a.nrm, 3));
-  if (a.col) g.setAttribute("color", new THREE.Float32BufferAttribute(a.col, 3));
+  if (a.col?.length) g.setAttribute("color", new THREE.Float32BufferAttribute(a.col, 3));
   g.setAttribute("aRoad", new THREE.Float32BufferAttribute(a.road, 4));
   if (a.mark) g.setAttribute("aMark", new THREE.Float32BufferAttribute(a.mark, 1));
   g.setIndex(a.idx);
@@ -148,7 +146,6 @@ function geometry(a) {
   return g;
 }
 
-const ASPHALT = [0.042, 0.045, 0.048];
 
 export class RegionRoads {
   constructor(scene) {
@@ -168,6 +165,16 @@ export class RegionRoads {
       if (v) return { lanes: v[0], oneway: v[1], dx: v[2] ?? 0, dz: v[3] ?? 0 };
     }
     return null;
+  }
+
+  // The network's arc length at a bridge's end (x, z), or null: deck dashes continue the road's.
+  sAt(x, z) {
+    let best = null;
+    for (const [bx, bz, s] of this.data?.bridge_s ?? []) {
+      const d = Math.hypot(bx - x, bz - z);
+      if (d < 30 && (!best || d < best.d)) best = { d, s };
+    }
+    return best?.s ?? null;
   }
 
   // A bridge point [x, z, ...] moved by the network's shift field (scenery_roads.py), or as is.
@@ -203,10 +210,7 @@ export class RegionRoads {
     const ground = drawnGround(world.tiles, NEAR_SEGMENTS);
     const height = (x, z) => ground.height(x, z);
     const a = { pos: [], nrm: [], col: [], road: [], mark: [], idx: [] };
-    for (const r of this.data.roads) {
-      const colour = r.colour !== null && r.colour !== undefined ? imageryColour(r.colour) : ASPHALT;
-      ribbon(r.pts, r.width, r.lanes, r.oneway, colour, height, a);
-    }
+    for (const r of this.data.roads) ribbon(r.pts, r.width, r.lanes, r.oneway, r.s0 ?? 0, height, a);
     const roads = new THREE.Mesh(geometry(a), this.material);
     roads.receiveShadow = true;
     this.group.add(roads);

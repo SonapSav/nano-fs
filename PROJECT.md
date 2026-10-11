@@ -1637,7 +1637,14 @@ landmarks; later night lighting, shadows, haze.
     10 x 10 km around OMAD (2026-10-11): 2,643 roads, 1,123 crossings and stop lines, 6,989
     alignment findings (|offset| 4.0 -> 2.9 m), ~9 min to build; frame time with the roads
     shown vs hidden within noise (8.1 vs 8.2 ms, 7.5 vs 8.1 ms). Service roads (41,000 ways)
-    not included.
+    not included. Single asphalt and level A seams (2026-10-11, commit SEAMA): one asphalt
+    for every road, ramp and deck (linear 0.10 grey, ground-fixed noise); road pieces that
+    continue one another joined into chains (dashes run on; 2,716 pieces -> 2,421 roads);
+    markings and tyre tracks stop where roads overlap at junctions, how far from the angle
+    between them (ramp splits up to 150 m); run ends at shared nodes extended half their
+    width; deck dashes continue the network's (two-way bridges: phase may jump). Level B
+    (junction shapes, painted gore areas, roundabout markings; Shapely in the scenery
+    group) to decide after the owner's look.
   - [ ] Known: drawing with the sun's shadows costs ~3-4 ms a frame more than without in
     the dense city (sampling on the receivers; a redraw of the map adds more, every few
     seconds in flight). Filter types and map sizes measured too noisily to choose

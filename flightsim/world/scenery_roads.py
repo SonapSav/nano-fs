@@ -172,50 +172,172 @@ def _densify(pts: np.ndarray) -> np.ndarray:
     return np.array(out)
 
 
-def network(roads: list[dict], points: list[dict], colours) -> dict:
-    """The drawn network: per road its densified points with arc length and a marking
-    weight (0 within a junction's reach: where other roads join, the markings stop), the
-    crossings with their road's direction and width."""
-    degree: dict[int, int] = {}
-    for r in roads:
-        for i, nd in enumerate(r["nodes"]):
-            degree[nd] = degree.get(nd, 0) + (1 if i in (0, len(r["nodes"]) - 1) else 2)
-    widest: dict[int, float] = {}
-    for r in roads:
-        for nd in r["nodes"]:
-            widest[nd] = max(widest.get(nd, 0.0), width_m(r["lanes"]) * (1 if r["oneway"] else 1))
-    out, at_node = [], {}
-    for r in roads:
-        if r["bridge"]:
+def _chains(roads: list[dict]) -> list[list[tuple[dict, bool]]]:
+    """Roads joined where one continues another: at a node where exactly two road ends
+    meet and nothing else, of the same lanes and one-way (one-way roads end to start).
+    Each chain: [(road, reversed), ...] in order."""
+    ends: dict[int, list[tuple[int, int]]] = {}
+    inner: dict[int, int] = {}
+    for i, r in enumerate(roads):
+        ends.setdefault(r["nodes"][0], []).append((i, 0))
+        ends.setdefault(r["nodes"][-1], []).append((i, 1))
+        for nd in r["nodes"][1:-1]:
+            inner[nd] = inner.get(nd, 0) + 1
+
+    def partner(i: int, which: int) -> tuple[int, int] | None:
+        nd = roads[i]["nodes"][-1 if which else 0]
+        here = ends.get(nd, [])
+        if len(here) != 2 or inner.get(nd):
+            return None
+        (j, w) = here[0] if here[1] == (i, which) else here[1]
+        a, b = roads[i], roads[j]
+        if j == i or (a["lanes"], a["oneway"]) != (b["lanes"], b["oneway"]):
+            return None
+        if a["oneway"] and w == which:  # one-way: an end meets a start
+            return None
+        return j, w
+
+    used, chains = set(), []
+    for start in range(len(roads)):
+        if start in used:
             continue
-        a = r["pts"]
-        seg = np.hypot(*np.diff(a, axis=0).T)
-        s_nodes = np.concatenate([[0.0], np.cumsum(seg)])
-        junctions = [(s_nodes[i], widest[nd]) for i, nd in enumerate(r["nodes"]) if degree.get(nd, 0) > 2]
-        for i, nd in enumerate(r["nodes"]):
-            at_node.setdefault(nd, (r, i, s_nodes[i]))
-        dense = _densify(a)
-        s = np.concatenate([[0.0], np.cumsum(np.hypot(*np.diff(dense, axis=0).T))])
-        mark = np.ones(len(s))
-        for sj, wj in junctions:
-            reach = wj / 2 + 4.0
-            mark = np.minimum(mark, np.clip((np.abs(s - sj) - reach) / 4.0, 0.0, 1.0))
-        out.append({"id": r["id"], "cls": r["cls"], "lanes": r["lanes"], "oneway": r["oneway"], "width": round(width_m(r["lanes"]), 2),
-                    "colour": colours(r["cls"], dense[len(dense) // 2]),
-                    "pts": [[round(float(x), 2), round(float(z), 2), round(float(m), 2)] for (x, z), m in zip(dense, mark)]})  # fmt: skip
+        # Back to the chain's first road (its free end), then forward.
+        i, rev, seen = start, False, {start}
+        while (pj := partner(i, 1 if rev else 0)) is not None and pj[0] not in seen:
+            j, w = pj
+            seen.add(j)
+            i, rev = j, w == 0  # entered j at its start: walking back means j runs reversed
+        chain, at = [], (i, rev)
+        while at is not None and at[0] not in used:
+            j, rv = at
+            used.add(j)
+            chain.append((roads[j], rv))
+            nxt = partner(j, 0 if rv else 1)
+            at = (nxt[0], nxt[1] == 1) if nxt else None
+        chains.append(chain)
+    return chains
+
+
+MAX_REACH_M = 150.0  # markings stop at most this far either side of a junction (long ramp splits)
+
+
+def network(roads: list[dict], points: list[dict]) -> dict:
+    """The drawn network: road chains (continuing pieces joined, so lines and dashes run
+    on) as ribbons of their non-bridge runs, each with its points, arc length from the
+    chain's start (`s0`: dashes continue over bridges) and a marking weight: 0 where other
+    roads overlap it at a junction (how far: from the angle between the roads, a ramp
+    splitting off at a shallow angle overlaps for long), easing back over 4 m; run ends at a
+    node shared with other roads extend half their width (no notches). The crossings with
+    their road's direction and width; network arc lengths at the bridges' ends."""
+    incid: dict[int, list[tuple[np.ndarray, float, int]]] = {}  # node -> [(direction leaving, width, chain)]
+    chains = _chains(roads)
+    lines = []
+    for ci, chain in enumerate(chains):
+        pts, nodes, bridge = [], [], []
+        for r, rv in chain:
+            p = r["pts"][::-1] if rv else r["pts"]
+            nd = r["nodes"][::-1] if rv else r["nodes"]
+            k = 1 if pts else 0
+            pts.extend(p[k:])
+            nodes.extend(nd[k:])
+            bridge.extend([r["bridge"]] * (len(nd) - k))
+        pts = np.array(pts)
+        r0 = chain[0][0]
+        w = width_m(r0["lanes"])
+        lines.append({"pts": pts, "nodes": nodes, "bridge": bridge, "w": w, "r": r0})
+        for k, nd in enumerate(nodes):
+            for nb in (k - 1, k + 1):
+                if 0 <= nb < len(pts):
+                    d = pts[nb] - pts[k]
+                    L = float(np.hypot(*d))
+                    if L > 0:
+                        incid.setdefault(nd, []).append((d / L, w, ci))
+
+    def reach(nd: int, ci: int, d: np.ndarray, w: float) -> float:
+        out = 0.0
+        for d2, w2, c2 in incid.get(nd, []):
+            if c2 == ci and float(d @ d2) < -0.5:
+                continue  # this road's own other half
+            if c2 == ci and float(d @ d2) > 0.999:
+                continue  # itself
+            cosang = float(np.clip(d @ d2, -1.0, 1.0))
+            if cosang < -0.87:
+                continue  # another road continuing straight on (150 deg or more apart)
+            sin = max(np.sqrt(1.0 - cosang * cosang), 0.05)
+            need = ((w + w2) / 2 if cosang > 0 else w2 / 2) / sin + 2.0
+            out = max(out, min(need, MAX_REACH_M))
+        return out
+
+    out, at_node, bridge_s = [], {}, []
+    for ci, ln in enumerate(lines):
+        pts, nodes = ln["pts"], ln["nodes"]
+        s_nodes = np.concatenate([[0.0], np.cumsum(np.hypot(*np.diff(pts, axis=0).T))])
+        r0 = ln["r"]
+        for k, nd in enumerate(nodes):
+            at_node.setdefault(nd, (ln, k))
+        # Bridge ends: the network's arc length there (deck dashes continue).
+        for k in range(len(nodes)):
+            b = ln["bridge"][k]
+            if k and b != ln["bridge"][k - 1] or (k == 0 and b) or (k == len(nodes) - 1 and b):
+                bridge_s.append([round(float(pts[k][0]), 1), round(float(pts[k][1]), 1), round(float(s_nodes[k]), 2)])
+        # Junction gaps in the markings, by arc length.
+        gaps = []
+        for k, nd in enumerate(nodes):
+            others = [c for c in incid.get(nd, []) if c[2] != ci]
+            if not others:
+                continue
+            fwd = reach(nd, ci, (pts[k + 1] - pts[k]) / (np.hypot(*(pts[k + 1] - pts[k])) or 1), ln["w"]) if k + 1 < len(pts) else 0.0
+            back = reach(nd, ci, (pts[k - 1] - pts[k]) / (np.hypot(*(pts[k - 1] - pts[k])) or 1), ln["w"]) if k > 0 else 0.0
+            gaps.append((s_nodes[k] - back, s_nodes[k] + fwd))
+        # Runs of non-bridge pieces.
+        k = 0
+        while k < len(nodes) - 1:
+            if ln["bridge"][k + 1] and (k == 0 or ln["bridge"][k]):
+                k += 1
+                continue
+            j = k
+            while j + 1 < len(nodes) and not ln["bridge"][j + 1]:
+                j += 1
+            if j == k:
+                k += 1
+                continue
+            run = pts[k : j + 1].copy()
+            s0 = float(s_nodes[k])
+            # Extend the run's ends at a shared node (no notches); the bridge's own deck meets it otherwise.
+            ext = [0.0, 0.0]
+            for e, (idx, nb) in enumerate(((k, k + 1), (j, j - 1))):
+                nd = nodes[idx]
+                if any(c[2] != ci for c in incid.get(nd, [])) and not (0 < idx < len(nodes) - 1 and ln["bridge"][idx if e == 0 else idx + 1]):
+                    d = pts[idx] - pts[nb]
+                    d = d / (np.hypot(*d) or 1)
+                    ext[e] = min(ln["w"] / 2, 8.0)
+                    if e == 0:
+                        run = np.vstack([pts[idx] + d * ext[0], run])
+                    else:
+                        run = np.vstack([run, pts[idx] + d * ext[1]])
+            s0 -= ext[0]
+            dense = _densify(run)
+            s = s0 + np.concatenate([[0.0], np.cumsum(np.hypot(*np.diff(dense, axis=0).T))])
+            mark = np.ones(len(s))
+            for a, b in gaps:
+                mark = np.minimum(mark, np.clip(np.maximum(a - s, s - b) / 4.0, 0.0, 1.0))
+            out.append({"id": r0["id"], "cls": r0["cls"], "lanes": r0["lanes"], "oneway": r0["oneway"], "width": round(ln["w"], 2), "s0": round(s0, 2),
+                        "pts": [[round(float(x), 2), round(float(z), 2), round(float(m), 2)] for (x, z), m in zip(dense, mark)]})  # fmt: skip
+            k = j
     marks = []
     for p in points:
         hit = at_node.get(p["node"])
         if not hit or p["kind"] in ("unmarked", "no"):
             continue
-        r, i, _ = hit
-        a = r["pts"]
+        ln, i = hit
+        a = ln["pts"]
         q0, q1 = a[max(0, i - 1)], a[min(len(a) - 1, i + 1)]
         u = (q1 - q0) / (np.hypot(*(q1 - q0)) or 1.0)
         x, z = a[i]
+        junction = len({c[2] for c in incid.get(p["node"], [])}) > 1
         marks.append({"kind": "stop" if p["kind"] == "signals" else "zebra", "x": round(float(x), 2), "z": round(float(z), 2),
-                      "ux": round(float(u[0]), 4), "uz": round(float(u[1]), 4), "width": round(width_m(r["lanes"]), 2), "junction": degree.get(p["node"], 0) > 2})  # fmt: skip
-    return {"roads": out, "marks": [m for m in marks if not (m["kind"] == "stop" and m["junction"])]}
+                      "ux": round(float(u[0]), 4), "uz": round(float(u[1]), 4), "width": round(ln["w"], 2), "junction": junction})  # fmt: skip
+    return {"roads": out, "marks": [m for m in marks if not (m["kind"] == "stop" and m["junction"])], "bridge_s": bridge_s}
 
 
 def main(argv: list[str]) -> None:
@@ -260,13 +382,7 @@ def main(argv: list[str]) -> None:
     for p in points:
         p["x"], p["z"] = apply_field(np.array([[p["x"], p["z"]]]), field)[0]
 
-    def colours(cls, at):
-        key = (int(np.floor(at[0] / TILE_SIZE_M)), int(np.floor(at[1] / TILE_SIZE_M)))
-        f = out / "tiles" / f"f_{key[0]}_{key[1]}.json"
-        cols = json.loads(f.read_text()).get("colours", {}).get("roads", {}) if f.exists() else {}
-        return cols.get(cls.removesuffix("_link"))
-
-    net = network(roads, points, colours)
+    net = network(roads, points)
     net["box"] = list(box)
     gx0, gz0, cell, grid = field
     net["field"] = {"x0": gx0, "z0": gz0, "cell": cell, "rows": grid.shape[0], "cols": grid.shape[1], "d": np.round(grid, 2).ravel().tolist()}

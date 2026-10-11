@@ -236,7 +236,8 @@ function deck(b, p, cols, depthAt, pierAt, fascia = cols.concrete, lamps = cols.
   for (let i = 0; i + 1 < sec.length; i++) {
     const a = sec[i], c = sec[i + 1], n = a.n, m = n.clone().negate();
     const ti = (hw - PARAPET_W) * (cols.road.travel ?? 1); // across: + right of travel
-    cols.road.quad(a.Li, a.Ri, c.Ri, c.Li, up, [[p[i].s, -ti], [p[i].s, ti], [p[i + 1].s, ti], [p[i + 1].s, -ti]]);
+    const sa = cols.road.sOf ? cols.road.sOf(p[i].s) : p[i].s, sc = cols.road.sOf ? cols.road.sOf(p[i + 1].s) : p[i + 1].s;
+    cols.road.quad(a.Li, a.Ri, c.Ri, c.Li, up, [[sa, -ti], [sa, ti], [sc, ti], [sc, -ti]]);
     fascia.quad(a.Lb, a.Lp, c.Lp, c.Lb, n); // left fascia and parapet's outer face
     fascia.quad(a.Rb, a.Rp, c.Rp, c.Rb, m);
     fascia.quad(a.Li, a.Lpi, c.Lpi, c.Li, m); // parapets' inner faces
@@ -535,6 +536,9 @@ export class Bridges {
     col.lanes = [lanes, info?.oneway ? 1 : 0];
     const ex = p[p.length - 1].x - p[0].x, ez = p[p.length - 1].z - p[0].z;
     col.travel = info && ex * info.dx + ez * info.dz < 0 ? -1 : 1;
+    // Dashes continue the road's: the network's arc length where traffic enters the deck.
+    const L = p[p.length - 1].s, entry = col.travel > 0 ? p[0] : p[p.length - 1], s0 = this.roadS?.(entry.x, entry.z);
+    col.sOf = s0 === null || s0 === undefined ? (s) => s : col.travel > 0 ? (s) => s0 + s : (s) => s0 + (L - s);
   }
 
   build(list) {

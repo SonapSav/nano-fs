@@ -149,7 +149,10 @@ export class FlightScene {
     this.bridges = new Bridges(this.scene);
     this.roadNet = new RegionRoads(this.scene); // drawn roads with markings (prototype, ?roadproto)
     this.bridges.roadInfo = (b) => this.roadNet.bridgeLanes(b.ids);
-    if (ROAD_PROTO) this.bridges.shift = (q) => this.roadNet.shift(q);
+    if (ROAD_PROTO) {
+      this.bridges.shift = (q) => this.roadNet.shift(q);
+      this.bridges.roadS = (x, z) => this.roadNet.sAt(x, z);
+    }
     this.imageryClip = new ImageryClip(this.renderer); // a region's 1 m and 4 m imagery around the camera
     this.wind = [0, 0]; // the windsock's wind (from deg, kt), kept across a world change
     this.terrain = new Terrain(this.scene, quality);
