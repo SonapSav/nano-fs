@@ -240,7 +240,9 @@ export class FlightScene {
     this._environment(); // reflections of this sky
     const tint = new THREE.Color(TIMES[this.skyLight.time].sun).lerp(new THREE.Color(0xffffff), 0.55).multiplyScalar(TIMES[this.skyLight.time].cloud ?? 1);
     this.clouds.setTint(tint);
+    this.clouds.setSun(this.skyLight.sunDir);
     this.clouds.set(clouds, cloud_seed);
+    this.skyLight.setClouds(clouds);
   }
 
   // A new renderer with other context options (the performance test, bench.js): edge

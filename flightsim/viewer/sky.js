@@ -23,6 +23,11 @@ export const TIMES = {
   night: { elevation: 42, azimuth: 120, skySun: -24, sun: 0x9fb4e0, sunI: 0.18, sky: 0x24304c, ground: 0x0e1014, hemiI: 0.32, haze: 0x1c2234, turbidity: 2, rayleigh: 1, exposure: 1.25, night: 1, stars: 0.6, cloud: 0.12, glint: 0.12 },
 }; // fmt: skip
 
+// The sky's own cloud layer (three's Sky addon: noise on the dome, far away, never
+// reached) per cloud amount: its coverage (0-1). "few" is the addon's default, the look
+// before 2026-10-11; the others: project choices.
+export const SKY_CLOUDS = { clear: 0, few: 0.4, scattered: 0.5, broken: 0.6 };
+
 // Haze (fog near, far) in metres; "normal" is the original, also the quality "high" values.
 export const VISIBILITY = { clear: [16000, 30000], normal: [9000, 21000], hazy: [1500, 7000] };
 
@@ -105,6 +110,11 @@ export class SkyController {
     this.hemi.intensity = t.hemiI;
     this.scene.fog.color.setHex(t.haze);
     this.renderer.toneMappingExposure = t.exposure;
+  }
+
+  // The sky layer's clouds for a cloud amount (clear, few, scattered, broken).
+  setClouds(amount) {
+    this.sky.material.uniforms.cloudCoverage.value = SKY_CLOUDS[amount] ?? SKY_CLOUDS.few;
   }
 
   // Haze for a visibility, never beyond the quality setting's reach (`cap`, [near, far]).
