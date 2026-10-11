@@ -1597,7 +1597,7 @@ landmarks; later night lighting, shadows, haze.
     where it is present. (8c937b6)
   - [x] Sheikh Zayed Bridge's deck edges dark grey-green (2026-10-11, the owner's photo from
     the south shore: about sRGB (40, 60, 58) in sunlight), white only the arches, the
-    spine and the lamp posts; its piers outside the spine concrete. (commit EDGEFIX)
+    spine and the lamp posts; its piers outside the spine concrete. (ade566b)
   - [ ] Sheikh Zayed Bridge's east end against the owner's photo (2026-10-11), to decide:
     (1) the deck there stays nearly level onto a bank about as high as the deck, but the
     ground model (FABDEM) has the bank at 11.6 m (northern deck) and 8.4 m (southern) where
