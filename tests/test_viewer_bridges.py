@@ -65,6 +65,38 @@ for (const [name, list] of Object.entries(cases)) {
   br.group.traverse((o) => { if (o.isMesh) tris += o.geometry.attributes.position.count / 3; });
   out.broken = { warned, tris };
 }
+// Ends on land bend to the ground as drawn: a terrain stub whose tile is drawn at 96
+// segments with the ground 2 m under the ends (deck 3 m there), then at 48 with it 1 m
+// above, then not drawn (as built).
+{
+  const scene = new THREE.Scene(), br = new Bridges(scene);
+  br.build([...cases.plain, ...cases.zayed]);
+  const roadY = (x0, x1) => {
+    const ys = [];
+    br.group.traverse((o) => {
+      if (!o.isMesh || o.material !== br.materials.road) return;
+      const a = o.geometry.attributes.position.array;
+      for (let i = 0; i < a.length; i += 3) if (a[i] >= x0 && a[i] <= x1 && Math.abs(a[i + 2]) < 9) ys.push(a[i + 1]);
+    });
+    return [Math.min(...ys), Math.max(...ys)];
+  };
+  const lamp = () => { const a = br.lampPoints.geometry.attributes.position.array; let m = Infinity; for (let i = 0; i < a.length; i += 3) if (a[i] < 40) m = Math.min(m, a[i + 1]); return m; };
+  const terrain = { tiles: new Map([["0,0", { mesh: {}, segments: 96 }]]) };
+  const shifts = [];
+  br.onChange = () => shifts.push(1);
+  out.bend = { ends: br.ends.length, built: { end: roadY(0, 0.01), mid: roadY(499, 501), lamp: lamp() } };
+  out.bend.first = br.bendEnds(terrain, (seg) => (seg === 96 ? 1 : 4));
+  out.bend.at96 = { end: roadY(0, 0.01), near: roadY(39, 41), mid: roadY(499, 501), lamp: lamp() };
+  out.bend.again = br.bendEnds(terrain, () => { throw new Error("asked again"); });
+  terrain.tiles.get("0,0").segments = 48;
+  br.bendEnds(terrain, (seg) => (seg === 96 ? 1 : 4));
+  out.bend.at48 = { end: roadY(0, 0.01) };
+  terrain.tiles.get("0,0").mesh = null;
+  br.bendEnds(terrain, () => null);
+  out.bend.none = { end: roadY(0, 0.01) };
+  out.bend.loading = (() => { const t = { tiles: new Map([["0,0", { mesh: {}, segments: 16 }]]) }; br.bendEnds(t, () => null); return br.ends[0].seg; })();
+  out.bend.shifts = shifts.length;
+}
 console.log(JSON.stringify(out));
 """
 
@@ -77,7 +109,7 @@ def result(tmp_path_factory):
     for f in ("three.module.js", "three.core.js"):
         shutil.copy(VIEWER / "vendor" / f, three / f)
     (three / "package.json").write_text('{"name":"three","type":"module","exports":{".":"./three.module.js","./addons/*":"./addons/*"}}')
-    for f in ("bridges.js", "landmarkKit.js", "nightLights.js", "featureGeometry.js", "demCore.js"):
+    for f in ("bridges.js", "landmarkKit.js", "nightLights.js", "featureGeometry.js", "demCore.js", "world.js", "terrainCore.js"):
         shutil.copy(VIEWER / f, d / f)
     out = subprocess.run([NODE, "--input-type=module", "-e", SCRIPT], cwd=d, capture_output=True, text=True, timeout=120)
     assert out.returncode == 0, out.stderr
@@ -86,7 +118,7 @@ def result(tmp_path_factory):
 
 def test_all_kinds_build(result):
     for k, r in result.items():
-        if k == "broken":
+        if k in ("broken", "bend"):
             continue
         assert not r["nan"] and r["tris"] > 0 and r["meshes"] >= 2, k
 
@@ -97,7 +129,7 @@ def test_heights(result):
     assert result["maqta"]["top"] > 7.5 + 0.18 * 50  # the tied arch rises over the deck
     assert result["khalifa"]["top"] == pytest.approx(35 + 1.0, abs=0.2)  # deck 35 m + parapet
     assert result["plain"]["bottom"] == pytest.approx(-4)  # piers down into the water
-    assert result["low"]["bottom"] > 0  # low over land: no piers, only the deck
+    assert result["low"]["bottom"] == pytest.approx(3 - 3)  # low over land: abutment walls 3 m into the ground (3 m), no piers
 
 
 def test_one_broken_bridge_leaves_the_others(result):
@@ -106,3 +138,20 @@ def test_one_broken_bridge_leaves_the_others(result):
     r = result["broken"]
     assert r["warned"] == 1
     assert r["tris"] > result["plain"]["tris"] + result["khalifa"]["tris"]  # both, plus the fallback decks
+
+
+def test_ends_on_land_bend_to_the_ground_as_drawn(result):
+    # The terrain draws its ground coarser than the height data the decks are built to;
+    # an end on land follows the drawn ground at the tile's detail, easing out over 80 m.
+    r = result["bend"]
+    assert r["ends"] == 6  # the plain bridge's two ends and both ends of Sheikh Zayed's two decks (all on land)
+    assert r["built"]["end"] == pytest.approx([3, 3], abs=0.01)
+    assert r["first"] is True and r["again"] is False  # moved once; nothing asked while the detail stays
+    assert r["at96"]["end"] == pytest.approx([1, 1], abs=0.01)  # down 2 m to the drawn ground
+    assert r["at96"]["near"][0] > 1 and r["at96"]["near"][1] < r["built"]["end"][1] + 2  # easing in between
+    assert r["at96"]["mid"] == r["built"]["mid"]  # the middle untouched
+    assert r["at96"]["lamp"] < r["built"]["lamp"]  # the lamps near the end move with the deck
+    assert r["at48"]["end"] == pytest.approx([4, 4], abs=0.01)  # coarser detail: up 1 m
+    assert r["none"]["end"] == pytest.approx([3, 3], abs=0.01)  # no tile drawn: as built
+    assert r["loading"] == 0  # height tiles still loading: kept as it was, asked again next frame
+    assert r["shifts"] == 3  # the sun's shadows redrawn on each change

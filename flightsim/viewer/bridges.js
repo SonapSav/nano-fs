@@ -10,7 +10,8 @@
 import * as THREE from "three";
 import { steel, stone } from "./landmarkKit.js";
 import { lightMaterial, lightPoints } from "./nightLights.js";
-import { imageryColour } from "./featureGeometry.js";
+import { drawnGround, imageryColour } from "./featureGeometry.js";
+import { world } from "./world.js";
 
 const TILE_M = 4000;
 const VIEW_M = 16000;
@@ -18,6 +19,18 @@ const PARAPET_M = 1.0, PARAPET_W = 0.4; // (project choices, as the piers below)
 const PIER_MIN_M = 2.5; // no pier where the deck's underside is lower than this above the ground
 const PIER_SPACING_M = { land: 35, water: 45 };
 const SEA_FLOOR_M = -4; // piers in water go this far down (out of sight)
+// A deck's end on land meets the road on the ground's exact height (bridges.json), but the
+// ground is drawn coarser (terrain.js: a vertex every 42 m near the aircraft, 83 m and
+// 250 m further out), so on an embankment the drawn ground can lie metres from it (Sheikh
+// Zayed Bridge's east end: 5 m at the middle detail). The last BEND_M of a bridge (at most
+// END_SHARE of its length) bends to the ground as drawn under its end: everything there
+// moves down or up together, fully at the end, easing to nothing BEND_M in (project choices).
+const BEND_M = 80, END_SHARE = 0.45;
+// Abutments: where a deck runs low over land (its underside less than ABUT_M above the
+// ground: an embankment's end, no piers yet), its sides and its end on land go down
+// into the ground (ABUT_BURY_M below the ground's exact height: also below the coarser
+// drawn ground) instead of leaving daylight under it (project choices).
+const ABUT_M = 4, ABUT_BURY_M = 3;
 
 // --- Geometry collection -------------------------------------------------------------------
 
@@ -27,6 +40,10 @@ class Collector {
     this.nrm = [];
     this.col = colours ? [] : null; // per vertex, the current `paint`
     this.paint = [1, 1, 1];
+    // Bridge ends that bend this geometry: `tag(x, z)` -> [end, weight] or null (set per
+    // bridge); per tagged vertex its index, end and weight.
+    this.tag = null;
+    this.bend = [];
   }
   // A triangle, its face normal turned toward `hint` (when given).
   tri(a, b, c, hint) {
@@ -38,6 +55,8 @@ class Collector {
       n.negate();
     }
     for (const p of [a, b, c]) {
+      const t = this.tag?.(p.x, p.z);
+      if (t) this.bend.push(this.pos.length / 3, t[0], t[1]);
       this.pos.push(p.x, p.y, p.z);
       this.nrm.push(n.x, n.y, n.z);
       this.col?.push(...this.paint);
@@ -48,6 +67,8 @@ class Collector {
     this.tri(a, c, d, hint);
   }
   absorb(other) {
+    const base = this.pos.length / 3;
+    for (let i = 0; i < other.bend.length; i += 3) this.bend.push(base + other.bend[i], other.bend[i + 1], other.bend[i + 2]);
     for (let i = 0; i < other.pos.length; i++) this.pos.push(other.pos[i]);
     for (let i = 0; i < other.nrm.length; i++) this.nrm.push(other.nrm[i]);
     if (this.col) for (let i = 0; i < other.pos.length / 3; i++) this.col.push(...(other.col ? other.col.slice(3 * i, 3 * i + 3) : this.paint));
@@ -58,12 +79,40 @@ class Collector {
     g.setAttribute("position", new THREE.Float32BufferAttribute(this.pos, 3));
     g.setAttribute("normal", new THREE.Float32BufferAttribute(this.nrm, 3));
     if (this.col) g.setAttribute("color", new THREE.Float32BufferAttribute(this.col, 3));
+    if (this.bend.length) g.userData.bend = bendData(this.bend, this.pos);
     g.computeBoundingSphere();
     return g;
   }
 }
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+// Tagged vertices as arrays: index, end, weight and their height as built.
+function bendData(bend, pos) {
+  const n = bend.length / 3, idx = new Int32Array(n), end = new Int32Array(n), w = new Float32Array(n), y0 = new Float32Array(n);
+  for (let k = 0; k < n; k++) {
+    idx[k] = bend[3 * k];
+    end[k] = bend[3 * k + 1];
+    w[k] = bend[3 * k + 2];
+    y0[k] = pos[3 * idx[k] + 1];
+  }
+  return { idx, end, w, y0 };
+}
+
+// The tag of a bridge's geometry (Collector.tag): its nearest end on land within reach
+// (`ends`: [{i, x, z, ux, uz, r}], u into the bridge; distance along it, so a deck's
+// whole width moves alike), weight 1 there easing (cosine) to 0 at r; null if none.
+function endTag(ends) {
+  if (!ends.length) return null;
+  return (x, z) => {
+    let best = null;
+    for (const e of ends) {
+      const d = Math.max(0, (x - e.x) * e.ux + (z - e.z) * e.uz);
+      if (d < e.r && Math.hypot(x - e.x, z - e.z) < 2 * e.r && (!best || d < best.d)) best = { d, e };
+    }
+    return best ? [best.e.i, 0.5 + 0.5 * Math.cos((Math.PI * best.d) / best.e.r)] : null;
+  };
+}
 
 // A box between points a and b (its long axis), `across` (unit, horizontal) the direction
 // of its width, `w` wide and `t` thick.
@@ -177,12 +226,29 @@ function deck(b, p, cols, depthAt, pierAt, fascia = cols.concrete, lamps = cols.
     fascia.quad(a.Lp, a.Lpi, c.Lpi, c.Lp, up); // parapet caps
     fascia.quad(a.Rp, a.Rpi, c.Rpi, c.Rp, up);
     fascia.quad(a.Lb, a.Rb, c.Rb, c.Lb, down);
+    const qa = p[i], qc = p[i + 1];
+    if (!qa.wet && !qc.wet && Math.min(qa.y - depthAt(qa.s) - qa.g, qc.y - depthAt(qc.s) - qc.g) < ABUT_M) {
+      const foot = (sc, q, side) => V(sc[side].x, q.g - ABUT_BURY_M, sc[side].z);
+      fascia.quad(a.Lb, foot(a, qa, "Lb"), foot(c, qc, "Lb"), c.Lb, n);
+      fascia.quad(a.Rb, foot(a, qa, "Rb"), foot(c, qc, "Rb"), c.Rb, m);
+    }
+  }
+  // Each end on land: closed down into the ground (the road meets the ground there).
+  for (const [k, out] of [[0, -1], [sec.length - 1, 1]]) {
+    const q = p[k], e = sec[k];
+    if (q.wet) continue;
+    const dir = V(q.ux * out, 0, q.uz * out), low = q.g - ABUT_BURY_M;
+    fascia.quad(e.Lp, e.Rp, V(e.Rb.x, low, e.Rb.z), V(e.Lb.x, low, e.Lb.z), dir);
   }
   if (lamps) {
     const L = p[p.length - 1].s;
     for (let s = LAMP_M / 2; s < L; s += LAMP_M) {
       const q = at(p, s);
-      for (const side of [1, -1]) lamps.push(q.x + q.nx * side * (hw - 0.5), q.y + LAMP_H_M, q.z + q.nz * side * (hw - 0.5));
+      for (const side of [1, -1]) {
+        const x = q.x + q.nx * side * (hw - 0.5), z = q.z + q.nz * side * (hw - 0.5), t = cols.road.tag?.(x, z);
+        if (t) cols.lampBend?.push(lamps.length / 3, t[0], t[1]);
+        lamps.push(x, q.y + LAMP_H_M, z);
+      }
     }
   }
   // Piers: at `pierAt` positions (arc lengths), where the underside is high enough.
@@ -270,7 +336,8 @@ function waveArch(decks, white) {
     }
     const first = s < arches[0].s0, a = first ? arches[0] : arches[arches.length - 1];
     const u = first ? (s - S0) / lead : (S1 - s) / tail; // 0 at the spine's end, 1 at the arch
-    return { y: ground - d0 / 2 + (yd - ground + d0 / 2) * Math.sin((Math.PI / 2) * u), sep: 0, f: a.side, above: false, depth: d0 };
+    const end = ground - d0 / 2 - (q.wet ? 0 : ABUT_BURY_M); // on land into the ground (also below the coarser drawn ground)
+    return { y: end + (yd - end) * Math.sin((Math.PI / 2) * u), sep: 0, f: a.side, above: false, depth: d0 };
   };
   const lateral = (fr, f) => f * (fr.half + W / 2 + rw); // offset of the spine from the void's middle
   // Sweep a box section along stations (centre, lateral unit, width, depth), each
@@ -411,6 +478,14 @@ function boxGirder(d) {
   return { depthAt, piers: others, vPiers };
 }
 
+// The region's ground as drawn at `segments` per tile (featureGeometry.js drawnGround, as
+// the roads lie on it), or null while its height tiles load.
+function drawnHeight(segments, x, z) {
+  const tx = Math.floor(x / TILE_M), tz = Math.floor(z / TILE_M);
+  if (!world.scenery || !world.tileReady(tx, tz)) return null; // (and its neighbours: the cell's corners)
+  return drawnGround(world.tiles, segments).height(x, z);
+}
+
 // --- Bridges ------------------------------------------------------------------------------
 
 export class Bridges {
@@ -433,6 +508,8 @@ export class Bridges {
   build(list) {
     this.clear();
     this.lamps = []; // lamp positions (x, y, z) of every bridge
+    this.lampBend = []; // lamps near an end on land: index, end, weight (as Collector.bend)
+    this.ends = []; // every deck's ends on land: {x, z, y (road), key (terrain tile), seg (drawn at), dy}
     const tiles = new Map(), landmarks = new Map();
     for (const b of list ?? []) {
       if (b.pts.length < 2) continue;
@@ -449,6 +526,7 @@ export class Bridges {
         console.warn(`bridge ${name}: ${e.message}; drawn as plain decks`);
         for (const d of decks) {
           d.cols.road.paint = deckPaint(d.b);
+          for (const k of ["road", "concrete", "white"]) d.cols[k].tag = endTag(d.ends);
           deck(d.b, d.p, d.cols, () => d.b.depth_m, spacedPiers(d.p, PIER_SPACING_M.water));
         }
       }
@@ -457,7 +535,13 @@ export class Bridges {
     if (this.lamps.length) {
       const pos = new Float32Array(this.lamps), col = new Float32Array(pos.length);
       for (let i = 0; i < col.length; i += 3) col.set(LAMP_RGB, i);
-      this.group.add(lightPoints(pos, col, (this.lampMaterial ??= lightMaterial(3))));
+      this.lampPoints = lightPoints(pos, col, (this.lampMaterial ??= lightMaterial(3)));
+      this.group.add(this.lampPoints);
+      if (this.lampBend.length) {
+        const b = bendData(this.lampBend, this.lamps);
+        this.lampPoints.geometry.userData.bend = b;
+        this.bent.push(this.lampPoints.geometry);
+      }
     }
   }
 
@@ -469,13 +553,28 @@ export class Bridges {
     if (!night) this.materials.white.emissive.setRGB(0, 0, 0);
   }
 
+  // A bridge's ends on land, registered (this.ends): [{i, x, z, r}] for endTag.
+  _ends(b) {
+    const out = [], r = Math.min(BEND_M, END_SHARE * b.length_m);
+    const n = b.pts.length;
+    for (const [q, next] of [[b.pts[0], b.pts[Math.min(1, n - 1)]], [b.pts[n - 1], b.pts[Math.max(0, n - 2)]]]) {
+      const [x, z, y, , wet] = q, l = Math.hypot(next[0] - x, next[1] - z);
+      if (wet || r < 5 || !l) continue;
+      out.push({ i: this.ends.length, x, z, ux: (next[0] - x) / l, uz: (next[1] - z) / l, r });
+      this.ends.push({ x, z, y, key: `${Math.floor(x / TILE_M)},${Math.floor(z / TILE_M)}`, seg: null, dy: 0 });
+    }
+    return out;
+  }
+
   // One bridge's deck, piers and (Sheikh Khalifa, Al Maqta) structure into its tile's
   // collectors; Sheikh Zayed's decks wait for its spine (`landmarks`).
   _one(b, tiles, landmarks) {
     const p = centreline(b), mid = p[Math.floor(p.length / 2)];
     const key = `${Math.floor(mid.x / TILE_M)},${Math.floor(mid.z / TILE_M)}`;
     if (!tiles.has(key)) tiles.set(key, { road: new Collector(true), concrete: new Collector(true), steel: new Collector(), paint: new Collector(), white: new Collector(), tubes: [], x: (Math.floor(mid.x / TILE_M) + 0.5) * TILE_M, z: (Math.floor(mid.z / TILE_M) + 0.5) * TILE_M });
-    const cols = { ...tiles.get(key), lamps: this.lamps }, d = { b, p };
+    const cols = { ...tiles.get(key), lamps: this.lamps, lampBend: this.lampBend }, d = { b, p };
+    const ends = this._ends(b), tag = endTag(ends);
+    for (const k of ["road", "concrete", "steel", "paint", "white"]) cols[k].tag = tag; // (the tile's collectors: set per bridge)
     const kind = b.structure?.kind;
     cols.concrete.paint = sidePaint(b); // (before the girders and piers, which use it too)
     b.depth_m ??= 1.8; // builds before 2026-10-10 did not record it (scenery_bridges.py DECK_DEPTH_M)
@@ -491,7 +590,7 @@ export class Bridges {
       // Its decks wait for the spine (which carries them: no ordinary piers there).
       b.width_m = b.structure.deck_width_m ?? b.width_m;
       if (!landmarks.has(b.landmark)) landmarks.set(b.landmark, { cols, decks: [] });
-      landmarks.get(b.landmark).decks.push({ ...d, cols });
+      landmarks.get(b.landmark).decks.push({ ...d, cols, ends });
       return;
     }
     piers ??= spacedPiers(p, p.some((q) => q.wet) ? PIER_SPACING_M.water : PIER_SPACING_M.land);
@@ -503,11 +602,13 @@ export class Bridges {
   // spine). Collected aside first, so a failure leaves nothing half drawn.
   _landmark(cols, decks) {
     for (const d of decks) d.p = centreline(d.b); // with the published width
-    const white = new Collector();
+    const white = new Collector(), all = endTag(decks.flatMap((d) => d.ends));
+    white.tag = all; // the spine and arches: bent by the nearest deck end
     const spine = waveArch(decks, white);
     const parts = decks.map((d) => {
       const own = { road: new Collector(true), white: new Collector() };
       own.road.paint = deckPaint(d.b);
+      own.road.tag = own.white.tag = d.cols.concrete.tag = endTag(d.ends);
       const piers = spacedPiers(d.p, d.p.some((q) => q.wet) ? PIER_SPACING_M.water : PIER_SPACING_M.land).filter((s) => {
         const q = at(d.p, s);
         return !spine.onSpine(q.x, q.z);
@@ -516,7 +617,11 @@ export class Bridges {
       return [d.cols, own];
     });
     cols.white.absorb(white);
-    this.lamps.push(...spine.lampHeads);
+    for (let k = 0; k < spine.lampHeads.length; k += 3) {
+      const t = all?.(spine.lampHeads[k], spine.lampHeads[k + 2]);
+      if (t) this.lampBend.push(this.lamps.length / 3, t[0], t[1]);
+      this.lamps.push(spine.lampHeads[k], spine.lampHeads[k + 1], spine.lampHeads[k + 2]);
+    }
     for (const [c, own] of parts) {
       c.road.absorb(own.road);
       c.white.absorb(own.white);
@@ -525,11 +630,13 @@ export class Bridges {
 
   _meshes(tiles) {
     this.tiles = [];
+    this.bent = []; // geometries with vertices near an end on land
     for (const t of tiles.values()) {
       const group = new THREE.Group();
       for (const k of ["road", "concrete", "steel", "paint", "white"]) {
         const g = t[k].geometry();
         if (g) group.add(this.mesh(g, this.materials[k]));
+        if (g?.userData.bend) this.bent.push(g);
       }
       const byMat = {};
       for (const [g, k] of t.tubes) (byMat[k] ??= []).push(g);
@@ -546,8 +653,37 @@ export class Bridges {
     return m;
   }
 
+  // Each end on land follows the ground as the terrain draws it under the end (`terrain`:
+  // terrain.js's Terrain, its tiles' detail); `groundAt(segments, x, z)`: that height
+  // (tests give their own). Vertices move only when a tile's detail changes.
+  bendEnds(terrain, groundAt = drawnHeight) {
+    let changed = false;
+    for (const e of this.ends ?? []) {
+      const tile = terrain?.tiles.get(e.key), seg = tile?.mesh ? tile.segments : 0;
+      if (seg === e.seg) continue;
+      const h = seg ? groundAt(seg, e.x, e.z) : null;
+      if (seg && h === null) continue; // its height tiles still loading: asked again next frame
+      e.seg = seg;
+      const dy = seg ? h - e.y : 0; // no tile drawn there: as built
+      if (dy !== e.dy) {
+        e.dy = dy;
+        changed = true;
+      }
+    }
+    if (!changed) return false;
+    for (const g of this.bent) {
+      const { idx, end, w, y0 } = g.userData.bend, pos = g.getAttribute("position");
+      for (let k = 0; k < idx.length; k++) pos.array[3 * idx[k] + 1] = y0[k] + w[k] * this.ends[end[k]].dy;
+      pos.needsUpdate = true;
+      g.computeBoundingSphere();
+    }
+    this.onChange?.(); // the sun's shadow map is drawn again
+    return true;
+  }
+
   // Only the tiles within VIEW_M of the camera.
-  update(cameraPos) {
+  update(cameraPos, terrain = null) {
+    if (terrain) this.bendEnds(terrain);
     // Uplit white with a slowly changing tint (a soft wash, the structure's white still reads).
     if (this.night) this.materials.white.emissive.setHSL(((performance.now() / 1000) % 90) / 90, 0.35, 0.035 * this.night).add(new THREE.Color(0.03, 0.03, 0.035).multiplyScalar(this.night));
     for (const t of this.tiles ?? []) t.group.visible = Math.hypot(t.x - cameraPos.x, t.z - cameraPos.z) < VIEW_M;
@@ -565,5 +701,8 @@ export class Bridges {
     this.group.traverse((o) => o.geometry?.dispose());
     this.group.clear();
     this.tiles = [];
+    this.bent = [];
+    this.ends = [];
+    this.lampPoints = null;
   }
 }

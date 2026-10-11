@@ -151,6 +151,7 @@ export class FlightScene {
     this.terrain = new Terrain(this.scene, quality);
     this.sunShadows = new SunShadows(this.renderer, this.skyLight.sun);
     this.terrain.onChange = () => this.sunShadows.invalidate();
+    this.bridges.onChange = () => this.sunShadows.invalidate();
     this._applyQuality(quality);
 
     this.model = buildC172();
@@ -567,7 +568,7 @@ export class FlightScene {
 
   render() {
     this._followGround();
-    this.bridges.update(this.camera.position);
+    this.bridges.update(this.camera.position, this.terrain);
     this.imageryClip.update(this.camera.position.x, this.camera.position.z); // last frame's camera
     waterUniforms.waterTime.value = (performance.now() / 1000) % 10000;
     this._stepRecentre();

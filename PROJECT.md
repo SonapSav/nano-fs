@@ -1564,7 +1564,18 @@ landmarks; later night lighting, shadows, haze.
   - [x] Sheikh Zayed Bridge's east end (the owner's telephoto photo, taken 2026-10-10 23:03,
     before the deck-profile fix that evening): checked from the photo's position (4.8 km
     on the 150 deg bearing, 5 deg field of view) and from the side: both decks now ramp
-    down to the shore road.
+    down to the shore road. Wrong: that check was close up; the owner's next photo
+    (2026-10-11 08:50, 2 nm) still showed a ridge (fixed below).
+  - [x] Bridge ends standing above the ground (2026-10-11, the owner): the decks end at the
+    ground's exact height, but the terrain draws the ground coarser (a vertex every 42 m
+    near the aircraft, 83 m and 250 m further out) and the roads lie on that; on an
+    embankment the drawn ground was metres off (Sheikh Zayed east end: 1.8 m near, 5.2 m
+    at the middle detail, 7.1 m far; 90 % of the region's 1,299 ends on land within 0.5 m
+    near, 1.2 m at the middle detail). bridges.js now bends each bridge's last 80 m (at
+    most 45 % of it) to the drawn ground under its end, at the detail its terrain tile is
+    drawn at (moved when that changes; deck, sides, piers, spine, lamps together), and
+    gives low decks over land abutment walls and closed ends going 3 m into the ground
+    (Sheikh Zayed's spine ends too) instead of daylight under them. (commit BENDFIX)
   - [x] Bridges a distinct light grey (2026-10-11, the owner): the sides, parapets, underside
     and piers were a light concrete (0xc7c2b6) that read as a white band, and the decks'
     colour, measured along each bridge, picked up the shade and planting beside it
