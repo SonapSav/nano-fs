@@ -49,6 +49,12 @@ sources:
     # (194, 157, 117).
     gain: [2.62, 3.09, 3.44]
     gamma: 1.6
+    # The dark end (2026-10-11, the owner: black patches in the water): mangroves and dark
+    # channels read below 0 in every band after the atmospheric correction (raw 500-900 for
+    # an offset of 1000) and came out pure black. Below the knee the reflectance is
+    # compressed instead (knee + slope x (r - knee)): mangroves (-0.05, -0.03, -0.05) come
+    # out a dark green, about (35, 50, 35). Project choice, by eye.
+    toe: {knee: 0.048, slope: 0.33}
     items:
       - {id: S2A_39QYG_20251024_0_L2A, url: https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/39/Q/YG/2025/10/S2A_39QYG_20251024_0_L2A/}
       - {id: S2A_39QZG_20251024_1_L2A, url: https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/39/Q/ZG/2025/10/S2A_39QZG_20251024_1_L2A/}

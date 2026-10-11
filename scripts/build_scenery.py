@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 from flightsim.world.scenery import manifest_hash
-from flightsim.world.scenery_build import SCENERY_DIR, build, build_hires, download, load_spec, write_manifest
+from flightsim.world.scenery_build import SCENERY_DIR, build, build_hires, build_imagery_only, download, load_spec, write_manifest
 
 
 def pin(region_file: Path, sources: list[dict]) -> None:
@@ -29,6 +29,7 @@ def main() -> None:
     parser.add_argument("--pin", action="store_true", help="record the sources' sha256 in the region file")
     parser.add_argument("--download-only", action="store_true")
     parser.add_argument("--hires-only", action="store_true", help="rebuild only the high-resolution imagery of a built region")
+    parser.add_argument("--imagery-only", action="store_true", help="rebuild only the imagery of a built region (and the building colours and roads made from it)")
     args = parser.parse_args()
 
     spec = load_spec(args.region)
@@ -39,6 +40,10 @@ def main() -> None:
         sources = download(spec) + [build_hires(spec, SCENERY_DIR / spec.name)]
         manifest = write_manifest(spec, sources, SCENERY_DIR / spec.name)
         print(f"rebuilt {spec.name}'s high-resolution imagery in {time.perf_counter() - t0:.0f} s, scenery hash {manifest_hash(manifest)[:16]}")
+    elif args.imagery_only:
+        manifest = build_imagery_only(spec)
+        sources = manifest["sources"]
+        print(f"rebuilt {spec.name}'s imagery in {time.perf_counter() - t0:.0f} s, scenery hash {manifest_hash(manifest)[:16]}")
     else:
         manifest = build(spec)
         sources = manifest["sources"]

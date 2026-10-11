@@ -1624,6 +1624,24 @@ landmarks; later night lighting, shadows, haze.
     dusk, night shots before and after); city flight 89.9 -> 100.5-101.5 fps, measured
     back to back; the sky's clouds now cost nothing (the puffs still ~2 fps). A dome drawn
     after the opaque scene instead measured the same. (ff7f6ff)
+  - [x] Roads in the belly camera (2026-10-11, the owner's screenshots): zoomed in, the drawn
+    roads fell behind the ground (the imagery showed through in patches): three.js negates
+    the polygon offset's factor with a reversed depth buffer but not its units, so our
+    negative units pushed away from the camera; with the belly camera's 5 cm near plane
+    one depth step is ~0.8 m at 800 m. Patched in the vendored three.module.js (units
+    negated too; vendor/README). Markings far away (the 640 px belly picture: ~1 m a
+    pixel) were skipped under half a metre a pixel; now averaged over the pixel (exact box
+    filter: a 15 cm line at 1 m a pixel shows at 15 %, dashes a third), skipped only past
+    3 m a pixel. City flight ~1 fps lower (99.4 vs ~100.5). (6deebf1)
+  - [x] Black water and mangroves (2026-10-11, the owner): the Sentinel imagery clipped
+    reflectance at 0, and the atmospheric correction leaves the darkest surfaces below 0
+    in every band (raw 500-900 for an offset of 1000): 50 km2 of land within 14 km of the
+    origin (mangroves 13.8, wetland 12.8, trees 7.8) came out pure black, and the 1 m
+    imagery, matched to it, too (3,127 of 5,249 chunks with black areas). A toe below
+    reflectance 0.048 (slope 0.33) instead of the clip (region file `imagery.toe`):
+    mangroves dark green; 5 chunks left with black (2 near x -21 km: no data in either
+    source). New `--imagery-only` build (Sentinel, 1 m imagery, roof colours, roads,
+    manifest: 29 min); scenery hash now c4e1692299bba524. (COMMIT)
   - [ ] Decide later (the owner, 2026-10-11): the clouds' whiteness and softness (clouds.js
     PUFF: ambient, direct, base, noise, scale; easy to tune), after flying with them.
   - [ ] Road network with markings (2026-10-11, the owner: option 2, drawn roads replacing the

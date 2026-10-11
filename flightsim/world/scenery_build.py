@@ -496,9 +496,13 @@ def build_imagery(spec: RegionSpec, paths: list[Path], out: Path, log=print) -> 
     each pixel's centre through our map to the scenes' UTM grid (GDAL's transform),
     bilinear within a scene (the first scene in the region file's order with data there
     wins), then 255 x (gain x reflectance)^(1/gamma), the gain per band (a colour balance).
+    Below the toe's knee the reflectance is compressed (knee + slope x (r - knee), not
+    below 0) rather than clipped at 0: the atmospheric correction leaves the darkest
+    surfaces (mangroves, dark channels) below 0 in every band, which came out pure black.
     JPEG, quality 88."""
     im = spec.sources["imagery"]
     scale, offset, gamma = (float(im[k]) for k in ("scale", "offset", "gamma"))
+    knee, slope = (float(im["toe"][k]) for k in ("knee", "slope")) if "toe" in im else (0.0, 0.0)
     gain = np.asarray(im["gain"] if isinstance(im["gain"], list) else [im["gain"]] * 3, np.float32)[:, None]  # per band
     import rasterio
     import rasterio.errors
@@ -539,7 +543,8 @@ def build_imagery(spec: RegionSpec, paths: list[Path], out: Path, log=print) -> 
                 rgb[:, idx] = v[:, valid]
                 done[idx] = True
             missing += int((~done).sum())
-            refl = np.clip(rgb * scale + offset, 0.0, None)
+            refl = rgb * scale + offset
+            refl = np.clip(np.where(refl < knee, knee + slope * (refl - knee), refl), 0.0, None)
             tone = 255.0 * np.clip(gain * refl, 0.0, 1.0) ** (1.0 / gamma)
             img = np.where(done, np.round(tone), 0).clip(0, 255).astype(np.uint8).reshape(3, IMAGERY_PX, IMAGERY_PX)
             with MemoryFile() as mem, warnings.catch_warnings():
@@ -866,6 +871,22 @@ def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print) -> dict:
     from flightsim.world.scenery_roads import build_roads
 
     build_roads(spec, out, log)  # the drawn road network (after the 1 m imagery: aligned to it)
+    return write_manifest(spec, sources, out)
+
+
+def build_imagery_only(spec: RegionSpec, root: Path = SCENERY_DIR, log=print) -> dict:
+    """Only the imagery of a built region and what is made from it: the Sentinel imagery,
+    the 1 m imagery and the building colours, and the road network (aligned to the 1 m
+    imagery); then the manifest."""
+    out = root / spec.name
+    sources = download(spec, root, log)
+    src = out / "sources"
+    build_imagery(spec, [src / f["name"] for f in sources if f["kind"] == "imagery"], out, log)
+    if spec.sources.get("hires_imagery"):
+        sources.append(build_hires(spec, out, log))
+    from flightsim.world.scenery_roads import build_roads
+
+    build_roads(spec, out, log)
     return write_manifest(spec, sources, out)
 
 
