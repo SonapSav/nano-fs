@@ -1653,7 +1653,7 @@ landmarks; later night lighting, shadows, haze.
     while it is open (its "combo" heartbeat) their buttons in the viewer are greyed out,
     back when it closes. The camera inset in the 3D view (K) stays available. The map
     window's drawing moved to mapPane.js (shared). Checked headless (data/shots/combo.py):
-    1600 x 900 and 1920 x 1080 layouts, buttons, key routing, closing. (COMMIT)
+    1600 x 900 and 1920 x 1080 layouts, buttons, key routing, closing. (c172f60)
   - [ ] Decide later (the owner, 2026-10-11): the clouds' whiteness and softness (clouds.js
     PUFF: ambient, direct, base, noise, scale; easy to tune), after flying with them.
   - [ ] Road network with markings (2026-10-11, the owner: option 2, drawn roads replacing the
