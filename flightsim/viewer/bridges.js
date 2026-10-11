@@ -12,6 +12,7 @@ import { steel, stone } from "./landmarkKit.js";
 import { lightMaterial, lightPoints } from "./nightLights.js";
 import { drawnGround, imageryColour } from "./featureGeometry.js";
 import { world } from "./world.js";
+import { ROAD_PROTO, roadMaterial } from "./roadNetwork.js";
 
 const TILE_M = 4000;
 const VIEW_M = 16000;
@@ -44,16 +45,23 @@ class Collector {
     // bridge); per tagged vertex its index, end and weight.
     this.tag = null;
     this.bend = [];
+    // Road surfaces with markings (roadNetwork.js, `?roadproto`): per vertex metres along and
+    // across (`r` of tri), and the deck's lanes and one-way (`lanes`, set per bridge).
+    this.road = null;
+    this.lanes = [0, 0];
   }
   // A triangle, its face normal turned toward `hint` (when given).
-  tri(a, b, c, hint) {
+  tri(a, b, c, hint, r = null) {
     const n = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a));
     if (n.lengthSq() < 1e-12) return;
     n.normalize();
+    let rs = r ?? [[0, 0], [0, 0], [0, 0]];
     if (hint && n.dot(hint) < 0) {
       [b, c] = [c, b];
+      rs = [rs[0], rs[2], rs[1]];
       n.negate();
     }
+    if (this.road) for (const q of rs) this.road.push(q[0], q[1], ...this.lanes);
     for (const p of [a, b, c]) {
       const t = this.tag?.(p.x, p.z);
       if (t) this.bend.push(this.pos.length / 3, t[0], t[1]);
@@ -62,13 +70,14 @@ class Collector {
       this.col?.push(...this.paint);
     }
   }
-  quad(a, b, c, d, hint) {
-    this.tri(a, b, c, hint);
-    this.tri(a, c, d, hint);
+  quad(a, b, c, d, hint, r = null) {
+    this.tri(a, b, c, hint, r && [r[0], r[1], r[2]]);
+    this.tri(a, c, d, hint, r && [r[0], r[2], r[3]]);
   }
   absorb(other) {
     const base = this.pos.length / 3;
     for (let i = 0; i < other.bend.length; i += 3) this.bend.push(base + other.bend[i], other.bend[i + 1], other.bend[i + 2]);
+    if (this.road) for (let i = 0; i < other.pos.length / 3; i++) this.road.push(...(other.road ? other.road.slice(4 * i, 4 * i + 4) : [0, 0, 0, 0]));
     for (let i = 0; i < other.pos.length; i++) this.pos.push(other.pos[i]);
     for (let i = 0; i < other.nrm.length; i++) this.nrm.push(other.nrm[i]);
     if (this.col) for (let i = 0; i < other.pos.length / 3; i++) this.col.push(...(other.col ? other.col.slice(3 * i, 3 * i + 3) : this.paint));
@@ -80,6 +89,10 @@ class Collector {
     g.setAttribute("normal", new THREE.Float32BufferAttribute(this.nrm, 3));
     if (this.col) g.setAttribute("color", new THREE.Float32BufferAttribute(this.col, 3));
     if (this.bend.length) g.userData.bend = bendData(this.bend, this.pos);
+    if (this.road) {
+      g.setAttribute("aRoad", new THREE.Float32BufferAttribute(this.road, 4));
+      g.setAttribute("aMark", new THREE.Float32BufferAttribute(new Float32Array(this.pos.length / 3).fill(1), 1));
+    }
     g.computeBoundingSphere();
     return g;
   }
@@ -222,7 +235,8 @@ function deck(b, p, cols, depthAt, pierAt, fascia = cols.concrete, lamps = cols.
   const up = V(0, 1, 0), down = V(0, -1, 0);
   for (let i = 0; i + 1 < sec.length; i++) {
     const a = sec[i], c = sec[i + 1], n = a.n, m = n.clone().negate();
-    cols.road.quad(a.Li, a.Ri, c.Ri, c.Li, up);
+    const ti = (hw - PARAPET_W) * (cols.road.travel ?? 1); // across: + right of travel
+    cols.road.quad(a.Li, a.Ri, c.Ri, c.Li, up, [[p[i].s, -ti], [p[i].s, ti], [p[i + 1].s, ti], [p[i + 1].s, -ti]]);
     fascia.quad(a.Lb, a.Lp, c.Lp, c.Lb, n); // left fascia and parapet's outer face
     fascia.quad(a.Rb, a.Rp, c.Rp, c.Rb, m);
     fascia.quad(a.Li, a.Lpi, c.Lpi, c.Li, m); // parapets' inner faces
@@ -507,6 +521,20 @@ export class Bridges {
       white: new THREE.MeshStandardMaterial({ color: 0xdcdad3, roughness: 0.6, metalness: 0, envMapIntensity: 0.5 }),
     };
     this.materials.concrete.vertexColors = true;
+    if (ROAD_PROTO) this.materials.road = roadMaterial(); // the roads' asphalt and markings (prototype)
+    this.roadInfo = null; // (bridge) -> {lanes, oneway, dx, dz} from the road network, or null
+  }
+
+  // A deck's road collector set for its markings: lanes, one-way, and which way it is
+  // travelled along the deck's points (the deck may be built the other way).
+  _roadSetup(col, b, p) {
+    if (!ROAD_PROTO) return;
+    col.road ??= [];
+    const info = this.roadInfo?.(b);
+    const lanes = info?.lanes ?? Math.max(1, Math.round((b.width_m - 2.8) / 3.65));
+    col.lanes = [lanes, info?.oneway ? 1 : 0];
+    const ex = p[p.length - 1].x - p[0].x, ez = p[p.length - 1].z - p[0].z;
+    col.travel = info && ex * info.dx + ez * info.dz < 0 ? -1 : 1;
   }
 
   build(list) {
@@ -530,6 +558,7 @@ export class Bridges {
         console.warn(`bridge ${name}: ${e.message}; drawn as plain decks`);
         for (const d of decks) {
           d.cols.road.paint = deckPaint(d.b);
+          this._roadSetup(d.cols.road, d.b, d.p);
           for (const k of ["road", "concrete", "white"]) d.cols[k].tag = endTag(d.ends);
           deck(d.b, d.p, d.cols, () => d.b.depth_m, spacedPiers(d.p, PIER_SPACING_M.water));
         }
@@ -573,6 +602,7 @@ export class Bridges {
   // One bridge's deck, piers and (Sheikh Khalifa, Al Maqta) structure into its tile's
   // collectors; Sheikh Zayed's decks wait for its spine (`landmarks`).
   _one(b, tiles, landmarks) {
+    if (this.shift) b = { ...b, pts: b.pts.map((q) => this.shift(q)) }; // onto the imagery's roads with the road network (prototype)
     const p = centreline(b), mid = p[Math.floor(p.length / 2)];
     const key = `${Math.floor(mid.x / TILE_M)},${Math.floor(mid.z / TILE_M)}`;
     if (!tiles.has(key)) tiles.set(key, { road: new Collector(true), concrete: new Collector(true), steel: new Collector(), paint: new Collector(), white: new Collector(), tubes: [], x: (Math.floor(mid.x / TILE_M) + 0.5) * TILE_M, z: (Math.floor(mid.z / TILE_M) + 0.5) * TILE_M });
@@ -599,6 +629,7 @@ export class Bridges {
     }
     piers ??= spacedPiers(p, p.some((q) => q.wet) ? PIER_SPACING_M.water : PIER_SPACING_M.land);
     cols.road.paint = deckPaint(b);
+    this._roadSetup(cols.road, b, p);
     deck(b, p, cols, depthAt, piers);
   }
 
@@ -612,6 +643,7 @@ export class Bridges {
     const parts = decks.map((d) => {
       const own = { road: new Collector(true), white: new Collector(), edge: new Collector(true) };
       own.road.paint = deckPaint(d.b);
+      this._roadSetup(own.road, d.b, d.p);
       own.edge.paint = ZAYED_EDGE;
       d.cols.concrete.paint = sidePaint(d.b); // its piers outside the spine: concrete
       own.road.tag = own.white.tag = own.edge.tag = d.cols.concrete.tag = endTag(d.ends);
@@ -698,7 +730,8 @@ export class Bridges {
 
   // The landmarks' environment map (Landmarks.setEnvironment), or null.
   setEnvironment(texture) {
-    for (const m of Object.values(this.materials)) {
+    for (const [k, m] of Object.entries(this.materials)) {
+      if (k === "road") continue; // asphalt does not mirror the sky (it read lighter than the roads beside it)
       m.envMap = texture ?? null;
       m.needsUpdate = true;
     }

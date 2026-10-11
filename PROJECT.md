@@ -1619,6 +1619,21 @@ landmarks; later night lighting, shadows, haze.
     large clouds. (82145c9)
   - [ ] Decide later (the owner, 2026-10-11): the clouds' whiteness and softness (clouds.js
     PUFF: ambient, direct, base, noise, scale; easy to tune), after flying with them.
+  - [ ] Road network with markings (2026-10-11, the owner: option 2, drawn roads replacing the
+    imagery's, the same asphalt on the bridges). Check: OSM road tags in the region:
+    lanes on 100 % of motorway/trunk/primary/secondary, 55 % tertiary, 11-15 % residential
+    and unclassified; turn lanes 0-10 %; no widths; 937 zebra and 4,425 marked crossings,
+    1,057 signals. Alignment against the 1 m imagery (dark-band fit across the road every
+    25 m, 36 tiles): OSM centrelines |offset| median 4-6 m, 42-53 % within 4 m; a smooth
+    shift field (200 m cells) brings it only 4.0 -> 3.2 m (most of the offset is per road,
+    not a shift of the imagery). Prototype `?roadproto` (commit ROADPROTO): world/scenery_roads.py
+    (a box east of Sheikh Zayed Bridge: 105 roads, lanes, one-way, markings stopped at
+    junctions, zebra crossings and stop lines, the shift field) and viewer/roadNetwork.js
+    (one asphalt: neutral grey from the measured colour, floor linear 0.10; lane lines,
+    yellow median edge, dashed centre lines); bridge decks in the same material and shift.
+    Also found: the bridge decks' road mirrored the sky (environment map), part of why
+    decks read lighter than roads; off for the road material. Next: the owner judges the
+    look; per-road snapping (not just a shift field) and junction shapes before a full build.
   - [ ] Known: drawing with the sun's shadows costs ~3-4 ms a frame more than without in
     the dense city (sampling on the receivers; a redraw of the map adds more, every few
     seconds in flight). Filter types and map sizes measured too noisily to choose
