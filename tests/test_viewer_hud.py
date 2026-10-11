@@ -28,6 +28,15 @@ out.ahead = hud.project(hud.worldDirection(0, 0), cam, W, H);
 out.up5 = hud.project(hud.worldDirection(0, 5 * D), cam, W, H);
 out.right10 = hud.project(hud.worldDirection(10 * D, 0), cam, W, H);
 out.behind = hud.project(hud.worldDirection(Math.PI, 0), cam, W, H);
+// The same with a reversed depth buffer (scene.js), where NDC depth cannot tell behind from ahead.
+const rev = new THREE.PerspectiveCamera(70, 1, 0.05, 120000);
+rev._reversedDepth = true;
+rev.updateProjectionMatrix();
+rev.lookAt(0, 0, -1);
+rev.updateMatrixWorld();
+out.revAhead = hud.project(hud.worldDirection(0, 0), rev, W, H);
+out.revBehind = hud.project(hud.worldDirection(Math.PI, 0), rev, W, H);
+out.revBehindPoint = hud.projectPoint(new THREE.Vector3(30, -50, 400), rev, W, H);
 out.body = [hud.bodyVector(0, 0), hud.bodyVector(90, 0), hud.bodyVector(0, 90)].map((v) => v.toArray());
 const row = (vn, ve, vd) => ({ v_north_mps: vn, v_east_mps: ve, v_down_mps: vd });
 out.fpLevel = hud.flightPathDirection(row(50, 0, 0)).toArray();
@@ -86,6 +95,9 @@ def test_conformal_directions_project_through_the_camera(out):
     assert out["up5"]["y"] == pytest.approx(500 - scale * math.tan(math.radians(5)), abs=0.05)
     assert out["right10"]["x"] == pytest.approx(500 + scale * math.tan(math.radians(10)), abs=0.05)
     assert out["behind"] is None
+    # Reversed depth: points behind the camera are still out of view (not drawn mirrored).
+    assert out["revAhead"]["x"] == pytest.approx(500, abs=0.5) and out["revAhead"]["y"] == pytest.approx(500, abs=0.5)
+    assert out["revBehind"] is None and out["revBehindPoint"] is None
 
 
 def test_body_directions(out):

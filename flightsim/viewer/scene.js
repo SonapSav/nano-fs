@@ -515,8 +515,9 @@ export class FlightScene {
   boresightX() {
     if (this.view !== "cockpit") return null;
     const fwd = new THREE.Vector3(1000, 0, 0).add(EYE_BODY).applyMatrix4(this.aircraft.matrix);
+    if (fwd.clone().applyMatrix4(this.camera.matrixWorldInverse).z >= 0) return null; // behind (reversed depth: NDC z cannot tell)
     const ndc = fwd.project(this.camera);
-    if (ndc.z > 1 || Math.abs(ndc.x) > 0.97) return null;
+    if (Math.abs(ndc.x) > 0.97) return null;
     return (ndc.x + 1) / 2;
   }
 

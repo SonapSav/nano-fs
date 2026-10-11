@@ -1572,6 +1572,11 @@ landmarks; later night lighting, shadows, haze.
     (the colour the roads it joins are drawn in), and its concrete a tone mixed from it
     (per bridge, vertex colours); Sheikh Zayed Bridge stays white. A deck and the road on
     the ground beside it now render alike (~(85, 97, 94) in a test view).
+  - [x] HUD drew a huge X (2026-10-11, the owner): the reversed depth buffer (0c8b99e)
+    broke the HUD's behind-the-camera test (NDC depth in [-1, 1]), so the runway outline
+    and extended centreline behind the aircraft were drawn mirrored in front. hud.js now
+    judges behind / beyond in the camera's own frame (as scene.js's boresight check);
+    test with a reversed-depth camera (fails on the old code). (commit HUDFIX)
   - [ ] Known: drawing with the sun's shadows costs ~3-4 ms a frame more than without in
     the dense city (sampling on the receivers; a redraw of the map adds more, every few
     seconds in flight). Filter types and map sizes measured too noisily to choose

@@ -43,15 +43,16 @@ export function worldDirection(headingRad, elevRad) {
 
 // Screen position (pixels) of a world direction seen from the camera, or null if behind.
 export function project(dir, camera, w, h) {
-  const p = camera.position.clone().addScaledVector(dir, FAR_M).project(camera);
-  if (p.z > 1 || p.z < -1) return null;
-  return { x: ((p.x + 1) / 2) * w, y: ((1 - p.y) / 2) * h };
+  return projectPoint(camera.position.clone().addScaledVector(dir, FAR_M), camera, w, h);
 }
 
 // Screen position of a world point (not a direction), or null if behind the camera.
+// Behind or beyond is judged in the camera's own frame: with a reversed depth buffer
+// (scene.js) a point behind the camera projects to a depth inside [-1, 1], mirrored.
 export function projectPoint(point, camera, w, h) {
+  const d = -point.clone().applyMatrix4(camera.matrixWorldInverse).z; // distance ahead
+  if (d < camera.near || d > camera.far) return null;
   const p = point.clone().project(camera);
-  if (p.z > 1 || p.z < -1) return null;
   return { x: ((p.x + 1) / 2) * w, y: ((1 - p.y) / 2) * h };
 }
 
