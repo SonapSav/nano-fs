@@ -1637,7 +1637,7 @@ landmarks; later night lighting, shadows, haze.
     10 x 10 km around OMAD (2026-10-11): 2,643 roads, 1,123 crossings and stop lines, 6,989
     alignment findings (|offset| 4.0 -> 2.9 m), ~9 min to build; frame time with the roads
     shown vs hidden within noise (8.1 vs 8.2 ms, 7.5 vs 8.1 ms). Service roads (41,000 ways)
-    not included. Single asphalt and level A seams (2026-10-11, commit SEAMA): one asphalt
+    not included. Single asphalt and level A seams (2026-10-11, commit bfbcf41): one asphalt
     for every road, ramp and deck (linear 0.10 grey, ground-fixed noise); road pieces that
     continue one another joined into chains (dashes run on; 2,716 pieces -> 2,421 roads);
     markings and tyre tracks stop where roads overlap at junctions, how far from the angle
