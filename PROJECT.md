@@ -1617,6 +1617,8 @@ landmarks; later night lighting, shadows, haze.
     cloud amount (clear none, few 40 % as before, scattered 50 %, broken 60 %; sky.js).
     Cost: clouds on vs off within the measurement noise (~0.3-0.6 ms) in two views with
     large clouds. (82145c9)
+  - [ ] Decide later (the owner, 2026-10-11): the clouds' whiteness and softness (clouds.js
+    PUFF: ambient, direct, base, noise, scale; easy to tune), after flying with them.
   - [ ] Known: drawing with the sun's shadows costs ~3-4 ms a frame more than without in
     the dense city (sampling on the receivers; a redraw of the map adds more, every few
     seconds in flight). Filter types and map sizes measured too noisily to choose
