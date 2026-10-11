@@ -14,7 +14,8 @@ let heardAt = 0;
 channel.addEventListener("message", (e) => {
   const m = e.data;
   heardAt = performance.now();
-  if (m.type === "state") {
+  if (m.type === "close-windows") window.close(); // the combo panel opened (combowindow.js)
+  else if (m.type === "state") {
     panel.setSession(m.hello);
     panel.setRunText(m.run ?? "");
     row = m.row;

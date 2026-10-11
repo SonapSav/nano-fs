@@ -8,86 +8,30 @@
 // map, the map and the belly camera, the camera alone (camsink.js; it needs this window to
 // be opened from the viewer). Remembered in this browser.
 
-import { Geodesy } from "./geo.js";
 import { PANEL_CHANNEL, PANEL_TIMEOUT_MS } from "./panel.js";
-import { RANGES_NM, Track, drawMap } from "./map.js";
-import { MapBackground } from "./mapTiles.js";
-import { NavTracker } from "./nav.js";
+import { MapPane } from "./mapPane.js";
 import { CameraSink } from "./camsink.js";
 
 const canvas = document.getElementById("map");
 const status = document.getElementById("status");
 const channel = new BroadcastChannel(PANEL_CHANNEL);
-const KEY = "flightsim.map";
 const LAYOUTS = ["map", "split", "camera"];
-let settings = { rangeIndex: 2, northUp: true, layout: "map" };
-try {
-  settings = { ...settings, ...JSON.parse(localStorage.getItem(KEY) ?? "{}") };
-} catch {
-  // defaults
-}
-settings.rangeIndex = Math.max(0, Math.min(RANGES_NM.length - 1, settings.rangeIndex | 0));
+const map = new MapPane(canvas, "flightsim.map", { layout: "map" });
+const settings = map.settings; // range, north up and the layout
 if (!LAYOUTS.includes(settings.layout)) settings.layout = "map";
-const save = () => {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(settings));
-  } catch {
-    // not remembered
-  }
-};
-
-let hello = null, row = null, geodesy = new Geodesy(null), heardAt = 0, dirty = true;
-let navTracker = null, nav = null; // a route's navigation (nav.js), fed every frame
-let camera = null; // what the belly camera sees (app.js camShape), drawn on the map
-const track = new Track();
-let background = null;
-try {
-  background = new MapBackground(() => (dirty = true));
-} catch {
-  background = null; // no module workers: the plain map
-}
-
-function addToTrack(r) {
-  const [n, e] = geodesy.toMap(r.lat_rad, r.lon_rad);
-  track.add(r.t_s, n, e);
-  nav = navTracker ? navTracker.update(r) : null;
-}
+const save = () => map.save();
+let heardAt = 0;
 
 channel.addEventListener("message", (e) => {
-  const m = e.data;
   heardAt = performance.now();
-  if (m.type === "state") {
-    if (m.hello?.run_id !== hello?.run_id || m.hello?.source !== hello?.source) track.clear();
-    hello = m.hello;
-    geodesy = new Geodesy(hello?.world ?? null);
-    navTracker = hello?.route ? new NavTracker(hello.route, geodesy) : null;
-    nav = null;
-    row = m.row;
-    if (row) addToTrack(row);
-    dirty = true;
-  } else if (m.type === "camera") {
-    camera = m.camera;
-    dirty = true;
-  } else if (m.type === "frame") {
-    row = m.row;
-    addToTrack(row);
-    dirty = true;
-  }
+  if (e.data.type === "close-windows") window.close(); // the combo panel opened (combowindow.js)
+  else map.message(e.data);
 });
 channel.postMessage({ type: "sync" });
 setInterval(() => {
   status.textContent = performance.now() - heardAt < PANEL_TIMEOUT_MS ? "" : "Waiting for the flight viewer window…";
 }, 1000);
 
-function zoom(dir) {
-  settings.rangeIndex = Math.max(0, Math.min(RANGES_NM.length - 1, settings.rangeIndex + dir));
-  save();
-  dirty = true;
-}
-canvas.addEventListener("wheel", (e) => {
-  e.preventDefault();
-  zoom(e.deltaY > 0 ? 1 : -1);
-}, { passive: false });
 const cameraCanvas = document.getElementById("camera");
 const cameraSink = new CameraSink(cameraCanvas, { onStatus: (t) => (document.getElementById("camera-status").textContent = t) });
 function applyLayout() {
@@ -98,7 +42,7 @@ function applyLayout() {
     cameraSink.disable();
     document.getElementById("camera-status").textContent = "";
   } else cameraSink.enable();
-  dirty = true;
+  map.dirty = true;
 }
 applyLayout();
 
@@ -119,15 +63,11 @@ document.addEventListener("keydown", (e) => {
   }
   if (["+", "=", "-", "_"].includes(e.key) || e.code === "NumpadAdd" || e.code === "NumpadSubtract") {
     e.preventDefault();
-    if (!e.repeat) zoom(e.key === "+" || e.key === "=" || e.code === "NumpadAdd" ? -1 : 1);
+    if (!e.repeat) map.zoom(e.key === "+" || e.key === "=" || e.code === "NumpadAdd" ? -1 : 1);
     return;
   }
   if (e.code === "KeyN") {
-    if (!e.repeat) {
-      settings.northUp = !settings.northUp;
-      save();
-      dirty = true;
-    }
+    if (!e.repeat) map.toggleNorthUp();
     return;
   }
   e.preventDefault();
@@ -138,20 +78,10 @@ document.addEventListener("keyup", (e) => {
   if (cameraSink.key(e.code, false)) return;
   channel.postMessage({ type: "key", event: "up", code: e.code, key: e.key, shiftKey: e.shiftKey, repeat: false });
 });
-window.addEventListener("resize", () => (dirty = true));
+window.addEventListener("resize", () => (map.dirty = true));
 
 function frame() {
-  if (dirty) {
-    dirty = false;
-    const dpr = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
-    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
-      canvas.width = Math.round(w * dpr);
-      canvas.height = Math.round(h * dpr);
-    }
-    const ctx = canvas.getContext("2d");
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (w && h) drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm: RANGES_NM[settings.rangeIndex], northUp: settings.northUp, background, nav, camera });
-  }
+  map.draw();
   requestAnimationFrame(frame);
 }
 frame();

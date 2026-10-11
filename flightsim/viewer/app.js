@@ -846,6 +846,8 @@ window.addEventListener("resize", () => (dirty = true));
 // own panel so the 3D view gets the room.
 const panelChannel = "BroadcastChannel" in window ? new BroadcastChannel(PANEL_CHANNEL) : null;
 let panelSeenAt = -Infinity;
+let comboSeenAt = -Infinity; // the combo panel (combo.html): camera, map and instruments in one window
+const comboOpen = () => performance.now() - comboSeenAt < PANEL_TIMEOUT_MS;
 const tellPanel = (msg) => panelChannel?.postMessage(msg);
 const syncPanel = () => tellPanel({ type: "state", hello: session, row: latest, run: panel.run.textContent });
 function placePanel() {
@@ -854,12 +856,26 @@ function placePanel() {
     $("panel").hidden = away;
     dirty = true;
   }
-  $("panel-window").textContent = away ? "Instruments: own window" : "Instruments window";
+  $("panel-window").textContent = away && !comboOpen() ? "Instruments: own window" : "Instruments window";
+  // While the combo panel is open it stands in for the instruments, map and camera windows.
+  const combo = comboOpen();
+  for (const id of ["panel-window", "map-window", "camera-window"]) {
+    const b = $(id);
+    if (b.disabled !== combo) {
+      b.disabled = combo;
+      if (combo) b.dataset.title ??= b.title;
+      b.title = combo ? "The combo panel is open (close it to use this window)" : b.dataset.title ?? b.title;
+    }
+  }
+  $("combo-window").textContent = combo ? "Combo panel: open" : "Combo panel";
 }
 panelChannel?.addEventListener("message", (e) => {
   const m = e.data;
   if (m.type === "alive") panelSeenAt = performance.now();
-  else if (m.type === "closed") panelSeenAt = -Infinity;
+  else if (m.type === "closed") {
+    if (!comboOpen()) panelSeenAt = -Infinity; // (an instruments window the combo panel closed)
+  } else if (m.type === "combo") comboSeenAt = performance.now();
+  else if (m.type === "combo-closed") comboSeenAt = panelSeenAt = -Infinity;
   else if (m.type === "sync") syncPanel();
   else if (m.type === "key") {
     const ev = { code: m.code, key: m.key, shiftKey: m.shiftKey, repeat: m.repeat, preventDefault() {} };
@@ -877,6 +893,9 @@ $("panel-window").addEventListener("click", () => {
 });
 $("map-window").addEventListener("click", () => {
   window.open("map.html", "flightsim-map", "popup=yes,width=900,height=900");
+});
+$("combo-window").addEventListener("click", () => {
+  window.open("combo.html", "flightsim-combo", "popup=yes,width=1600,height=900");
 });
 $("camera-window").addEventListener("click", () => {
   window.open("camera.html", "flightsim-camera", "popup=yes,width=1280,height=720");

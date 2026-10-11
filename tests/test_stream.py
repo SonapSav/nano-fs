@@ -405,6 +405,30 @@ def test_instruments_window_is_served_offline(logged_episode, env_cfg, gains):
         assert b"http://" not in content and b"https://" not in content, path
 
 
+def test_combo_panel_is_served_offline(logged_episode, env_cfg, gains):
+    """The combo panel (combo.html: camera, map and instruments in one window) and its own
+    files, with no external resources; it closes the separate windows and tells the viewer
+    it is open."""
+    data_dir, _ = logged_episode
+    paths = ("/combo.html", "/combowindow.js", "/mapPane.js", "/mapwindow.js", "/panelwindow.js", "/camerawindow.js")
+
+    async def body(port):
+        def get(path):
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as r:
+                return r.headers["Content-Type"], r.read()
+
+        return await asyncio.to_thread(lambda: [get(p) for p in paths])
+
+    files = dict(zip(paths, _with_server(data_dir, env_cfg, gains, body)))
+    assert files["/combo.html"][0].startswith("text/html") and b'src="./combowindow.js"' in files["/combo.html"][1]
+    combo = files["/combowindow.js"][1]
+    assert b'type: "close-windows"' in combo and b'type: "combo"' in combo and b'type: "combo-closed"' in combo
+    for path in ("/mapwindow.js", "/panelwindow.js", "/camerawindow.js"):
+        assert b'"close-windows"' in files[path][1], path
+    for path, (_, content) in files.items():
+        assert b"http://" not in content and b"https://" not in content, path
+
+
 def test_demonstrations_record_when_the_hud_was_in_view(env_cfg, tmp_path):
     from flightsim.datalog import read_log
     from flightsim.stream.sources import ManualSource

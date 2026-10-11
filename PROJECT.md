@@ -1643,6 +1643,17 @@ landmarks; later night lighting, shadows, haze.
     mangroves dark green; 5 chunks left with black (2 near x -21 km: no data in either
     source). New `--imagery-only` build (Sentinel, 1 m imagery, roof colours, roads,
     manifest: 29 min); scenery hash now c4e1692299bba524. (3da93e2)
+  - [x] Combo panel (2026-10-11, the owner): one window (combo.html) with the belly camera
+    top left (16:9 at the top row's height, 55 % of the window), the moving map top right
+    and the instruments across the bottom. The mouse picks the pane: over the camera drag,
+    wheel and double-click as in the camera window; over the map the wheel; + / - zoom the
+    pane under the mouse (over the instruments they go to the viewer), N north up over
+    the map; numpad camera keys always the camera; other keys fly. Opening it closes the
+    instruments, map and camera windows ("close-windows" on the instruments channel);
+    while it is open (its "combo" heartbeat) their buttons in the viewer are greyed out,
+    back when it closes. The camera inset in the 3D view (K) stays available. The map
+    window's drawing moved to mapPane.js (shared). Checked headless (data/shots/combo.py):
+    1600 x 900 and 1920 x 1080 layouts, buttons, key routing, closing. (COMMIT)
   - [ ] Decide later (the owner, 2026-10-11): the clouds' whiteness and softness (clouds.js
     PUFF: ambient, direct, base, noise, scale; easy to tune), after flying with them.
   - [ ] Road network with markings (2026-10-11, the owner: option 2, drawn roads replacing the

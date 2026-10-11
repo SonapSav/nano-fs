@@ -103,7 +103,9 @@ flightsim/          # installable package (uv_build backend)
                     #   camera.js / camsink.js / camera.html: stabilized belly camera (rendered here, shown in the
                     #     inset, the camera window and the map window; pointing recorded with demonstrations)
                     #   geo.js / gps.js: WGS84 map (port of world/geo.py); GPS unit in the panel
-                    #   map.js / map.html: moving map in its own window (same channel as the instruments window)
+                    #   map.js / map.html: moving map in its own window (same channel as the instruments window);
+                    #     mapPane.js: the map on a canvas, fed from the channel (map window and combo panel)
+                    #   combo.html / combowindow.js: camera, map and instruments in one window (the others close)
                     #   sound.js: synthesized engine, wind, stall horn, flap motor (Web Audio, driven by frames)
                     #   world.js: the flight's world (procedural or a real-world region) for every part of the viewer;
                     #     demCore.js (bit-identical to world/dem.py), demTiles.js, featureGeometry.js (region tiles, OSM

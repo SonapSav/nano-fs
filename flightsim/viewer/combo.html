@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Combo panel</title>
+<link rel="stylesheet" href="./vendor/fonts/barlow-condensed.css">
+<link rel="stylesheet" href="./theme.css">
+<link rel="stylesheet" href="./panel.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body { background: var(--panel); color: var(--marking); font: 500 clamp(14px, 2vh, 26px)/1.35 var(--font); }
+  [hidden] { display: none !important; }
+  /* The belly camera top left (16:9 at the row's height, at most 65 % of the width), the
+     moving map top right, the instruments across the bottom. */
+  #combo { display: grid; width: 100vw; height: 100dvh; grid-template-rows: 55fr 45fr; }
+  #top { display: flex; min-height: 0; }
+  #camera-box { position: relative; height: 100%; aspect-ratio: 16 / 9; max-width: 65vw; background: #000; flex: none; }
+  #map-box { position: relative; flex: 1; min-width: 0; background: #1d2a22; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  #camera { cursor: grab; }
+  #camera:active { cursor: grabbing; }
+  /* Gauges as large as the bottom row allows (five columns plus the readouts). */
+  #panel { --g: min(19vh, calc((100vw - 16em) / 5.4)); gap: 1.5vh 2vw; align-content: center; min-height: 0; }
+  #panel .readout { min-width: 12em; }
+  #panel .run { font-size: 0.8em; }
+  .status { position: absolute; left: 50%; top: 45%; transform: translateX(-50%); color: var(--dim); font: 500 16px var(--font); text-align: center; }
+  .status:empty { display: none; }
+  #status { position: fixed; left: 14px; bottom: 10px; color: var(--dim); font: 500 16px var(--font); }
+  #status:empty { display: none; }
+</style>
+</head>
+<body>
+  <div id="combo">
+    <div id="top">
+      <div id="camera-box" data-pane="camera">
+        <canvas id="camera" aria-label="Belly camera picture: drag to point, wheel to zoom, double-click to re-centre"></canvas>
+        <div id="camera-status" class="status" role="status"></div>
+      </div>
+      <div id="map-box" data-pane="map">
+        <canvas id="map" aria-label="Moving map: wheel to zoom"></canvas>
+      </div>
+    </div>
+    <section id="panel" class="panel" data-pane="panel" aria-label="Instruments"></section>
+  </div>
+  <div id="status" role="status">Waiting for the flight viewer window…</div>
+  <script type="module" src="./combowindow.js"></script>
+</body>
+</html>

@@ -10,6 +10,9 @@ const status = document.getElementById("status");
 const sink = new CameraSink(document.getElementById("camera"), { onStatus: (t) => (status.textContent = t) });
 sink.enable();
 const channel = new BroadcastChannel(PANEL_CHANNEL);
+channel.addEventListener("message", (e) => {
+  if (e.data.type === "close-windows") window.close(); // the combo panel opened (combowindow.js)
+});
 
 document.addEventListener("keydown", (e) => {
   if (e.ctrlKey || e.altKey || e.metaKey || /^F\d+$/.test(e.key)) return;
