@@ -1657,6 +1657,11 @@ landmarks; later night lighting, shadows, haze.
     fps, p95 14.4 ms, 22 frames over 30 ms (worst 126 ms) vs off 103.0, 13.8 ms, 12 (60 ms):
     ~0.7 ms a frame and hitches when a road tile is built on the main thread (to move to the
     tile worker). Not yet: roads at night (the old ribbons glowed under the street lamps).
+  - [x] Grand Mosque too bright at night (2026-10-11, the owner): the landmarks' floodlight
+    glow (emissive 0.55 x their colour) came out near white through the night exposure and
+    ACES; now 0.075, a bluer white (dim blue-grey most of the lunar month: Speirs + Major's
+    lunar lighting, Visit Abu Dhabi), shaped as ground floodlights: fading with height
+    (45 m, at least 30 %), less on surfaces facing up (landmarks.js floodlit). (commit MOSQUENIGHT)
   - [ ] Known: drawing with the sun's shadows costs ~3-4 ms a frame more than without in
     the dense city (sampling on the receivers; a redraw of the map adds more, every few
     seconds in flight). Filter types and map sizes measured too noisily to choose

@@ -452,6 +452,50 @@ const BUILDERS = { grand_mosque: grandMosque, leaning_tower: leaningTower, flat_
 
 // --- Landmarks ---------------------------------------------------------------------------------
 
+const FLOOD_H_M = 45; // floodlight fall-off with height (project choice)
+
+// A landmark material's emissive (its night floodlight) shaped as lit from the ground:
+// times exp(-height / FLOOD_H_M) (at least 0.3) and less on surfaces facing up. Once per material.
+function floodlit(material, groundM) {
+  if (material.userData.floodlit) {
+    material.userData.floodlit.value = groundM;
+    return;
+  }
+  const base = (material.userData.floodlit = { value: groundM });
+  const previous = material.onBeforeCompile;
+  material.onBeforeCompile = (shader, renderer) => {
+    previous?.call(material, shader, renderer);
+    shader.uniforms.floodBase = base;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying float vFloodY;")
+      .replace(
+        "#include <project_vertex>",
+        `#include <project_vertex>
+{
+  vec4 fp = vec4(transformed, 1.0);
+  #ifdef USE_INSTANCING
+    fp = instanceMatrix * fp;
+  #endif
+  vFloodY = (modelMatrix * fp).y;
+}`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nvarying float vFloodY;\nuniform float floodBase;")
+      .replace(
+        "#include <emissivemap_fragment>",
+        `#include <emissivemap_fragment>
+{
+  float h = max(vFloodY - floodBase, 0.0);
+  float up = dot(normal, normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz));
+  totalEmissiveRadiance *= max(exp(-h / ${FLOOD_H_M.toFixed(1)}), 0.3) * (1.0 - 0.45 * max(up, 0.0));
+}`,
+      );
+  };
+  const key = material.customProgramCacheKey?.bind(material);
+  material.customProgramCacheKey = () => `${key ? key() : ""}|floodlit`;
+  material.needsUpdate = true;
+}
+
 export class Landmarks {
   constructor(scene) {
     this.group = new THREE.Group();
@@ -465,6 +509,7 @@ export class Landmarks {
       const make = BUILDERS[m.kind];
       if (!make) continue;
       const g = make(m);
+      g.userData.ground = m.ground_m ?? 0;
       this.group.add(g);
       const box = new THREE.Box3().setFromObject(g), c = box.getCenter(new THREE.Vector3()), s = box.getSize(new THREE.Vector3());
       const R = Math.max(Math.max(s.x, s.z) / 2, 0.9 * s.y) + 25;
@@ -472,19 +517,25 @@ export class Landmarks {
     }
   }
 
-  // Floodlit at night (`night` 0-1, nightLights.js): stone, marble and gold glow in a
-  // cool white (their own colour, a little blued); glass and metal stay nearly dark
-  // (project choices, by eye; the Grand Mosque is lit in shades of blue-white).
+  // Floodlit at night (`night` 0-1, nightLights.js): stone, marble and gold lit from below
+  // as by ground floodlights: brightest at the foot, fading with height (FLOOD_H_M), walls
+  // more than roofs; a cool blue-white (the Grand Mosque's lighting follows the moon: dim
+  // blue-grey most of the month, brilliant white at the full moon; Speirs + Major, Visit
+  // Abu Dhabi, checked 2026-10-11; no moon phase here: between). Glass and metal stay nearly
+  // dark. Strengths: project choices, by eye (0.55 before 2026-10-11, flat: daylight at night).
   setNight(night) {
-    const flood = new THREE.Color(0.78, 0.86, 1.0);
+    const flood = new THREE.Color(0.55, 0.68, 1.0);
     const seen = new Set();
-    this.group.traverse((o) => {
-      const m = o.material;
-      if (!(m instanceof THREE.MeshStandardMaterial) || seen.has(m)) return;
-      seen.add(m);
-      const k = m.metalness >= 0.8 ? 0.06 : 0.55;
-      m.emissive.copy(m.color).multiply(flood).multiplyScalar(k * night);
-    });
+    for (const site of this.group.children) {
+      site.traverse((o) => {
+        const m = o.material;
+        if (!(m instanceof THREE.MeshStandardMaterial) || seen.has(m)) return;
+        seen.add(m);
+        const k = m.metalness >= 0.8 ? 0.012 : 0.075; // (the night exposure and ACES curve brighten it about 2x)
+        m.emissive.copy(m.color).multiply(flood).multiplyScalar(k * night);
+        floodlit(m, site.userData.ground ?? 0);
+      });
+    }
   }
 
   clear() {
