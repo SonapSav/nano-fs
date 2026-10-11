@@ -1598,13 +1598,15 @@ landmarks; later night lighting, shadows, haze.
   - [x] Sheikh Zayed Bridge's deck edges dark grey-green (2026-10-11, the owner's photo from
     the south shore: about sRGB (40, 60, 58) in sunlight), white only the arches, the
     spine and the lamp posts; its piers outside the spine concrete. (ade566b)
-  - [ ] Sheikh Zayed Bridge's east end against the owner's photo (2026-10-11), to decide:
-    (1) the deck there stays nearly level onto a bank about as high as the deck, but the
-    ground model (FABDEM) has the bank at 11.6 m (northern deck) and 8.4 m (southern) where
-    the deck is 20 m, so ours ramps down 8-11 m over the last ~150 m; raising the drawn
-    bank would part the viewer's ground from the physics' (same tiles today). (2) The
-    marina arch (top 30 m, a project choice from the 2026-10-10 photos) rises ~16 m above
-    the deck there; in this photo nothing east of the 74 m arch rises above the deck.
+  - [x] Sheikh Zayed Bridge's east end against the owner's photo (2026-10-11): the deck there
+    stays nearly level onto a bank about as high as the deck; FABDEM (bare earth) had
+    removed the bank (11.6 m / 8.4 m at the two decks' ends; Copernicus GLO-30, the
+    surface model it is made from: 17-18 m on the road). The build now raises approach
+    banks at landmark bridges' ends (`embankment: true`) in the height tiles from GLO-30
+    (world/scenery_embankments.py; physics and viewer read the same tiles): ends now
+    17.1 / 17.0 m, west end 9.8 m; the deck runs 20 -> ~17 m. The marina arch's top
+    lowered from 30 m (a project choice) to 18 m, the parapet there: in the photo nothing
+    east of the 74 m arch rises above the deck. (commit EMBANKFIX)
   - [ ] Known: drawing with the sun's shadows costs ~3-4 ms a frame more than without in
     the dense city (sampling on the receivers; a redraw of the map adds more, every few
     seconds in flight). Filter types and map sizes measured too noisily to choose

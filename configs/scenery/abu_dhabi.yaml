@@ -122,6 +122,23 @@ sources:
     tiles: ["123023122", "123023123", "123023132", "123023300", "123023301", "123023310"]
     min_tree_m: 3
     spacing_m: 2.5
+  dsm:
+    # Copernicus DEM GLO-30 Public (a surface model: the ground with buildings, trees and
+    # man-made banks), AWS open data (registry.opendata.aws/copernicus-dem), free licence
+    # (ESA; dataspace.copernicus.eu COP-DEM, checked 2026-10-11). Only for the approach
+    # banks at landmark bridges' ends that FABDEM's removal took (world/scenery_embankments.py;
+    # Sheikh Zayed Bridge's east end: 17-18 m on the road where FABDEM has 9-12 m). The
+    # bank: from the end while the surface model (median over `smooth_m`) is `raise_min_m`
+    # above the bare earth, then down at `grade`; flat `half_width_m` + one post either side
+    # of the road, sides falling at `side_slope`: project choices.
+    url: "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_{tile}_DEM/Copernicus_DSM_COG_10_{tile}_DEM.tif"
+    tiles: [N24_00_E054_00]
+    reach_m: 400
+    raise_min_m: 1
+    smooth_m: 30
+    grade: 0.05
+    half_width_m: 12
+    side_slope: 0.5
   # Credits shown with the scenery (the viewer's corners; full text as their tooltip and in
   # the README). EarthView's: the registry's citation (accessed on DATE from its page),
   # 2026-10-10. Wording checked 2026-10-09: FABDEM's required Copernicus statement (Earth
@@ -136,6 +153,7 @@ sources:
     - "GHS-BUILT-H R2023A (building heights), European Commission, Joint Research Centre (CC BY 4.0)."
     - "GlobalBuildingAtlas (building heights), Zhu et al. 2025, Technical University of Munich, CC BY-NC 4.0."
     - "Trees: Meta and World Resources Institute (WRI) 2024, high resolution canopy height maps, CC BY 4.0. Source imagery for CHM © 2016 Maxar."
+    - "Copernicus DEM GLO-30 (approach banks at landmark bridges), produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved."
     - "Satellogic EarthView (1 m imagery, 2022), Satellogic, CC BY 4.0; accessed on 2026-10-10 from https://registry.opendata.aws/satellogic-earthview. Modified: resampled, colour-matched to the Sentinel-2 imagery and blended into it."
 
 # Landmarks modelled in the viewer (viewer/landmarks.js) on their OSM footprints; `replace`
@@ -241,12 +259,14 @@ bridges:
   # ENR). The arches' centres measured on the 1 m imagery (map x, z), the marina arch
   # outside the southern deck there; rib width, the side arches' tops, where the crowns
   # sit (from the west end), how far the ribs part, lamp posts: project choices (the
-  # owner's photos, 2026-10-10).
-  - {name: Sheikh Zayed Bridge, kind: wave_arch, ways: [91207495, 407685949], clearance_m: 17.5, deck_depth_m: 2.5,
+  # owner's photos, 2026-10-10). The marina arch's top at the parapet there (was 30 m): in
+  # the owner's photo from the south shore (2026-10-11) nothing east of the 74 m arch rises
+  # above the deck.
+  - {name: Sheikh Zayed Bridge, kind: wave_arch, ways: [91207495, 407685949], clearance_m: 17.5, deck_depth_m: 2.5, embankment: true,
      deck_width_m: 23.6, rib_width_m: 4, rib_depth_m: [8, 5], pier_low_m: 1.5, lamp_spacing_m: 25, lamp_height_m: 12,
      arches: [{centre_xz: [2757, 474], span_m: 144, top_m: 60, ribs_apart_m: 9, side: 0, crown_at: 0.38},
               {centre_xz: [2995, 513], span_m: 74, top_m: 40, ribs_apart_m: 6, side: 0.15, crown_at: 0.45},
-              {centre_xz: [3160, 541], span_m: 50, top_m: 30, ribs_apart_m: 4, side: 1}]}
+              {centre_xz: [3160, 541], span_m: 50, top_m: 18, ribs_apart_m: 4, side: 1}]}
   # Al Maqta Bridge (1967, second arch 1997): about 300 m, steel tied (bowstring) arches,
   # one per direction (Wikipedia; Gulf News). Arch over the channel; its rise and the
   # clearance: project choices.
@@ -282,12 +302,28 @@ pinned:
   N23E054_FABDEM_V1-2.tif: d26130aacd148d3e030928d182021d15ffe317dfdf4a5ca74e5636f52914aaa2
   N24E053_FABDEM_V1-2.tif: a5c0fc649cc2d1bc04a773015273c9ba929b789fa9590d5be57524a55df3227c
   N24E054_FABDEM_V1-2.tif: 9b2ae202f8dc424579fa1bf5411845fb69a5d08903ad6adc3f92a33d9a955ed1
+  S2A_39QYG_20251024_0_L2A_b03b08_window.tif: 699a0b415252b1d93919cc1c0e7089d2223399b91010dd65ae5c1ec17bc7f407
   S2A_39QYG_20251024_0_L2A_window.tif: fe1b64131e7a0449821a224995333327a6a2d249f737c2aa961c792d1c1c6a04
+  S2A_39QZG_20251024_1_L2A_b03b08_window.tif: cb3492bf2d2571488ddb1bf2af3f1a1815d041146be919077437c0064e80799a
   S2A_39QZG_20251024_1_L2A_window.tif: 23dad3e75195891952e80807326c892073e506ecc544cce07dea91f639964326
+  S2A_39RYH_20251024_0_L2A_b03b08_window.tif: c3936c87adb5db41eda472185b05245aac4914944fa3e38fc3d45fd66d3e8c5c
   S2A_39RYH_20251024_0_L2A_window.tif: b8c10fff80ac13d8af5fd7af43a4a1ee98f31cbf43abd90a7010025cf97543b7
+  S2A_39RZH_20251024_1_L2A_b03b08_window.tif: d76ccc2269a4c2b2a237d2fa868180a293eb168fee1c80c0a2ef78708c3cecf9
   S2A_39RZH_20251024_1_L2A_window.tif: 12018509a91a7953ba0b515e4e48d268cc05a1aefbe4dcb9c0400f2aa0cf4b36
+  S2B_39QZG_20251024_0_L2A_b03b08_window.tif: 4c089e6788046eea22fbae9d34ec32b9c32e049b50bff03b02d74bf18e27411c
   S2B_39QZG_20251024_0_L2A_window.tif: 3bc9a497fec953019f00d27f20e542a2680dab5716f98dfd2bd451c366387a5e
+  S2B_39RZH_20251024_0_L2A_b03b08_window.tif: 8b7c101d5a26f47afdf12da5451d8276fa739f8681594e4c6883799d9299d3b3
   S2B_39RZH_20251024_0_L2A_window.tif: 54e077bf716c4e94e557866caba3bdef53f889ef656e265ef48ef2684ca5feed
   building_height_window.tif: b4f1426d4df42c9b562e50a9d7a908b85120ca565d5e6281fe337540ee1de6a2
+  chm_123023122.tif: e3a407de272a3a98ea770128785d81250c1645e8e8546900bba26d0f21048842
+  chm_123023123.tif: fe865b960e45220ccc1f4fe99d5310d77511fb5c4d7ab9dd1204ae6b486c3b09
+  chm_123023132.tif: 3a35cf5a2218b044017c7709b1e024b9cc69289b9b96c65e4b19537d481899bc
+  chm_123023300.tif: d7e9a0f02a332209354b449607e4a321fd5ee29c585cb14642cdc64b60080790
+  chm_123023301.tif: 1d5a1aca4823ea2e89cdb199f621fed621b1b4ff82bedb6e7ed9293c684c525b
+  chm_123023310.tif: 54e7ce33d8fbeda6f080255b9006fb2aaa91b5f4c9b241422361182b76bd2a54
+  gba_lod1_e050_n25_e055_n20.json: 9e836314a993c2a57fd4b4099e77e5cf14a501cb7d93f7b073c1900f7d45c4ca
+  gba_odbl_polygon_e050_n25_e055_n20.geojson: d68cdd176ea85f5941de16e6bcddb40c85b4a91a565fd9121c1faf7008039bb4
+  gba_polygon_e050_n25_e055_n20.geojson: a3e02e6583e6c34ee8522fed75b31189487c4fdab4d44498544ab79556269c79
   gcc-states-261008.osm.pbf: 37ddf4a1c62bf695297173744a9ff7524ae51cd4c421a75cfa5de110b80166eb
+  glo30_N24_00_E054_00.tif: aa3b6d63c48d46242ef313c5c7be098867d2a5459d43d4f1a71b04510c428793
   satellogic/listing.json: 5b51b359395a96ab9555137612b0c0b068f47e01a267536c0d530e4e5b0885b9

@@ -16,7 +16,9 @@ and the viewer read the built files through scenery.py. Steps, each repeatable:
    onto a straight slope fitted to the terrain under its centreline (`airfields.json`).
 4a. water the land cover misses, from Sentinel-2's water index at sea level (build_water).
 4b. shore distance: from each water cell to the nearest land (the viewer's shallow water).
-5. features (OpenStreetMap): roads, railways, taxiways, aprons and buildings per tile.
+5. features (OpenStreetMap): roads, railways, taxiways, aprons and buildings per tile;
+   first the approach banks at landmark bridges' ends (scenery_embankments.py, from
+   Copernicus GLO-30) are raised in the height tiles, then the bridges profiled.
 5b. high-resolution imagery (scenery_hires.py), where the region file asks for it.
 5c. building, road, bridge and runway colours from the imagery (scenery_colours.py).
 6. manifest.json: the region, its sources, every file's sha256.
@@ -272,6 +274,9 @@ def source_files(spec: RegionSpec) -> list[dict]:
     if chm:
         for t in chm["tiles"]:
             out.append({"kind": "canopy_height", "name": f"chm_{t}.tif", "url": chm["url"].format(tile=t)})
+    from flightsim.world.scenery_embankments import dsm_files
+
+    out += dsm_files(spec)
     gba = spec.sources.get("gba_heights")
     if gba:
         for f in gba["files"]:
@@ -850,7 +855,7 @@ def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print) -> dict:
     pbf = src / next(f["name"] for f in sources if f["kind"] == "osm")
     build_airfields(spec, pbf, out, log)
     bh = next((src / f["name"] for f in sources if f["kind"] == "building_height"), None)
-    build_features(spec, pbf, out, log, building_height=bh)
+    build_features(spec, pbf, out, log, building_height=bh, dsm=[src / f["name"] for f in sources if f["kind"] == "dsm"])
     if spec.sources.get("hires_imagery"):
         sources.append(build_hires(spec, out, log))  # and the building colours
     elif imagery:
@@ -880,7 +885,43 @@ def build_hires(spec: RegionSpec, out: Path, log=print) -> dict:
     return entry
 
 
-def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_height: Path | None = None) -> None:
+def _grid(spec: RegionSpec, out: Path) -> np.ndarray:
+    """The region's height posts as one grid (float64): post (row, col) at x = x0 + col *
+    POST_M (east), z = x0 + row * POST_M (south), x0 = the first tile's west edge."""
+    lo, hi = spec.ix_range
+    nt = hi - lo + 1
+    grid = np.empty((nt * HEIGHT_CELLS + 1,) * 2, dtype=np.float64)
+    for iz in range(lo, hi + 1):
+        for ix in range(lo, hi + 1):
+            r0, c0 = (iz - lo) * HEIGHT_CELLS, (ix - lo) * HEIGHT_CELLS
+            grid[r0 : r0 + HEIGHT_CELLS + 1, c0 : c0 + HEIGHT_CELLS + 1] = np.fromfile(out / heights_name(ix, iz), "<f4").reshape(HEIGHT_CELLS + 1, -1)
+    return grid
+
+
+def _write_grid(spec: RegionSpec, out: Path, grid: np.ndarray) -> None:
+    lo, hi = spec.ix_range
+    g32 = grid.astype(np.float32)
+    for iz in range(lo, hi + 1):
+        for ix in range(lo, hi + 1):
+            r0, c0 = (iz - lo) * HEIGHT_CELLS, (ix - lo) * HEIGHT_CELLS
+            (out / heights_name(ix, iz)).write_bytes(g32[r0 : r0 + HEIGHT_CELLS + 1, c0 : c0 + HEIGHT_CELLS + 1].astype("<f4").tobytes())
+
+
+def _embankments(spec: RegionSpec, g: geo.Geodesy, ways: list[dict], tiles: dict, out: Path, dsm: list[Path], log=print) -> None:
+    """Approach banks at landmark bridges' ends (scenery_embankments.py), into the height
+    tiles before the bridges' profiles are taken from them."""
+    from flightsim.world.scenery_embankments import build_embankments
+
+    if not dsm or not any(m.get("embankment") for m in spec.sources.get("bridges") or []):
+        return
+    roads = [np.asarray(l, float).reshape(-1, 2) for t in tiles.values() for lines in t["roads"].values() for l in lines]
+    grid = _grid(spec, out)
+    done = build_embankments(spec, g, ways, roads, grid, spec.ix_range[0] * TILE_SIZE_M, POST_M, dsm, log)
+    if any(d["posts"] for d in done):
+        _write_grid(spec, out, grid)
+
+
+def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_height: Path | None = None, dsm: list[Path] | None = None) -> None:
     from flightsim.world.scenery_osm import extract_features, extract_parts
 
     g = geo.Geodesy("wgs84", spec.origin_lat_deg, spec.origin_lon_deg)
@@ -889,7 +930,9 @@ def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_h
     marks = spec.sources.get("landmarks") or []
     tiles = extract_features(pbf, g, region_bounds_deg(spec, 0.0), half, TILE_SIZE_M, capture={o for m in marks for o in _osm_ids(m)})
     captured = tiles.pop("captured", {})
-    _bridges(spec, tiles.pop("bridges", []), out, log)
+    ways = tiles.pop("bridges", [])
+    _embankments(spec, g, ways, tiles, out, dsm or [], log)
+    _bridges(spec, ways, out, log)
     if spec.sources.get("gba_heights"):  # first: per building; GHS's cell averages for the rest
         from flightsim.world.scenery_heights import gba_heights
 
