@@ -1665,7 +1665,7 @@ landmarks; later night lighting, shadows, haze.
     2012 s); the OSM features are freed before the tree workers start; the tree, 1 m imagery
     and road steps run no more workers than the free memory holds (scenery.build_workers,
     measured peaks 0.6 / 0.7 / 0.35 GB a worker); `--workers N` by hand; README: memory
-    note, "about an hour" (estimate from the steps' times, not a timed full build). (COMMIT)
+    note, "about an hour" (estimate from the steps' times, not a timed full build). (b1be976)
   - [ ] Decide later (the owner, 2026-10-11): the clouds' whiteness and softness (clouds.js
     PUFF: ambient, direct, base, noise, scale; easy to tune), after flying with them.
   - [ ] Road network with markings (2026-10-11, the owner: option 2, drawn roads replacing the
