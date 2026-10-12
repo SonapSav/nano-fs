@@ -1671,7 +1671,7 @@ landmarks; later night lighting, shadows, haze.
     walls along the aerodrome outline, way 159458774, 9.06 km of its 9.05), else the viewer's
     3 m; the feature tiles' `wall_m` (one per wall). Side effect: 16 other walls in the region
     with an OSM height tag (2-8 m) now drawn at it. Full build: scenery hash
-    ef2f53c1f04ec94c. (COMMIT)
+    ef2f53c1f04ec94c. (30d5dd2)
   - [ ] Decide later (the owner, 2026-10-11): the clouds' whiteness and softness (clouds.js
     PUFF: ambient, direct, base, noise, scale; easy to tune), after flying with them.
   - [ ] Road network with markings (2026-10-11, the owner: option 2, drawn roads replacing the
