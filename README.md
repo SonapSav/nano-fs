@@ -92,7 +92,7 @@ uv run python scripts/docker.py up -d --build viewer   # or: docker compose up -
 The first start designs the LQR gain schedule (about 15 s) and caches it in `data/`.
 
 The Abu Dhabi scenery is built once from its open data sources (downloads about 6 GB
-into `data/scenery/`, 5 GB of it the 1 m imagery, then about an hour on 12 cores):
+into `data/scenery/`, 5 GB of it the 1 m imagery, then about 55 minutes on 12 cores):
 
 ```sh
 uv run --group scenery python scripts/build_scenery.py configs/scenery/abu_dhabi.yaml
@@ -111,7 +111,7 @@ Options (all after the region file):
 **If the terminal closes or the build stops without an error** (typically right after the
 last landmark, when the features and trees start): the PC ran out of memory and Linux
 stopped the build. The parallel steps (trees, 1 m imagery, roads) need up to about 7 GB
-with 12 workers; they start fewer when less memory is free, but other programs can still
+with 12 workers (a full build peaked at 7.0 GB); they start fewer when less memory is free, but other programs can still
 take it while they run. To confirm, look for the kernel's message:
 
 ```sh

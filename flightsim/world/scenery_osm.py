@@ -315,10 +315,13 @@ def extract_parts(pbf_path, geodesy: geo.Geodesy, sites: dict[str, tuple[float, 
     return out
 
 
-def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: float, tile_m: float, capture: set | None = None) -> dict:
+def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: float, tile_m: float, capture: set | None = None,
+                     wall_heights: dict | None = None) -> dict:  # fmt: skip
     """{(ix, iz): {"roads": {class: [polyline, ...]}, "rail": [...], "taxiway": [...],
     "apron": [ring, ...], "buildings": [[height_m, source, ring], ...], "wall": [polyline, ...],
-    "fence": [polyline, ...]}} (barrier=wall / fence: walls and fences) in world x (east),
+    "wall_m": [height_m or None, ...] (per wall: its OSM height tag, else `wall_heights`
+    {way id: metres}, else None: the viewer's default), "fence": [polyline, ...]}}
+    (barrier=wall / fence: walls and fences) in world x (east),
     z (south) metres rounded to 0.1, for the tiles of the region. Lines are cut at tile
     edges; areas go to the tile of their centroid (outer rings only). `capture`: OSM
     objects ("way/<id>", "relation/<id>") whose first outer ring and its inner rings are
@@ -335,16 +338,18 @@ def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: fl
     bridges: list[dict] = []
 
     def tile(key):
-        return tiles.setdefault(key, {"roads": {}, "rail": [], "taxiway": [], "apron": [], "buildings": [], "wall": [], "fence": []})
+        return tiles.setdefault(key, {"roads": {}, "rail": [], "taxiway": [], "apron": [], "buildings": [], "wall": [], "wall_m": [], "fence": []})
 
     def xz(lat, lon):
         north, east = geodesy.to_map(math.radians(lat), math.radians(lon))
         return round(east, 1), round(-north, 1)
 
-    def add_lines(kind, pts, cls=None):
+    def add_lines(kind, pts, cls=None, height_m=None):
         for key, lines in _polylines_by_tile(pts, tile_m).items():
             t = tile(key)
             (t["roads"].setdefault(cls, []) if kind == "roads" else t[kind]).extend(lines)
+            if kind == "wall":
+                t["wall_m"].extend([height_m] * len(lines))
 
     def add_area(kind, ring, extra=None):
         if len(ring) < 3:
@@ -403,7 +408,8 @@ def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: fl
                             "lanes": _metres(tags.get("lanes")), "layer": _metres(tags.get("layer")) or 1,
                             "name": tags.get("bridge:name") or tags.get("name:en") or tags.get("name")})  # fmt: skip
             continue
-        add_lines(kind, pts, cls)
+        height_m = (_metres(tags.get("height")) or (wall_heights or {}).get(o.id)) if kind == "wall" else None
+        add_lines(kind, pts, cls, height_m)
     if capture:
         tiles["captured"] = captured
     tiles["bridges"] = sorted(bridges, key=lambda b: b["id"])

@@ -271,16 +271,18 @@ const ROAD_GREY = [0x5a, 0x5c, 0x5e].map((v) => srgbToLinear(v / 255)); // build
 const PAVED_GREY = [0x7d, 0x7f, 0x80].map((v) => srgbToLinear(v / 255));
 
 // Walls and fences (OSM barrier=wall / fence): upright strips along their lines on the
-// drawn ground, both faces, walls WALL_M high and solid (render colour), fences FENCE_M
-// and see-through (the material's mesh pattern). Heights: project choices.
+// drawn ground, both faces, walls WALL_M high (or their own height: the tile's `wall_m`,
+// from OSM or the region file, e.g. OMAD's 4 m perimeter wall) and solid (render colour),
+// fences FENCE_M and see-through (the material's mesh pattern). Heights: project choices.
 const WALL_M = 3.0, FENCE_M = 2.4;
 
 export function barrierData(f, tiles, segments = null) {
   const ground = drawnGround(tiles, segments);
   const out = {};
-  for (const [kind, h] of [["wall", WALL_M], ["fence", FENCE_M]]) {
+  for (const [kind, hDefault] of [["wall", WALL_M], ["fence", FENCE_M]]) {
     const m = new Mesh(false, true);
-    for (const line of f[kind] ?? []) {
+    for (const [n, line] of (f[kind] ?? []).entries()) {
+      const h = (kind === "wall" && f.wall_m?.[n]) || hDefault;
       let along = 0;
       for (let k = 0; k + 3 < line.length; k += 2) {
         const ax = line[k], az = line[k + 1], bx = line[k + 2], bz = line[k + 3], len = Math.hypot(bx - ax, bz - az);

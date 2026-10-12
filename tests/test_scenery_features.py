@@ -46,13 +46,14 @@ def test_features_from_osm(tmp_path):
         lat, lon = ll(n, e)
         xml.append(f'<node id="{i}" version="1" lat="{lat:.9f}" lon="{lon:.9f}"/>')
     ways = [(10, [1, 2], {"highway": "primary"}), (11, [3, 4, 5, 6, 3], {"building": "yes", "building:levels": "4"}),
-            (12, [7, 8], {"highway": "footway"}), (13, [3, 4], {"highway": "trunk", "bridge": "yes", "lanes": "2", "name": "B"})]  # fmt: skip
+            (12, [7, 8], {"highway": "footway"}), (13, [3, 4], {"highway": "trunk", "bridge": "yes", "lanes": "2", "name": "B"}),
+            (14, [7, 8], {"barrier": "wall"}), (15, [5, 6], {"barrier": "wall"}), (16, [4, 5], {"barrier": "wall", "height": "2.5"})]  # fmt: skip
     for wid, nds, tags in ways:
         xml.append(f'<way id="{wid}" version="1">' + "".join(f'<nd ref="{n}"/>' for n in nds)
                    + "".join(f'<tag k="{k}" v="{v}"/>' for k, v in tags.items()) + "</way>")  # fmt: skip
     xml.append("</osm>")
     (tmp_path / "t.osm").write_text("\n".join(xml))
-    f = extract_features(tmp_path / "t.osm", g, (23.9, 53.9, 24.1, 54.1), 8000, 4000)
+    f = extract_features(tmp_path / "t.osm", g, (23.9, 53.9, 24.1, 54.1), 8000, 4000, wall_heights={14: 4.0})
     (bridge,) = f.pop("bridges")  # on a bridge: out of the ground roads, whole
     assert (bridge["id"], bridge["nodes"], bridge["cls"], bridge["lanes"], bridge["name"]) == (13, [3, 4], "trunk", 2.0, "B")
     roads = {k: v["roads"] for k, v in f.items() if v["roads"]}
@@ -62,6 +63,10 @@ def test_features_from_osm(tmp_path):
     assert b[0] == pytest.approx(4 * 3.3 + 1.0) and b[1] == "levels" and len(b[2]) == 8  # 4 corners, x z each
     corners = {(round(b[2][k]), round(b[2][k + 1])) for k in range(0, 8, 2)}
     assert corners == {(1000, 1000), (1040, 1000), (1040, 1030), (1000, 1030)}  # x east, z south
+    # Walls' heights, one per wall: the region file's (way 14: OMAD's perimeter wall, 4 m),
+    # OSM's height tag (way 16), else None (the viewer's default).
+    walls = {(round(line[0]), round(line[1])): h for t in f.values() for line, h in zip(t["wall"], t["wall_m"], strict=True)}
+    assert walls == {(50, -50): 4.0, (1040, 1030): None, (1040, 1000): 2.5}
 
 
 @pytest.mark.skipif(NODE is None, reason="node not installed")
@@ -76,6 +81,7 @@ def test_feature_meshes():
       roads: {{ primary: [[100, 100, 300, 100]] }}, rail: [], taxiway: [],
       apron: [[1000, 1000, 1100, 1000, 1100, 1100, 1050, 1050, 1000, 1100]],  // concave
       buildings: [[20, "levels", [2000, 2000, 2030, 2000, 2030, 2020, 2000, 2020]], [80, "height", [3000, 3000, 3010, 3000, 3010, 3010, 3000, 3010]]],
+      wall: [[500, 500, 510, 500], [600, 500, 610, 500]], wall_m: [4, null],
     }};
     const g = fg.featureGroundData(f, tiles);
     const b = fg.buildingData(f, tiles, 0), tall = fg.buildingData(f, tiles, 50);
@@ -91,7 +97,10 @@ def test_feature_meshes():
     console.log(JSON.stringify({{
       roadY: [Math.min(...ys(g.roads)), Math.max(...ys(g.roads))], roadTris: g.roads.index.length / 3,
       apronTris: g.paved.index.length / 3, concave: fg.triangulate([0, 0, 10, 0, 10, 10, 5, 5, 0, 10]).length / 3,
-      top: Math.max(...ys(b)), outward, tallCount: tall.position.length / 3, allCount: b.position.length / 3,
+      top: Math.max(...ys(b)), outward,
+      wallTops: (() => {{ const w = fg.barrierData(f, tiles).wall; const t = [0, 0];
+        for (let i = 0; i < w.position.length / 3; i++) {{ const k = w.position[3 * i] < 550 ? 0 : 1; t[k] = Math.max(t[k], w.position[3 * i + 1]); }}
+        return t; }})(), tallCount: tall.position.length / 3, allCount: b.position.length / 3,
       // A building with the imagery's colour (0x808080): its roof vertices (facade along -1).
       roof: (() => {{ const c = fg.buildingData({{ buildings: [[10, "osm", [0, 0, 10, 0, 10, 10, 0, 10], 0x808080]] }}, tiles, 0);
         const k = [...Array(c.position.length / 3).keys()].find((i) => c.facade[3 * i] === -1);
@@ -104,6 +113,7 @@ def test_feature_meshes():
     assert out["apronTris"] == 3 and out["concave"] == 3  # 5 corners: 3 triangles
     assert out["top"] == pytest.approx(10 + 80)
     assert out["outward"]
+    assert out["wallTops"] == pytest.approx([10 + 4, 10 + 3])  # its own height, else the 3 m default
     assert 0 < out["tallCount"] < out["allCount"]  # only the 80 m tower on distant tiles
     grey = (128 / 255 * 0.9478672986 + 0.0521327014) ** 2.4 * 1.4  # sRGB to linear, brightened as the imagery
     assert out["roof"] == pytest.approx([grey] * 3, rel=1e-5)

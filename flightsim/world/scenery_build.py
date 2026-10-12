@@ -953,7 +953,8 @@ def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_h
     lo, hi = spec.ix_range
     half = max(abs(lo), hi + 1) * TILE_SIZE_M
     marks = spec.sources.get("landmarks") or []
-    tiles = extract_features(pbf, g, region_bounds_deg(spec, 0.0), half, TILE_SIZE_M, capture={o for m in marks for o in _osm_ids(m)})
+    walls = {int(k): float(v) for k, v in (spec.sources["osm"].get("wall_heights") or {}).items()}
+    tiles = extract_features(pbf, g, region_bounds_deg(spec, 0.0), half, TILE_SIZE_M, capture={o for m in marks for o in _osm_ids(m)}, wall_heights=walls)
     captured = tiles.pop("captured", {})
     ways = tiles.pop("bridges", [])
     _embankments(spec, g, ways, tiles, out, dsm or [], log)
@@ -974,7 +975,7 @@ def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_h
             sites[m["name"]] = (cx, cz, max(math.hypot(x - cx, z - cz) for x, z in zip(xs, zs)))
     parts = extract_parts(pbf, g, sites) if sites else {}
     _landmarks(spec, marks, captured, tiles, out, log, parts)
-    empty = {"roads": {}, "rail": [], "taxiway": [], "apron": [], "buildings": [], "wall": [], "fence": []}
+    empty = {"roads": {}, "rail": [], "taxiway": [], "apron": [], "buildings": [], "wall": [], "wall_m": [], "fence": []}
     counts = {"buildings": 0, "roads": 0}
     for iz in range(lo, hi + 1):
         for ix in range(lo, hi + 1):

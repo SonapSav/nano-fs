@@ -26,6 +26,10 @@ sources:
   osm:
     # Geofabrik's dated extract of the GCC states (OpenStreetMap, ODbL), pinned by date.
     url: https://download.geofabrik.de/asia/gcc-states-261008.osm.pbf
+    # Wall heights (m) by OSM way, where the wall has no height tag (others: the viewer's
+    # 3 m). OMAD's perimeter wall, about 4 m (the owner, 2026-10-12): the three walls that
+    # follow the aerodrome's outline (way 159458774) all the way round, 9.06 km of its 9.05.
+    wall_heights: {391966353: 4.0, 200430162: 4.0, 391966111: 4.0}
   imagery:
     # Sentinel-2 L2A surface reflectance, red/green/blue bands (B04, B03, B02; 10 m), AWS Earth
     # Search (collection sentinel-2-l2a; reflectance = value x 0.0001 - 0.1 per the items'
