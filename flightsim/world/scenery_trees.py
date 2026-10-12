@@ -21,6 +21,8 @@ import numpy as np
 from flightsim.world.scenery import TILE_SIZE_M, features_name
 
 WEB_MERCATOR_R = 6378137.0
+STRIP_ROWS = 500  # canopy_grid's rows at a time
+WORKER_GB = 0.6  # a tile worker's peak memory (measured 2026-10-12: 12 workers 6.3 GB in all; 15.2 GB before the strips)
 
 
 def canopy_grid(sources: list[Path], geodesy, ix: int, iz: int) -> np.ndarray:
@@ -44,20 +46,28 @@ def canopy_grid(sources: list[Path], geodesy, ix: int, iz: int) -> np.ndarray:
     from scipy.ndimage import map_coordinates
 
     c = (np.arange(n) + 0.5) / step
-    rr, cc = np.meshgrid(c, c, indexing="ij")
-    MX = map_coordinates(mx, [rr, cc], order=1)
-    MY = map_coordinates(my, [rr, cc], order=1)
-    for path in sources:
-        with rasterio.open(path) as ds:
-            inv = ~ds.transform
-            col, row = inv * (MX, MY)
-            col, row = np.floor(col).astype(np.int64), np.floor(row).astype(np.int64)
-            ok = (col >= 0) & (col < ds.width) & (row >= 0) & (row < ds.height)
-            if not ok.any():
-                continue
-            r0, r1, c0, c1 = row[ok].min(), row[ok].max() + 1, col[ok].min(), col[ok].max() + 1
-            win = ds.read(1, window=Window(c0, r0, c1 - c0, r1 - r0))
-            out[ok] = win[row[ok] - r0, col[ok] - c0]
+    files = [rasterio.open(path) for path in sources]
+    try:
+        # In strips of STRIP_ROWS rows: the whole tile's float64 coordinate grids took ~1 GB
+        # a worker (the build ran out of memory on a 16 GB PC; the same values either way).
+        for a in range(0, n, STRIP_ROWS):
+            rr, cc = np.meshgrid(c[a : a + STRIP_ROWS], c, indexing="ij")
+            MX = map_coordinates(mx, [rr, cc], order=1)
+            MY = map_coordinates(my, [rr, cc], order=1)
+            strip = out[a : a + STRIP_ROWS]
+            for ds in files:
+                inv = ~ds.transform
+                col, row = inv * (MX, MY)
+                col, row = np.floor(col).astype(np.int64), np.floor(row).astype(np.int64)
+                ok = (col >= 0) & (col < ds.width) & (row >= 0) & (row < ds.height)
+                if not ok.any():
+                    continue
+                r0, r1, c0, c1 = row[ok].min(), row[ok].max() + 1, col[ok].min(), col[ok].max() + 1
+                win = ds.read(1, window=Window(c0, r0, c1 - c0, r1 - r0))
+                strip[ok] = win[row[ok] - r0, col[ok] - c0]
+    finally:
+        for ds in files:
+            ds.close()
     return out
 
 
@@ -97,6 +107,10 @@ def build_trees(spec, out: Path, log=print, workers: int | None = None) -> None:
     g = geo.Geodesy("wgs84", spec.origin_lat_deg, spec.origin_lon_deg)
     lo, hi = spec.ix_range
     jobs = [(out, ix, iz, sources, g, float(chm["min_tree_m"]), float(chm["spacing_m"])) for iz in range(lo, hi + 1) for ix in range(lo, hi + 1)]
+    from flightsim.world.scenery import build_workers
+
+    workers = build_workers(WORKER_GB, workers)
+    log(f"trees: {workers} workers")
     with concurrent.futures.ProcessPoolExecutor(workers, mp_context=multiprocessing.get_context("fork")) as ex:
         counts = list(ex.map(_tile, jobs, chunksize=2))
     log(f"trees: {sum(counts)} from the canopy height map")

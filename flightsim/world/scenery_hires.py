@@ -41,6 +41,7 @@ import numpy as np
 
 CHUNK_PX = 512  # pixels per chunk side, every level
 LEVELS = (1.0, 4.0)  # metres per pixel of level 0 and level 1
+WORKER_GB = 0.7  # a block worker's peak memory (measured 2026-10-12: 12 workers 7.2 GB in all; scenery.build_workers)
 TILE_PX = 384  # EarthView tile side (pixels, 1 m)
 HIRES_FORMAT = 1
 _S3_NS = "{http://s3.amazonaws.com/doc/2006-03-01/}"
@@ -554,6 +555,10 @@ def build_hires(spec, out: Path, log=print, workers: int | None = None) -> None:
     g = geo.Geodesy("wgs84", spec.origin_lat_deg, spec.origin_lon_deg)
     size = int((x1 - x0) / COARSE_M)
     e, n = _utm_grid(g, int(hi["epsg"]), x0, x0, COARSE_M, size)
+    from flightsim.world.scenery import build_workers
+
+    workers = build_workers(WORKER_GB, workers)
+    log(f"hires imagery: {workers} workers")
     with concurrent.futures.ProcessPoolExecutor(workers, mp_context=multiprocessing.get_context("fork")) as ex:
         thumbs = list(ex.map(_thumb, tiles.path, chunksize=64))
     log(f"hires imagery: {len(thumbs)} tiles read")

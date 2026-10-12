@@ -208,3 +208,27 @@ def test_landmarks(tmp_path):
     assert 255 < m["qibla_deg"] < 265  # Mecca from Abu Dhabi: west by south
     assert [b[0] for b in tiles[(0, 0)]["buildings"]] == [9]  # the box inside the footprint replaced
     assert (m["footprints"][0]["height_m"], m["footprints"][0]["height_source"]) == (33, "height")  # and its height kept
+
+
+def test_build_workers_fit_the_free_memory(monkeypatch, tmp_path):
+    """Parallel build steps run no more workers than the free memory holds (a 16 GB PC ran
+    out of memory with twelve tree workers), one per core at most, at least one; a given
+    count is kept."""
+    import builtins
+
+    from flightsim.world import scenery
+
+    real_open = builtins.open
+
+    def meminfo(gb):
+        f = tmp_path / f"meminfo_{gb}"
+        f.write_text(f"MemTotal: 16000000 kB\nMemAvailable: {int(gb * 1e6)} kB\n")
+        monkeypatch.setattr(builtins, "open", lambda p, *a, **k: real_open(f if p == "/proc/meminfo" else p, *a, **k))
+
+    monkeypatch.setattr(scenery.os, "cpu_count", lambda: 12)
+    meminfo(8.0)
+    assert scenery.build_workers(1.0) == 6  # (8 - 2 reserved) / 1 GB
+    assert scenery.build_workers(0.25) == 12  # no more than the cores
+    assert scenery.build_workers(1.0, workers=3) == 3
+    meminfo(1.0)
+    assert scenery.build_workers(1.0) == 1  # always at least one

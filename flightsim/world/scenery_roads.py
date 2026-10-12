@@ -30,6 +30,7 @@ LANE_M = 3.65  # (project choice; UAE lanes are about 3.5-3.75 m)
 SHOULDERS_M = 2.0  # both edges together, beyond the outer lane lines (project choice)
 DEFAULT_LANES = {"motorway": 3, "trunk": 3, "primary": 2, "secondary": 2, "tertiary": 2, "unclassified": 2, "residential": 2, "living_street": 1}
 CELL_M = 200.0
+WORKER_GB = 0.35  # an alignment worker's peak memory (measured 2026-10-12: 12 workers 3.4 GB in all; scenery.build_workers)
 STEP_M = 25.0
 DENSE_M = 5.0  # drawn roads: a point at least this often (they follow the ground)
 
@@ -571,6 +572,10 @@ def build_roads(spec, out: Path, log=print, workers: int | None = None) -> None:
     keys = sorted({_tile_of(int(k.split(",")[0]) * cm + 1, int(k.split(",")[1]) * cm + 1) for k in hires["levels"][0]["chunks"]})
     _JOB.update(out=out, hires=hires, roads=[r for r in roads if not r["bridge"]])
     found = []
+    from flightsim.world.scenery import build_workers
+
+    workers = build_workers(WORKER_GB, workers)
+    log(f"roads: {workers} workers")
     with concurrent.futures.ProcessPoolExecutor(workers, mp_context=multiprocessing.get_context("fork")) as ex:
         for n, f in enumerate(ex.map(_tile_findings, keys), 1):
             found.append(f)

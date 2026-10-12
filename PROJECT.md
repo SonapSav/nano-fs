@@ -1657,6 +1657,15 @@ landmarks; later night lighting, shadows, haze.
     back when it closes. The camera inset in the 3D view (K) stays available. The map
     window's drawing moved to mapPane.js (shared). Checked headless (data/shots/combo.py):
     1600 x 900 and 1920 x 1080 layouts, buttons, key routing, closing. (c172f60)
+  - [x] Scenery build out of memory on another PC (2026-10-12, the owner: the terminal
+    closed after the last landmark): the tree step's 12 forked workers each built the
+    whole 4 km tile's float64 coordinate grids (~1-1.3 GB a worker; 15.2 GB in all,
+    measured), and the out-of-memory killer took the terminal. canopy_grid now works in
+    500-row strips (identical trees, all 676 tiles byte for byte; 6.3 GB, 1197 s against
+    2012 s); the OSM features are freed before the tree workers start; the tree, 1 m imagery
+    and road steps run no more workers than the free memory holds (scenery.build_workers,
+    measured peaks 0.6 / 0.7 / 0.35 GB a worker); `--workers N` by hand; README: memory
+    note, "about an hour" (estimate from the steps' times, not a timed full build). (COMMIT)
   - [ ] Decide later (the owner, 2026-10-11): the clouds' whiteness and softness (clouds.js
     PUFF: ambient, direct, base, noise, scale; easy to tune), after flying with them.
   - [ ] Road network with markings (2026-10-11, the owner: option 2, drawn roads replacing the

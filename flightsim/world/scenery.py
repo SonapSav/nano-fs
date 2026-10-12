@@ -29,6 +29,7 @@ file's sha256; `scenery_hash` is the hash of the manifest, which logs record.
 
 import hashlib
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -109,3 +110,20 @@ def load_region(name: str, root: Path = SCENERY_DIR) -> Region:
         name=manifest["name"], origin_lat_deg=manifest["origin_lat_deg"], origin_lon_deg=manifest["origin_lon_deg"],
         ix_min=t["ix_min"], ix_max=t["ix_max"], iz_min=t["iz_min"], iz_max=t["iz_max"], manifest=manifest, path=path,
     )  # fmt: skip
+
+
+def build_workers(per_worker_gb: float, workers: int | None = None, reserve_gb: float = 2.0) -> int:
+    """How many worker processes a parallel build step runs: `workers` if given, else one
+    per CPU core, but no more than the memory available now (Linux /proc/meminfo, less
+    `reserve_gb` for the main process and the desktop) holds at `per_worker_gb` each (the
+    step's measured peak). On a 16 GB PC the build's twelve tree workers ran out of memory
+    and the out-of-memory killer took the terminal with them (2026-10-12)."""
+    if workers:
+        return workers
+    cores = os.cpu_count() or 1
+    try:
+        with open("/proc/meminfo") as f:
+            kb = next(int(line.split()[1]) for line in f if line.startswith("MemAvailable:"))
+    except (OSError, StopIteration, ValueError):
+        return cores
+    return max(1, min(cores, int((kb / 1e6 - reserve_gb) / per_worker_gb)))

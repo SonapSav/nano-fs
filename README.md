@@ -92,11 +92,15 @@ uv run python scripts/docker.py up -d --build viewer   # or: docker compose up -
 The first start designs the LQR gain schedule (about 15 s) and caches it in `data/`.
 
 The Abu Dhabi scenery is built once from its open data sources (downloads about 6 GB
-into `data/scenery/`, 5 GB of it the 1 m imagery, then about 20 minutes):
+into `data/scenery/`, 5 GB of it the 1 m imagery, then about an hour on 12 cores):
 
 ```sh
 uv run --group scenery python scripts/build_scenery.py configs/scenery/abu_dhabi.yaml
 ```
+
+The parallel steps (trees, 1 m imagery, roads) need up to about 7 GB of memory with 12
+workers; they run fewer workers when less memory is free. On a PC with little memory to
+spare, `--workers 4` (or fewer) sets the number by hand.
 
 The Flights drawer then offers the Abu Dhabi scenarios (they need the built scenery).
 

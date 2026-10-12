@@ -844,7 +844,7 @@ def write_manifest(spec: RegionSpec, sources: list[dict], out: Path) -> dict:
     return manifest
 
 
-def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print) -> dict:
+def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print, workers: int | None = None) -> dict:
     out = root / spec.name
     sources = download(spec, root, log)
     (out / "tiles").mkdir(parents=True, exist_ok=True)
@@ -861,20 +861,20 @@ def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print) -> dict:
     pbf = src / next(f["name"] for f in sources if f["kind"] == "osm")
     build_airfields(spec, pbf, out, log)
     bh = next((src / f["name"] for f in sources if f["kind"] == "building_height"), None)
-    build_features(spec, pbf, out, log, building_height=bh, dsm=[src / f["name"] for f in sources if f["kind"] == "dsm"])
+    build_features(spec, pbf, out, log, building_height=bh, dsm=[src / f["name"] for f in sources if f["kind"] == "dsm"], workers=workers)
     if spec.sources.get("hires_imagery"):
-        sources.append(build_hires(spec, out, log))  # and the building colours
+        sources.append(build_hires(spec, out, log, workers))  # and the building colours
     elif imagery:
         from flightsim.world.scenery_colours import colour_features
 
         colour_features(spec, out, log)
     from flightsim.world.scenery_roads import build_roads
 
-    build_roads(spec, out, log)  # the drawn road network (after the 1 m imagery: aligned to it)
+    build_roads(spec, out, log, workers)  # the drawn road network (after the 1 m imagery: aligned to it)
     return write_manifest(spec, sources, out)
 
 
-def build_imagery_only(spec: RegionSpec, root: Path = SCENERY_DIR, log=print) -> dict:
+def build_imagery_only(spec: RegionSpec, root: Path = SCENERY_DIR, log=print, workers: int | None = None) -> dict:
     """Only the imagery of a built region and what is made from it: the Sentinel imagery,
     the 1 m imagery and the building colours, and the road network (aligned to the 1 m
     imagery); then the manifest."""
@@ -883,14 +883,14 @@ def build_imagery_only(spec: RegionSpec, root: Path = SCENERY_DIR, log=print) ->
     src = out / "sources"
     build_imagery(spec, [src / f["name"] for f in sources if f["kind"] == "imagery"], out, log)
     if spec.sources.get("hires_imagery"):
-        sources.append(build_hires(spec, out, log))
+        sources.append(build_hires(spec, out, log, workers))
     from flightsim.world.scenery_roads import build_roads
 
-    build_roads(spec, out, log)
+    build_roads(spec, out, log, workers)
     return write_manifest(spec, sources, out)
 
 
-def build_hires(spec: RegionSpec, out: Path, log=print) -> dict:
+def build_hires(spec: RegionSpec, out: Path, log=print, workers: int | None = None) -> dict:
     """Only the high-resolution imagery (scenery_hires.py) of a built region; returns its
     listing as a source entry (pinned like the others)."""
     from flightsim.world import scenery_hires
@@ -903,7 +903,7 @@ def build_hires(spec: RegionSpec, out: Path, log=print) -> dict:
     pin = spec.pinned.get(entry["name"])
     if pin and pin != entry["sha256"]:
         raise ValueError(f"{entry['name']}: sha256 {entry['sha256']} differs from the pinned {pin}; delete it to list again")
-    scenery_hires.build_hires(spec, out, log)
+    scenery_hires.build_hires(spec, out, log, workers)
     from flightsim.world.scenery_colours import colour_features
 
     colour_features(spec, out, log)  # from the new imagery
@@ -946,7 +946,7 @@ def _embankments(spec: RegionSpec, g: geo.Geodesy, ways: list[dict], tiles: dict
         _write_grid(spec, out, grid)
 
 
-def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_height: Path | None = None, dsm: list[Path] | None = None) -> None:
+def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_height: Path | None = None, dsm: list[Path] | None = None, workers: int | None = None) -> None:
     from flightsim.world.scenery_osm import extract_features, extract_parts
 
     g = geo.Geodesy("wgs84", spec.origin_lat_deg, spec.origin_lon_deg)
@@ -984,7 +984,8 @@ def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_h
             counts["roads"] += sum(len(v) for v in t["roads"].values())
             (out / features_name(ix, iz)).write_text(json.dumps(t, separators=(",", ":"), sort_keys=True))
     log(f"features: {counts['buildings']} buildings, {counts['roads']} road pieces")
+    del tiles, captured, ways, parts  # not inherited by the tree workers (fork)
     if spec.sources.get("canopy_height"):
         from flightsim.world.scenery_trees import build_trees
 
-        build_trees(spec, out, log)
+        build_trees(spec, out, log, workers)
