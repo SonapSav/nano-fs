@@ -98,9 +98,32 @@ into `data/scenery/`, 5 GB of it the 1 m imagery, then about an hour on 12 cores
 uv run --group scenery python scripts/build_scenery.py configs/scenery/abu_dhabi.yaml
 ```
 
-The parallel steps (trees, 1 m imagery, roads) need up to about 7 GB of memory with 12
-workers; they run fewer workers when less memory is free. On a PC with little memory to
-spare, `--workers 4` (or fewer) sets the number by hand.
+Options (all after the region file):
+
+| Option | What it does |
+|---|---|
+| `--workers N` | number of worker processes for the parallel steps (default: one per CPU core, as many as the free memory holds) |
+| `--download-only` | only download the sources (files already downloaded are skipped, here and in every build) |
+| `--imagery-only` | rebuild only the imagery of a built region and what is made from it (Sentinel and 1 m imagery, roof colours, roads; about 30 minutes) |
+| `--hires-only` | rebuild only the 1 m imagery of a built region |
+| `--pin` | record the sources' sha256 in the region file |
+
+**If the terminal closes or the build stops without an error** (typically right after the
+last landmark, when the features and trees start): the PC ran out of memory and Linux
+stopped the build. The parallel steps (trees, 1 m imagery, roads) need up to about 7 GB
+with 12 workers; they start fewer when less memory is free, but other programs can still
+take it while they run. To confirm, look for the kernel's message:
+
+```sh
+journalctl -k | grep -i "out of memory"
+```
+
+Then run the build again with fewer workers (the downloads are kept; besides about 1 GB for
+the build itself, 4 workers need about 3 GB and 2 about 1.5 GB, at the cost of time):
+
+```sh
+uv run --group scenery python scripts/build_scenery.py configs/scenery/abu_dhabi.yaml --workers 4
+```
 
 The Flights drawer then offers the Abu Dhabi scenarios (they need the built scenery).
 
