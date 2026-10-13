@@ -1685,7 +1685,9 @@ landmarks; later night lighting, shadows, haze.
     (9 GB held by another process): 67 min, at least 5.0 GB stayed free, every file byte
     for byte the same as this PC's build. This PC's manifest had listed a leftover
     proto_roads.json (a 2026-10-11 prototype, moved out): scenery hash now
-    a2b5baef04183cd7 on both. The other PC's actual error message is still to be seen. (e5f2138)
+    a2b5baef04183cd7 on both. The other PC's error, seen since: the 1 m imagery bucket's "HTTP Error 503: Service
+    Unavailable" on one of 11,035 downloads (the retries' case; their waits now spread
+    0.5-1.5x so the 16 parallel downloads do not retry together). (e5f2138)
   - [ ] Decide later (the owner, 2026-10-11): the clouds' whiteness and softness (clouds.js
     PUFF: ambient, direct, base, noise, scale; easy to tune), after flying with them.
   - [ ] Road network with markings (2026-10-11, the owner: option 2, drawn roads replacing the

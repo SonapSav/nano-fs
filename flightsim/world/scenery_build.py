@@ -31,6 +31,7 @@ import hashlib
 import http.client
 import json
 import math
+import random
 import struct
 import time
 import urllib.error
@@ -157,16 +158,17 @@ def _transient(e: Exception) -> bool:
 
 def _retry(fn, what: str, log=print):
     """fn() again after RETRY_DELAYS_S while it fails transiently. The 1 m imagery is
-    12,604 files: without retries one dropped connection ended a fresh PC's build after
-    its first 40 minutes (2026-10-13)."""
+    12,604 files: without retries one "503 Service Unavailable" from its bucket ended a
+    fresh PC's build after its first 40 minutes (2026-10-13)."""
     for delay in (*RETRY_DELAYS_S, None):
         try:
             return fn()
         except Exception as e:
             if delay is None or not _transient(e):
                 raise
-            log(f"{what}: {e}; trying again in {delay} s")
-            time.sleep(delay)
+            wait = delay * random.uniform(0.5, 1.5)  # spread out: 16 parallel downloads, one busy server
+            log(f"{what}: {e}; trying again in {wait:.0f} s")
+            time.sleep(wait)
 
 
 def _get(url: str, headers: dict | None = None) -> bytes:
