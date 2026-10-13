@@ -1707,7 +1707,7 @@ landmarks; later night lighting, shadows, haze.
     feature tiles it crosses differed) and back to 4 m 7.4 min, hash a2b5baef04183cd7 again.
     The water-tile skip for the trees (option 2) was dropped: 718 trees stand on 200 all-water
     tiles, 671 of them on tile (-13, 4) at the west edge, up to 9 m; skipping them would
-    change the scenery. (COMMIT)
+    change the scenery. (f4c6001)
   - [ ] Check (2026-10-13): tile (-13, 4) at the region's west edge has 671 trees (canopy up
     to 9 m) but all-water land cover: likely an island WorldCover and the water index miss.
   - [ ] Decide later (the owner, 2026-10-11): the clouds' whiteness and softness (clouds.js
