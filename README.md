@@ -110,11 +110,16 @@ Not tested by us; the way Docker Desktop and this setup work:
   OpenStreetMap under the ODbL).
 
 The Abu Dhabi scenery is built once from its open data sources (downloads about 6 GB
-into `data/scenery/`, 5 GB of it the 1 m imagery, then about 55 minutes on 12 cores, 70 with the downloads):
+into `data/scenery/`, 5 GB of it the 1 m imagery, then about 45 minutes on 12 cores, 70 with the downloads):
 
 ```sh
 uv run --group scenery python scripts/build_scenery.py configs/scenery/abu_dhabi.yaml
 ```
+
+After a `git pull` that changes the scenery, run the same command: a build reruns only the
+steps whose code, region file settings or sources changed since the last one (a wall height: about 7 minutes; nothing changed: seconds).
+The trees, the slowest step, are kept in `data/scenery/<region>/cache/` and rarely rebuilt.
+A build that stopped part way goes on from the step that stopped.
 
 Options (all after the region file):
 
@@ -122,8 +127,7 @@ Options (all after the region file):
 |---|---|
 | `--workers N` | number of worker processes for the parallel steps (default: one per CPU core, as many as the free memory holds) |
 | `--download-only` | only download the sources (files already downloaded are skipped, here and in every build) |
-| `--imagery-only` | rebuild only the imagery of a built region and what is made from it (Sentinel and 1 m imagery, roof colours, roads; about 30 minutes) |
-| `--hires-only` | rebuild only the 1 m imagery of a built region |
+| `--force` | rebuild every step, even those whose inputs did not change |
 | `--pin` | record the sources' sha256 in the region file |
 
 **If the terminal closes, the build stops without an error, or it ends with "a worker
@@ -143,8 +147,7 @@ the build itself, 4 workers need about 3 GB and 2 about 1.5 GB, at the cost of t
 uv run --group scenery python scripts/build_scenery.py configs/scenery/abu_dhabi.yaml --workers 4
 ```
 
-If the log already shows the `trees:` lines, the features are built: `--imagery-only
---workers 4` finishes the rest (1 m imagery, colours, roads) without starting over.
+The steps that had finished are kept; it goes on from the one that stopped.
 
 **Network errors** (a dropped connection, a busy server) are tried again up to five times
 over about two minutes. A build that still stops on one keeps what it downloaded:

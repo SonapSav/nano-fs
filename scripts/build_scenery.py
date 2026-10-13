@@ -3,8 +3,10 @@ what is missing, then writes the tiles and manifest.json). Needs the scenery gro
 
     uv run --group scenery python scripts/build_scenery.py configs/scenery/abu_dhabi.yaml [--pin]
 
---pin writes the downloaded files' sha256 into the region file, so a later build stops if
-a source changed.
+A build reruns only the steps whose inputs (code, region file, sources) changed since the
+last one, and a build that stopped part way goes on from the step that stopped; --force
+reruns every step. --pin writes the downloaded files' sha256 into the region file, so a
+later build stops if a source changed.
 """
 
 import argparse
@@ -15,7 +17,7 @@ from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 
 from flightsim.world.scenery import manifest_hash
-from flightsim.world.scenery_build import SCENERY_DIR, build, build_hires, build_imagery_only, check_platform, download, load_spec, write_manifest
+from flightsim.world.scenery_build import build, check_platform, download, load_spec
 
 
 def pin(region_file: Path, sources: list[dict]) -> None:
@@ -30,9 +32,8 @@ def main() -> None:
     parser.add_argument("region", help="region file, e.g. configs/scenery/abu_dhabi.yaml")
     parser.add_argument("--pin", action="store_true", help="record the sources' sha256 in the region file")
     parser.add_argument("--download-only", action="store_true")
-    parser.add_argument("--hires-only", action="store_true", help="rebuild only the high-resolution imagery of a built region")
     parser.add_argument("--workers", type=int, default=None, help="worker processes for the parallel steps (default: one per CPU core, as many as the free memory holds)")
-    parser.add_argument("--imagery-only", action="store_true", help="rebuild only the imagery of a built region (and the building colours and roads made from it)")
+    parser.add_argument("--force", action="store_true", help="rebuild every step (by default only the steps whose inputs changed since the last build)")
     args = parser.parse_args()
     if not args.download_only:
         check_platform()
@@ -41,16 +42,8 @@ def main() -> None:
     t0 = time.perf_counter()
     if args.download_only:
         sources = download(spec)
-    elif args.hires_only:
-        sources = download(spec) + [build_hires(spec, SCENERY_DIR / spec.name, workers=args.workers)]
-        manifest = write_manifest(spec, sources, SCENERY_DIR / spec.name)
-        print(f"rebuilt {spec.name}'s high-resolution imagery in {time.perf_counter() - t0:.0f} s, scenery hash {manifest_hash(manifest)[:16]}")
-    elif args.imagery_only:
-        manifest = build_imagery_only(spec, workers=args.workers)
-        sources = manifest["sources"]
-        print(f"rebuilt {spec.name}'s imagery in {time.perf_counter() - t0:.0f} s, scenery hash {manifest_hash(manifest)[:16]}")
     else:
-        manifest = build(spec, workers=args.workers)
+        manifest = build(spec, workers=args.workers, force=args.force)
         sources = manifest["sources"]
         print(f"built {spec.name}: {len(manifest['files'])} files, scenery hash {manifest_hash(manifest)[:16]} "
               f"in {time.perf_counter() - t0:.0f} s")  # fmt: skip
@@ -66,5 +59,4 @@ if __name__ == "__main__":
         # A worker died without a Python error: on Linux the out-of-memory killer.
         sys.exit("\nscenery build: a worker process was killed, most likely for want of memory "
                  "(check with: journalctl -k | grep -i 'out of memory').\nRun the build again with fewer "
-                 "workers, e.g. --workers 4. If it had already written the features and trees "
-                 "(the log's \"trees:\" lines), --imagery-only --workers 4 finishes it from the imagery on.")
+                 "workers, e.g. --workers 4: the steps that had finished are kept.")

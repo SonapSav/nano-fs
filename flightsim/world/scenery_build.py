@@ -16,7 +16,8 @@ and the viewer read the built files through scenery.py. Steps, each repeatable:
    onto a straight slope fitted to the terrain under its centreline (`airfields.json`).
 4a. water the land cover misses, from Sentinel-2's water index at sea level (build_water).
 4b. shore distance: from each water cell to the nearest land (the viewer's shallow water).
-5. features (OpenStreetMap): roads, railways, taxiways, aprons and buildings per tile;
+5. features (OpenStreetMap): roads, railways, taxiways, aprons and buildings per tile, and
+   the trees (scenery_trees.py, cached);
    first the approach banks at landmark bridges' ends (scenery_embankments.py, from
    Copernicus GLO-30) are raised in the height tiles, then the bridges profiled.
 5b. high-resolution imagery (scenery_hires.py), where the region file asks for it.
@@ -24,7 +25,8 @@ and the viewer read the built files through scenery.py. Steps, each repeatable:
 5d. the drawn road network (scenery_roads.py): roads.json and tiles/rd_*.json.
 6. manifest.json: the region, its sources, every file's sha256.
 
-The same sources and code give byte-identical files.
+The same sources and code give byte-identical files. A build reruns only the steps whose
+inputs changed since the last one (see "Steps and their fingerprints"; --force: all).
 """
 
 import hashlib
@@ -896,69 +898,173 @@ def write_manifest(spec: RegionSpec, sources: list[dict], out: Path) -> dict:
     return manifest
 
 
-def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print, workers: int | None = None) -> dict:
+# --- Steps and their fingerprints ---------------------------------------------------------
+#
+# A build reruns only the steps whose inputs changed: each step's fingerprint (the code it
+# runs, its part of the region file, the sources and built files it reads) is kept in
+# cache/stages.json once the step has finished, and a later build skips a step whose
+# fingerprint is the same. A step that starts first forgets its own fingerprint and those
+# of the steps that read its output, so a build that stopped part way reruns them. The
+# trees (20 minutes, from a canopy map that rarely changes) are kept per tile in
+# cache/trees/ and merged into the features files whenever those are written. --force
+# reruns everything. Neither is in the manifest: the built files are the same either way.
+
+STAGES = "cache/stages.json"
+
+
+def _fingerprint(*parts) -> str:
+    return hashlib.sha256(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def _code(*objs) -> list[str]:
+    """The source of the modules and functions a step runs (hashed)."""
+    import inspect
+
+    return [hashlib.sha256(inspect.getsource(o).encode()).hexdigest() for o in objs]
+
+
+def _files(paths) -> str:
+    """One hash of the files' contents (sorted by name)."""
+    h = hashlib.sha256()
+    for path in sorted(paths):
+        h.update(path.name.encode() + b"\0" + bytes.fromhex(sha256_file(path)))
+    return h.hexdigest()
+
+
+class _Stages:
+    def __init__(self, out: Path, force: bool, log):
+        self.path, self.log = out / STAGES, log
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.state = {} if force or not self.path.exists() else json.loads(self.path.read_text())
+
+    def done(self, name: str, fp: str, what: str) -> bool:
+        if self.state.get(name) == fp:
+            self.log(f"{what}: unchanged since the last build, kept")
+            return True
+        return False
+
+    def start(self, name: str, *readers: str) -> None:
+        for k in (name, *readers):
+            self.state.pop(k, None)
+        self._save()
+
+    def finish(self, name: str, fp: str) -> None:
+        self.state[name] = fp
+        self._save()
+
+    def _save(self) -> None:
+        part = self.path.with_suffix(".part")
+        part.write_text(json.dumps(self.state, indent=1, sort_keys=True) + "\n")
+        part.rename(self.path)
+
+
+def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print, workers: int | None = None, force: bool = False) -> dict:
+    """Build the region (the steps whose inputs changed since the last build; all with
+    `force`) and write its manifest."""
+    import sys
+
+    from flightsim.world import dem, scenery, scenery_bridges, scenery_colours, scenery_embankments, scenery_heights, scenery_hires, scenery_osm, scenery_roads, scenery_trees
+
+    me = sys.modules[__name__]
+
     out = root / spec.name
     sources = download(spec, root, log)
     (out / "tiles").mkdir(parents=True, exist_ok=True)
     src = out / "sources"
-    build_heights(spec, [src / f["name"] for f in sources if f["kind"] == "dem"], out, log)
-    build_landcover(spec, [src / f["name"] for f in sources if f["kind"] == "landcover"], out, log)
-    water = [src / f["name"] for f in sources if f["kind"] == "water_index"]
-    if water:
-        build_water(spec, water, out, log)
-    build_shore(spec, out, log)
-    imagery = [src / f["name"] for f in sources if f["kind"] == "imagery"]
-    if imagery:
-        build_imagery(spec, imagery, out, log)
-    pbf = src / next(f["name"] for f in sources if f["kind"] == "osm")
-    build_airfields(spec, pbf, out, log)
-    bh = next((src / f["name"] for f in sources if f["kind"] == "building_height"), None)
-    build_features(spec, pbf, out, log, building_height=bh, dsm=[src / f["name"] for f in sources if f["kind"] == "dsm"], workers=workers)
-    if spec.sources.get("hires_imagery"):
-        sources.append(build_hires(spec, out, log, workers))  # and the building colours
-    elif imagery:
-        from flightsim.world.scenery_colours import colour_features
+    stages = _Stages(out, force, log)
+    region = {"origin": [spec.origin_lat_deg, spec.origin_lon_deg], "tiles_radius": spec.tiles_radius}
 
-        colour_features(spec, out, log, workers)
-    from flightsim.world.scenery_roads import build_roads
+    def tiles(prefix: str) -> list[Path]:
+        return list((out / "tiles").glob(f"{prefix}_*"))
 
-    build_roads(spec, out, log, workers)  # the drawn road network (after the 1 m imagery: aligned to it)
+    chm = spec.sources.get("canopy_height")
+    hires = spec.sources.get("hires_imagery")
+
+    # Terrain and features: heights, land cover, water, shore, Sentinel imagery, runways,
+    # embankments, bridges, OSM features, landmarks (about 4 minutes).
+    terrain_fp = _fingerprint(
+        "terrain", _code(me, scenery_osm, scenery_bridges, scenery_heights, scenery_embankments, geo, scenery, dem),
+        {**{k: v for k, v in spec.__dict__.items() if k not in ("sources", "pinned")},
+         "sources": {k: v for k, v in spec.sources.items() if k not in ("hires_imagery", "canopy_height")}},
+        sorted((f["name"], f["sha256"]) for f in sources if f["kind"] != "canopy_height"),
+    )  # fmt: skip
+    terrain = not stages.done("terrain", terrain_fp, "terrain and features")
+    if terrain:
+        stages.start("terrain", "colours")
+        build_heights(spec, [src / f["name"] for f in sources if f["kind"] == "dem"], out, log)
+        build_landcover(spec, [src / f["name"] for f in sources if f["kind"] == "landcover"], out, log)
+        water = [src / f["name"] for f in sources if f["kind"] == "water_index"]
+        if water:
+            build_water(spec, water, out, log)
+        build_shore(spec, out, log)
+        imagery = [src / f["name"] for f in sources if f["kind"] == "imagery"]
+        if imagery:
+            build_imagery(spec, imagery, out, log)
+        pbf = src / next(f["name"] for f in sources if f["kind"] == "osm")
+        build_airfields(spec, pbf, out, log)
+        bh = next((src / f["name"] for f in sources if f["kind"] == "building_height"), None)
+        build_features(spec, pbf, out, log, building_height=bh, dsm=[src / f["name"] for f in sources if f["kind"] == "dsm"])
+
+    # Trees (cached per tile), merged into the features files when either changed.
+    if chm:
+        cache = out / "cache" / "trees"
+        trees_fp = _fingerprint("trees", _code(scenery_trees, to_geodetic_arrays, geo), chm, region,
+                                sorted((f["name"], f["sha256"]) for f in sources if f["kind"] == "canopy_height"))  # fmt: skip
+        trees = not stages.done("trees", trees_fp, "trees")
+        if trees:
+            stages.start("trees")
+            scenery_trees.build_trees(spec, out, cache, log, workers)
+        if terrain or trees:
+            scenery_trees.merge_trees(spec, out, cache, log)
+        if trees:
+            stages.finish("trees", trees_fp)
+    if terrain:
+        stages.finish("terrain", terrain_fp)
+
+    # 1 m imagery (from the Sentinel imagery and land cover tiles).
+    hires_fp = None
+    if hires:
+        entry = _hires_entry(spec, out)
+        sources.append(entry)
+        hires_fp = _fingerprint("hires", _code(scenery_hires, to_geodetic_arrays, geo, scenery), hires, region, entry["sha256"],
+                                _files(tiles("i") + tiles("lc")))  # fmt: skip
+        if not stages.done("hires", hires_fp, "hires imagery"):
+            stages.start("hires", "colours", "roads")
+            scenery_hires.build_hires(spec, out, log, workers)
+            stages.finish("hires", hires_fp)
+
+    # Building, road, bridge and runway colours (into the features, bridges.json and
+    # airfields.json, which the terrain step writes anew).
+    colours_fp = _fingerprint("colours", _code(scenery_colours), terrain_fp, hires_fp, _files(tiles("i")))
+    if tiles("i") and not stages.done("colours", colours_fp, "colours"):
+        stages.start("colours")
+        scenery_colours.colour_features(spec, out, log, workers)
+        stages.finish("colours", colours_fp)
+
+    # The drawn road network (OSM roads aligned to the 1 m imagery).
+    if hires:
+        roads_fp = _fingerprint("roads", _code(scenery_roads, scenery_colours.tile_picture, to_geodetic_arrays, to_map_arrays), region,
+                                sorted(f["sha256"] for f in sources if f["kind"] == "osm"), _files([out / "hires.json"] + tiles("i")))  # fmt: skip
+        if not stages.done("roads", roads_fp, "roads"):
+            stages.start("roads")
+            scenery_roads.build_roads(spec, out, log, workers)
+            stages.finish("roads", roads_fp)
     return write_manifest(spec, sources, out)
 
 
-def build_imagery_only(spec: RegionSpec, root: Path = SCENERY_DIR, log=print, workers: int | None = None) -> dict:
-    """Only the imagery of a built region and what is made from it: the Sentinel imagery,
-    the 1 m imagery and the building colours, and the road network (aligned to the 1 m
-    imagery); then the manifest."""
-    out = root / spec.name
-    sources = download(spec, root, log)
-    src = out / "sources"
-    build_imagery(spec, [src / f["name"] for f in sources if f["kind"] == "imagery"], out, log)
-    if spec.sources.get("hires_imagery"):
-        sources.append(build_hires(spec, out, log, workers))
-    from flightsim.world.scenery_roads import build_roads
-
-    build_roads(spec, out, log, workers)
-    return write_manifest(spec, sources, out)
-
-
-def build_hires(spec: RegionSpec, out: Path, log=print, workers: int | None = None) -> dict:
-    """Only the high-resolution imagery (scenery_hires.py) of a built region; returns its
-    listing as a source entry (pinned like the others)."""
+def _hires_entry(spec: RegionSpec, out: Path) -> dict:
+    """The 1 m imagery's listing (listed from its bucket the first time) as a source entry,
+    pinned like the others."""
     from flightsim.world import scenery_hires
 
     hi = spec.sources["hires_imagery"]
     listing = out / "sources" / "satellogic" / "listing.json"
     listing.parent.mkdir(parents=True, exist_ok=True)
     scenery_hires.listing(spec, hi, listing)
-    entry = {"kind": "hires_imagery", "name": "satellogic/listing.json", "url": spec.sources["hires_imagery"]["bucket"], "sha256": sha256_file(listing)}
+    entry = {"kind": "hires_imagery", "name": "satellogic/listing.json", "url": hi["bucket"], "sha256": sha256_file(listing)}
     pin = spec.pinned.get(entry["name"])
     if pin and pin != entry["sha256"]:
         raise ValueError(f"{entry['name']}: sha256 {entry['sha256']} differs from the pinned {pin}; delete it to list again")
-    scenery_hires.build_hires(spec, out, log, workers)
-    from flightsim.world.scenery_colours import colour_features
-
-    colour_features(spec, out, log, workers)  # from the new imagery
     return entry
 
 
@@ -998,7 +1104,7 @@ def _embankments(spec: RegionSpec, g: geo.Geodesy, ways: list[dict], tiles: dict
         _write_grid(spec, out, grid)
 
 
-def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_height: Path | None = None, dsm: list[Path] | None = None, workers: int | None = None) -> None:
+def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_height: Path | None = None, dsm: list[Path] | None = None) -> None:
     from flightsim.world.scenery_osm import extract_features, extract_parts
 
     g = geo.Geodesy("wgs84", spec.origin_lat_deg, spec.origin_lon_deg)
@@ -1037,8 +1143,4 @@ def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_h
             counts["roads"] += sum(len(v) for v in t["roads"].values())
             (out / features_name(ix, iz)).write_text(json.dumps(t, separators=(",", ":"), sort_keys=True))
     log(f"features: {counts['buildings']} buildings, {counts['roads']} road pieces")
-    del tiles, captured, ways, parts  # not inherited by the tree workers (fork)
-    if spec.sources.get("canopy_height"):
-        from flightsim.world.scenery_trees import build_trees
-
-        build_trees(spec, out, log, workers)
+    del tiles, captured, ways, parts  # not inherited by the forked workers of the later steps

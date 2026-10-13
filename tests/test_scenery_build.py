@@ -292,3 +292,49 @@ def test_the_build_refuses_a_platform_without_fork(monkeypatch):
     monkeypatch.setattr(multiprocessing, "get_all_start_methods", lambda: ["spawn"])
     with pytest.raises(SystemExit, match="WSL 2"):
         scenery_build.check_platform()
+
+
+def test_steps_rerun_only_when_their_fingerprint_changed(tmp_path):
+    """A finished step with the same fingerprint is skipped; a step that starts forgets
+    itself and the steps that read its output (a build that stopped part way reruns
+    them); --force forgets everything."""
+    from flightsim.world.scenery_build import _Stages
+
+    log = []
+    s = _Stages(tmp_path, False, log.append)
+    assert not s.done("terrain", "a", "terrain")
+    s.start("terrain", "colours")
+    s.finish("terrain", "a")
+    s.finish("colours", "c")
+    s = _Stages(tmp_path, False, log.append)  # the next build
+    assert s.done("terrain", "a", "terrain") and s.done("colours", "c", "colours")
+    assert not s.done("terrain", "b", "terrain")  # its inputs changed
+    s.start("terrain", "colours")  # ... and the build stops here
+    s = _Stages(tmp_path, False, log.append)
+    assert not s.done("terrain", "a", "terrain") and not s.done("colours", "c", "colours")
+    s.finish("terrain", "a")
+    assert not _Stages(tmp_path, True, log.append).done("terrain", "a", "terrain")  # --force
+    assert log == ["terrain: unchanged since the last build, kept"] + ["colours: unchanged since the last build, kept"]
+
+
+def test_cached_trees_merge_into_the_features_files(tmp_path):
+    """merge_trees writes each tile's cached trees into its features file, other contents
+    kept (as the tree step wrote them before the cache)."""
+    import json
+
+    from flightsim.world.scenery import features_name
+    from flightsim.world.scenery_trees import cache_name, merge_trees
+
+    spec = RegionSpec(name="t", origin_lat_deg=24.0, origin_lon_deg=54.0, tiles_radius=1, sources={})
+    (tmp_path / "tiles").mkdir()
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    for iz in (-1, 0):
+        for ix in (-1, 0):
+            (tmp_path / features_name(ix, iz)).write_text(json.dumps({"buildings": [[9.0, "osm", [0, 0, 1, 0, 1, 1]]], "trees": [[1.0, 1.0, 1.0]]}))
+            (cache / cache_name(ix, iz)).write_text(json.dumps([[ix * 4000 + 0.5, iz * 4000 + 2.5, 7.0]] if ix == 0 else []))
+    merge_trees(spec, tmp_path, cache, log=lambda m: None)
+    f = json.loads((tmp_path / features_name(0, -1)).read_text())
+    assert f == {"buildings": [[9.0, "osm", [0, 0, 1, 0, 1, 1]]], "trees": [[0.5, -3997.5, 7.0]]}
+    assert json.loads((tmp_path / features_name(-1, 0)).read_text())["trees"] == []
+    assert (tmp_path / features_name(0, 0)).read_text() == json.dumps(f | {"trees": [[0.5, 2.5, 7.0]]}, separators=(",", ":"), sort_keys=True)

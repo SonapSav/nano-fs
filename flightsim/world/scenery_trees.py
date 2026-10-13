@@ -86,27 +86,33 @@ def find_trees(h: np.ndarray, min_m: float, spacing_m: float) -> np.ndarray:
     return np.column_stack([cols, rows, hts])
 
 
+def cache_name(ix: int, iz: int) -> str:
+    """A tile's trees in the build's cache folder (scenery_build: kept between builds, as
+    the canopy map rarely changes; merged into the features files)."""
+    return f"t_{ix}_{iz}.json"
+
+
 def _tile(args) -> int:
-    out, ix, iz, sources, geodesy, min_m, spacing = args
-    path = out / features_name(ix, iz)
-    if not path.exists():
-        return 0
+    cache, ix, iz, sources, geodesy, min_m, spacing = args
     h = canopy_grid(sources, geodesy, ix, iz)
     t = find_trees(h, min_m, spacing)
-    f = json.loads(path.read_text())
-    f["trees"] = [[round(ix * TILE_SIZE_M + c + 0.5, 1), round(iz * TILE_SIZE_M + r + 0.5, 1), round(float(v), 1)] for c, r, v in t]
-    path.write_text(json.dumps(f, separators=(",", ":"), sort_keys=True))
+    trees = [[round(ix * TILE_SIZE_M + c + 0.5, 1), round(iz * TILE_SIZE_M + r + 0.5, 1), round(float(v), 1)] for c, r, v in t]
+    part = cache / (cache_name(ix, iz) + ".part")
+    part.write_text(json.dumps(trees, separators=(",", ":")))
+    part.rename(cache / cache_name(ix, iz))
     return len(t)
 
 
-def build_trees(spec, out: Path, log=print, workers: int | None = None) -> None:
+def build_trees(spec, out: Path, cache: Path, log=print, workers: int | None = None) -> None:
+    """Every tile's trees into `cache` (merge_trees puts them into the features files)."""
     from flightsim.world import geo
 
     chm = spec.sources["canopy_height"]
     sources = [out / "sources" / f"chm_{t}.tif" for t in chm["tiles"]]
     g = geo.Geodesy("wgs84", spec.origin_lat_deg, spec.origin_lon_deg)
     lo, hi = spec.ix_range
-    jobs = [(out, ix, iz, sources, g, float(chm["min_tree_m"]), float(chm["spacing_m"])) for iz in range(lo, hi + 1) for ix in range(lo, hi + 1)]
+    cache.mkdir(parents=True, exist_ok=True)
+    jobs = [(cache, ix, iz, sources, g, float(chm["min_tree_m"]), float(chm["spacing_m"])) for iz in range(lo, hi + 1) for ix in range(lo, hi + 1)]
     from flightsim.world.scenery import build_workers
 
     workers = build_workers(WORKER_GB, workers)
@@ -114,3 +120,19 @@ def build_trees(spec, out: Path, log=print, workers: int | None = None) -> None:
     with concurrent.futures.ProcessPoolExecutor(workers, mp_context=multiprocessing.get_context("fork")) as ex:
         counts = list(ex.map(_tile, jobs, chunksize=2))
     log(f"trees: {sum(counts)} from the canopy height map")
+
+
+def merge_trees(spec, out: Path, cache: Path, log=print) -> None:
+    """The cached trees into every features file ("trees")."""
+    lo, hi = spec.ix_range
+    n = 0
+    for iz in range(lo, hi + 1):
+        for ix in range(lo, hi + 1):
+            path = out / features_name(ix, iz)
+            if not path.exists():
+                continue
+            f = json.loads(path.read_text())
+            f["trees"] = json.loads((cache / cache_name(ix, iz)).read_text())
+            n += len(f["trees"])
+            path.write_text(json.dumps(f, separators=(",", ":"), sort_keys=True))
+    log(f"trees: {n} into the features")

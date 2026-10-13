@@ -1694,6 +1694,22 @@ landmarks; later night lighting, shadows, haze.
     system; the scenery build inside WSL 2, or a built region copied from a Linux PC). The
     build stops at once where Python cannot fork (Windows itself) instead of at the trees
     (scenery_build.check_platform; --download-only still works). Untested on Windows. (ae534aa)
+  - [x] Faster rebuilds (2026-10-13, the owner: 50-70 minutes is too long a wait; option 1 of
+    the discussion): the build is five steps (terrain and features; trees; 1 m imagery;
+    colours; roads), each with a fingerprint of its code (inspect.getsource of the modules
+    and functions it runs), its part of the region file, its sources and the built files it
+    reads, kept in cache/stages.json when the step finishes; a build skips a step whose
+    fingerprint is unchanged, and a step that starts forgets its own and its readers'
+    (a stopped build reruns them). The trees are cached per tile (cache/trees/) and merged
+    into the features files (the viewer and the files unchanged). --imagery-only and
+    --hires-only gave way to --force. Measured: first build 43 min (scenery hash
+    a2b5baef04183cd7, unchanged); no change 2 s; one wall 4 -> 5 m 7.4 min (only the four
+    feature tiles it crosses differed) and back to 4 m 7.4 min, hash a2b5baef04183cd7 again.
+    The water-tile skip for the trees (option 2) was dropped: 718 trees stand on 200 all-water
+    tiles, 671 of them on tile (-13, 4) at the west edge, up to 9 m; skipping them would
+    change the scenery. (COMMIT)
+  - [ ] Check (2026-10-13): tile (-13, 4) at the region's west edge has 671 trees (canopy up
+    to 9 m) but all-water land cover: likely an island WorldCover and the water index miss.
   - [ ] Decide later (the owner, 2026-10-11): the clouds' whiteness and softness (clouds.js
     PUFF: ambient, direct, base, noise, scale; easy to tune), after flying with them.
   - [ ] Road network with markings (2026-10-11, the owner: option 2, drawn roads replacing the
