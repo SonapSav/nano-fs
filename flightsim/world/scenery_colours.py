@@ -25,6 +25,7 @@ from flightsim.world.scenery import TILE_SIZE_M, features_name, imagery_name
 
 TOWER_M = 40.0
 MIN_PIXELS = 4  # footprints smaller than this (at 1 m) take the pixel under their centre
+WORKER_GB = 0.55  # a tile worker's peak memory (measured 2026-10-13: 12 workers 6.2 GB in all; scenery.build_workers)
 
 
 def _read(path: Path) -> np.ndarray:
@@ -210,6 +211,10 @@ def colour_features(spec, out: Path, log=print, workers: int | None = None) -> N
         pts = np.concatenate([_along([ax + nx * o, az + nz * o, bx + nx * o, bz + nz * o]) for o in (-rw["width_m"] / 4, rw["width_m"] / 4)])
         assign(i, pts)
     jobs = [(out, ix, iz, hires, by_tile.get((ix, iz), {})) for iz in range(lo, hi + 1) for ix in range(lo, hi + 1) if (out / imagery_name(ix, iz)).exists()]
+    from flightsim.world.scenery import build_workers
+
+    workers = build_workers(WORKER_GB, workers)
+    log(f"building colours: {workers} workers")
     with concurrent.futures.ProcessPoolExecutor(workers, mp_context=multiprocessing.get_context("fork")) as ex:
         results = list(ex.map(_tile, jobs, chunksize=4))
     log(f"building colours: {sum(r[0] for r in results)} buildings coloured from the imagery")

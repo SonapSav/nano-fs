@@ -9,7 +9,9 @@ a source changed.
 
 import argparse
 import re
+import sys
 import time
+from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 
 from flightsim.world.scenery import manifest_hash
@@ -56,4 +58,11 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except BrokenProcessPool:
+        # A worker died without a Python error: on Linux the out-of-memory killer.
+        sys.exit("\nscenery build: a worker process was killed, most likely for want of memory "
+                 "(check with: journalctl -k | grep -i 'out of memory').\nRun the build again with fewer "
+                 "workers, e.g. --workers 4. If it had already written the features and trees "
+                 "(the log's \"trees:\" lines), --imagery-only --workers 4 finishes it from the imagery on.")

@@ -232,3 +232,51 @@ def test_build_workers_fit_the_free_memory(monkeypatch, tmp_path):
     assert scenery.build_workers(1.0, workers=3) == 3
     meminfo(1.0)
     assert scenery.build_workers(1.0) == 1  # always at least one
+
+
+def test_every_parallel_build_step_is_capped_by_memory():
+    """Every process pool in the build sizes itself with build_workers (the colours step's
+    did not and took 6.2 GB with twelve workers)."""
+    import re
+    from pathlib import Path
+
+    world = Path(__file__).resolve().parents[1] / "flightsim" / "world"
+    for path in world.glob("scenery*.py"):
+        src = path.read_text()
+        pools = len(re.findall(r"ProcessPoolExecutor\(", src))
+        if pools:
+            assert "build_workers(WORKER_GB, workers)" in src, path.name
+            assert re.search(r"^WORKER_GB = ", src, re.M), path.name
+
+
+def test_downloads_retry_transient_failures(monkeypatch):
+    """A dropped connection or a busy server is tried again; a missing file is not."""
+    import http.client
+    import urllib.error
+
+    from flightsim.world import scenery_build
+
+    monkeypatch.setattr(scenery_build.time, "sleep", lambda s: None)
+    calls = []
+
+    def flaky(errors):
+        def fn():
+            calls.append(1)
+            if len(calls) <= len(errors):
+                raise errors[len(calls) - 1]
+            return b"ok"
+
+        return fn
+
+    busy = urllib.error.HTTPError("u", 503, "Slow Down", {}, None)
+    errors = [ConnectionResetError(), busy, TimeoutError(), http.client.IncompleteRead(b""), urllib.error.URLError("dns")]
+    assert scenery_build._retry(flaky(errors), "u", log=lambda m: None) == b"ok"
+    assert len(calls) == 6
+    calls.clear()
+    with pytest.raises(urllib.error.HTTPError):
+        scenery_build._retry(flaky([urllib.error.HTTPError("u", 404, "Not Found", {}, None)]), "u", log=lambda m: None)
+    assert len(calls) == 1
+    calls.clear()
+    with pytest.raises(ConnectionResetError):  # gives up after the last delay
+        scenery_build._retry(flaky([ConnectionResetError()] * 9), "u", log=lambda m: None)
+    assert len(calls) == len(scenery_build.RETRY_DELAYS_S) + 1

@@ -1672,6 +1672,20 @@ landmarks; later night lighting, shadows, haze.
     3 m; the feature tiles' `wall_m` (one per wall). Side effect: 16 other walls in the region
     with an OSM height tag (2-8 m) now drawn at it. Full build: scenery hash
     ef2f53c1f04ec94c. (30d5dd2)
+  - [x] Scenery build audit (2026-10-13, the owner: on the other PC the build now passes the
+    trees but fails later): the building colours step still ran one worker per core (6.2 GB
+    with 12, measured) and now sizes itself like the others (WORKER_GB 0.55; a test checks
+    every process pool in the build does); downloads retry transient failures (5xx, 429,
+    dropped or timed-out connections, cut-short responses; 5 tries over ~2 min; GDAL's own
+    retries for the Sentinel windows): a fresh PC fetches the 12,604 1 m imagery tiles
+    after 40 minutes of building and one dropped connection ended the build; a killed
+    worker (out of memory) now ends with a message naming --workers and --imagery-only;
+    the Sentinel tiles' harmless NotGeoreferencedWarning is silenced. Checked end to end:
+    a fresh build folder (1 m imagery downloaded again, all MD5s good) with 10.7 GB free
+    (9 GB held by another process): 67 min, at least 5.0 GB stayed free, every file byte
+    for byte the same as this PC's build. This PC's manifest had listed a leftover
+    proto_roads.json (a 2026-10-11 prototype, moved out): scenery hash now
+    a2b5baef04183cd7 on both. The other PC's actual error message is still to be seen.
   - [ ] Decide later (the owner, 2026-10-11): the clouds' whiteness and softness (clouds.js
     PUFF: ambient, direct, base, noise, scale; easy to tune), after flying with them.
   - [ ] Road network with markings (2026-10-11, the owner: option 2, drawn roads replacing the

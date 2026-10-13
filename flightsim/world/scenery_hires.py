@@ -298,7 +298,10 @@ class _Sentinel:
     """The built Sentinel imagery (tiles/i_*.jpg) as one picture, sampled at map positions."""
 
     def __init__(self, out: Path, x0: float, x1: float):
+        import warnings
+
         import rasterio
+        import rasterio.errors
 
         from flightsim.world.scenery import IMAGERY_PX, TILE_SIZE_M, imagery_name, landcover_name, LANDCOVER_CELLS
 
@@ -312,8 +315,10 @@ class _Sentinel:
         for j in range(nt):
             for i in range(nt):
                 ix, iz = self.t0 + i, self.t0 + j
-                with rasterio.open(out / imagery_name(ix, iz)) as ds:
-                    self.rgb[:, j * IMAGERY_PX : (j + 1) * IMAGERY_PX, i * IMAGERY_PX : (i + 1) * IMAGERY_PX] = ds.read()
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", rasterio.errors.NotGeoreferencedWarning)  # a plain picture, by design
+                    with rasterio.open(out / imagery_name(ix, iz)) as ds:
+                        self.rgb[:, j * IMAGERY_PX : (j + 1) * IMAGERY_PX, i * IMAGERY_PX : (i + 1) * IMAGERY_PX] = ds.read()
                 lc = np.frombuffer((out / landcover_name(ix, iz)).read_bytes(), np.uint8).reshape(LANDCOVER_CELLS, LANDCOVER_CELLS)
                 self.lc[j * LANDCOVER_CELLS : (j + 1) * LANDCOVER_CELLS, i * LANDCOVER_CELLS : (i + 1) * LANDCOVER_CELLS] = lc
         self.origin = self.t0 * TILE_SIZE_M

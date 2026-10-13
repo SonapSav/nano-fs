@@ -28,9 +28,12 @@ The same sources and code give byte-identical files.
 """
 
 import hashlib
+import http.client
 import json
 import math
 import struct
+import time
+import urllib.error
 import urllib.request
 import warnings
 import zlib
@@ -141,27 +144,62 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+RETRY_DELAYS_S = (2, 5, 15, 30, 60)  # waits before each new attempt of a failed request
+
+
+def _transient(e: Exception) -> bool:
+    """A network failure worth trying again: the server's 5xx or 429 (busy, throttled),
+    a dropped or timed-out connection, a cut-short response. Not 404 and the like."""
+    if isinstance(e, urllib.error.HTTPError):
+        return e.code >= 500 or e.code == 429
+    return isinstance(e, (urllib.error.URLError, http.client.HTTPException, ConnectionError, TimeoutError))
+
+
+def _retry(fn, what: str, log=print):
+    """fn() again after RETRY_DELAYS_S while it fails transiently. The 1 m imagery is
+    12,604 files: without retries one dropped connection ended a fresh PC's build after
+    its first 40 minutes (2026-10-13)."""
+    for delay in (*RETRY_DELAYS_S, None):
+        try:
+            return fn()
+        except Exception as e:
+            if delay is None or not _transient(e):
+                raise
+            log(f"{what}: {e}; trying again in {delay} s")
+            time.sleep(delay)
+
+
 def _get(url: str, headers: dict | None = None) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
-    with urllib.request.urlopen(req, timeout=600) as r:
-        return r.read()
+    def once():
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
+        with urllib.request.urlopen(req, timeout=600) as r:
+            return r.read()
+
+    return _retry(once, url)
 
 
 def _download(url: str, dest: Path) -> None:
     part = dest.with_suffix(dest.suffix + ".part")
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=600) as r, open(part, "wb") as f:
-        while chunk := r.read(1 << 20):
-            f.write(chunk)
+
+    def once():
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(req, timeout=600) as r, open(part, "wb") as f:
+            while chunk := r.read(1 << 20):
+                f.write(chunk)
+
+    _retry(once, url)
     part.rename(dest)
 
 
 def _zip_member(url: str, name: str, dest: Path) -> None:
     """One stored or deflated member of a remote zip, by HTTP range requests (the zip's
     central directory, the member's local header, its data); checked against its CRC."""
-    head = urllib.request.Request(url, method="HEAD", headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(head, timeout=120) as r:
-        size = int(r.headers["Content-Length"])
+    def length():
+        head = urllib.request.Request(url, method="HEAD", headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(head, timeout=120) as r:
+            return int(r.headers["Content-Length"])
+
+    size = _retry(length, url)
     tail = _get(url, {"Range": f"bytes={max(0, size - 65536 - 22)}-{size - 1}"})
     eocd = tail.rfind(b"PK\x05\x06")
     if eocd < 0:
@@ -226,7 +264,8 @@ def _imagery_window(urls: list[str], bounds_deg, dest: Path) -> None:
 
     s, w, n, e = bounds_deg
     bands = []
-    with rasterio.Env(GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR", CPL_VSIL_CURL_ALLOWED_EXTENSIONS=".tif", GDAL_HTTP_USERAGENT=USER_AGENT):
+    with rasterio.Env(GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR", CPL_VSIL_CURL_ALLOWED_EXTENSIONS=".tif", GDAL_HTTP_USERAGENT=USER_AGENT,
+                      GDAL_HTTP_MAX_RETRY=5, GDAL_HTTP_RETRY_DELAY=5):
         for url in urls:
             with rasterio.open(f"/vsicurl/{url}") as ds:
                 xs, ys = transform("EPSG:4326", ds.crs, [w, e, w, e], [s, s, n, n])
@@ -867,7 +906,7 @@ def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print, workers: int | 
     elif imagery:
         from flightsim.world.scenery_colours import colour_features
 
-        colour_features(spec, out, log)
+        colour_features(spec, out, log, workers)
     from flightsim.world.scenery_roads import build_roads
 
     build_roads(spec, out, log, workers)  # the drawn road network (after the 1 m imagery: aligned to it)
@@ -906,7 +945,7 @@ def build_hires(spec: RegionSpec, out: Path, log=print, workers: int | None = No
     scenery_hires.build_hires(spec, out, log, workers)
     from flightsim.world.scenery_colours import colour_features
 
-    colour_features(spec, out, log)  # from the new imagery
+    colour_features(spec, out, log, workers)  # from the new imagery
     return entry
 
 

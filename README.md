@@ -92,7 +92,7 @@ uv run python scripts/docker.py up -d --build viewer   # or: docker compose up -
 The first start designs the LQR gain schedule (about 15 s) and caches it in `data/`.
 
 The Abu Dhabi scenery is built once from its open data sources (downloads about 6 GB
-into `data/scenery/`, 5 GB of it the 1 m imagery, then about 55 minutes on 12 cores):
+into `data/scenery/`, 5 GB of it the 1 m imagery, then about 55 minutes on 12 cores, 70 with the downloads):
 
 ```sh
 uv run --group scenery python scripts/build_scenery.py configs/scenery/abu_dhabi.yaml
@@ -108,11 +108,11 @@ Options (all after the region file):
 | `--hires-only` | rebuild only the 1 m imagery of a built region |
 | `--pin` | record the sources' sha256 in the region file |
 
-**If the terminal closes or the build stops without an error** (typically right after the
-last landmark, when the features and trees start): the PC ran out of memory and Linux
-stopped the build. The parallel steps (trees, 1 m imagery, roads) need up to about 7 GB
-with 12 workers (a full build peaked at 7.0 GB); they start fewer when less memory is free, but other programs can still
-take it while they run. To confirm, look for the kernel's message:
+**If the terminal closes, the build stops without an error, or it ends with "a worker
+process was killed"**: the PC ran out of memory and Linux stopped the build. The parallel
+steps (trees, 1 m imagery, building colours, roads) need up to about 7 GB with 12 workers
+(a full build peaked at 7.0 GB); they start fewer when less memory is free, but other
+programs can still take it while they run. To confirm, look for the kernel's message:
 
 ```sh
 journalctl -k | grep -i "out of memory"
@@ -124,6 +124,13 @@ the build itself, 4 workers need about 3 GB and 2 about 1.5 GB, at the cost of t
 ```sh
 uv run --group scenery python scripts/build_scenery.py configs/scenery/abu_dhabi.yaml --workers 4
 ```
+
+If the log already shows the `trees:` lines, the features are built: `--imagery-only
+--workers 4` finishes the rest (1 m imagery, colours, roads) without starting over.
+
+**Network errors** (a dropped connection, a busy server) are tried again up to five times
+over about two minutes. A build that still stops on one keeps what it downloaded:
+running the same command again downloads only the rest.
 
 The Flights drawer then offers the Abu Dhabi scenarios (they need the built scenery).
 
