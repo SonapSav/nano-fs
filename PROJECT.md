@@ -1693,7 +1693,7 @@ landmarks; later night lighting, shadows, haze.
     (Docker Desktop on WSL 2 for the simulator and viewer, the repository inside WSL 2's file
     system; the scenery build inside WSL 2, or a built region copied from a Linux PC). The
     build stops at once where Python cannot fork (Windows itself) instead of at the trees
-    (scenery_build.check_platform; --download-only still works). Untested on Windows. (COMMIT)
+    (scenery_build.check_platform; --download-only still works). Untested on Windows. (ae534aa)
   - [ ] Decide later (the owner, 2026-10-11): the clouds' whiteness and softness (clouds.js
     PUFF: ambient, direct, base, noise, scale; easy to tune), after flying with them.
   - [ ] Road network with markings (2026-10-11, the owner: option 2, drawn roads replacing the
