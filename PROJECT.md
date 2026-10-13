@@ -1689,6 +1689,11 @@ landmarks; later night lighting, shadows, haze.
     Unavailable" on one of 11,035 downloads (the retries' case; their waits now spread
     0.5-1.5x so the 16 parallel downloads do not retry together). The other PC's full build then finished without errors
     (the owner, 2026-10-13). (e5f2138, 3ef11ba)
+  - [x] Windows (2026-10-13, the owner asked whether Docker runs there): README "On Windows"
+    (Docker Desktop on WSL 2 for the simulator and viewer, the repository inside WSL 2's file
+    system; the scenery build inside WSL 2, or a built region copied from a Linux PC). The
+    build stops at once where Python cannot fork (Windows itself) instead of at the trees
+    (scenery_build.check_platform; --download-only still works). Untested on Windows. (COMMIT)
   - [ ] Decide later (the owner, 2026-10-11): the clouds' whiteness and softness (clouds.js
     PUFF: ambient, direct, base, noise, scale; easy to tune), after flying with them.
   - [ ] Road network with markings (2026-10-11, the owner: option 2, drawn roads replacing the

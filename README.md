@@ -72,7 +72,8 @@ follows Lanchester's theory, 26 s). See
 ## Quick start
 
 Requirements: [uv](https://docs.astral.sh/uv/) (it installs Python 3.14) or Docker, and a
-recent Firefox or Chromium for the viewer. Developed and tested on Linux (Debian 13).
+recent Firefox or Chromium for the viewer. Developed and tested on Linux (Debian 13);
+Windows: see [On Windows](#on-windows).
 A Chromium-based browser is recommended for the viewer: on the same machine Firefox needs
 about 1.5 times as long per frame (measured with the viewer's performance test, Settings).
 
@@ -90,6 +91,23 @@ uv run python scripts/docker.py up -d --build viewer   # or: docker compose up -
 ```
 
 The first start designs the LQR gain schedule (about 15 s) and caches it in `data/`.
+
+### On Windows
+
+Not tested by us; the way Docker Desktop and this setup work:
+
+- **Simulator and viewer:** with [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+  (WSL 2 backend) the commands above work as on Linux, viewer at http://localhost:8686/.
+  Clone the repository inside WSL 2's own file system (e.g. `~/nano-fs` in Ubuntu from
+  the Microsoft Store), not under `C:\`: the containers read `./data` much faster there.
+  Install git there too, so the images record their commit. Fly in Chromium or Edge on
+  Windows (it uses the PC's graphics card directly).
+- **Scenery build:** needs Linux, so run it inside WSL 2 (Ubuntu: install uv, then the
+  commands below as they are). On Windows itself it stops at once with a message: its
+  parallel steps fork their worker processes and read Linux's free memory, neither of
+  which Windows has. Or copy a built region from a Linux PC: `data/scenery/abu_dhabi/`
+  without its `sources/` folder (a few hundred MB; keep it private, it is derived from
+  OpenStreetMap under the ODbL).
 
 The Abu Dhabi scenery is built once from its open data sources (downloads about 6 GB
 into `data/scenery/`, 5 GB of it the 1 m imagery, then about 55 minutes on 12 cores, 70 with the downloads):

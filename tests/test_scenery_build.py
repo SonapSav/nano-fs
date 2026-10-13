@@ -280,3 +280,15 @@ def test_downloads_retry_transient_failures(monkeypatch):
     with pytest.raises(ConnectionResetError):  # gives up after the last delay
         scenery_build._retry(flaky([ConnectionResetError()] * 9), "u", log=lambda m: None)
     assert len(calls) == len(scenery_build.RETRY_DELAYS_S) + 1
+
+
+def test_the_build_refuses_a_platform_without_fork(monkeypatch):
+    """On Windows itself (no fork) the build stops at once with a pointer to WSL 2."""
+    import multiprocessing
+
+    from flightsim.world import scenery_build
+
+    scenery_build.check_platform()  # Linux: fine
+    monkeypatch.setattr(multiprocessing, "get_all_start_methods", lambda: ["spawn"])
+    with pytest.raises(SystemExit, match="WSL 2"):
+        scenery_build.check_platform()

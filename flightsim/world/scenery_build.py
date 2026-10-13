@@ -55,6 +55,17 @@ USER_AGENT = "nano-fs-scenery-build/1"
 WATER = 80  # WorldCover "permanent water bodies"
 
 
+def check_platform() -> None:
+    """The build's parallel steps fork their workers and size them from Linux's
+    /proc/meminfo: on Windows itself (no fork) it would stop at the trees, after half an
+    hour. WSL 2 is Linux and works (README, "On Windows")."""
+    import multiprocessing
+
+    if "fork" not in multiprocessing.get_all_start_methods():
+        raise SystemExit("The scenery build needs Linux (or WSL 2 on Windows: see the README, \"On Windows\"); "
+                         "this Python cannot fork worker processes.")
+
+
 # --- Region definition ------------------------------------------------------------------
 
 

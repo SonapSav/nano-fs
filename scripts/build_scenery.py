@@ -15,7 +15,7 @@ from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 
 from flightsim.world.scenery import manifest_hash
-from flightsim.world.scenery_build import SCENERY_DIR, build, build_hires, build_imagery_only, download, load_spec, write_manifest
+from flightsim.world.scenery_build import SCENERY_DIR, build, build_hires, build_imagery_only, check_platform, download, load_spec, write_manifest
 
 
 def pin(region_file: Path, sources: list[dict]) -> None:
@@ -34,6 +34,8 @@ def main() -> None:
     parser.add_argument("--workers", type=int, default=None, help="worker processes for the parallel steps (default: one per CPU core, as many as the free memory holds)")
     parser.add_argument("--imagery-only", action="store_true", help="rebuild only the imagery of a built region (and the building colours and roads made from it)")
     args = parser.parse_args()
+    if not args.download_only:
+        check_platform()
 
     spec = load_spec(args.region)
     t0 = time.perf_counter()
