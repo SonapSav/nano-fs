@@ -621,6 +621,16 @@ owner before work can start.
     and the pitch oscillated (~8 s period, ~50 stick reversals/min); judge sensitivity
     and expo after a few more flights. Do not hard-code axis indices: they vary by
     browser and OS.
+    - [x] Rudder (2026-10-14, the owner: the twist was too sensitive and aggressive): set in
+      Stick settings to sensitivity 0.4, expo 0.6 for the HOTAS X (per device; the owner:
+      "ok"). Defaults left as they are.
+    - [x] Throttle display (2026-10-14, the owner: at the lever's centre detent the panel
+      showed less than half; ~60 % of the travel reached the "half-way" mark): the lever and
+      the command were right (50 % at the detent, nothing between lever and physics alters
+      it); the mark was the pitch trim tick on the throttle bar's edge, at -0.12 trim (the
+      flights' trimmed start) level with 56 %. The controls gauge now has notches at half
+      throttle, the throttle in % under the bar, and the trim on its own UP / DN scale beside
+      it. (COMMIT)
 
 ### Viewer
 

@@ -475,20 +475,39 @@ export function drawControls(canvas, row) {
     ctx.fillRect(rx + rw / 2 + (rw / 2) * rud - 3, ry - 2, 6, 14);
   }
   text(ctx, "Rudder", rx + rw / 2, ry + 22, 13, C.dim);
-  // Throttle
-  const tx = 156, ty = 16, th = 150;
+  // Throttle: the bar with notches at half power (the lever's centre detent) and the
+  // value; the pitch trim on its own scale beside it (it used to be a tick on the
+  // throttle's edge, which read as a half-way mark whenever the trim was not neutral).
+  const tx = 146, ty = 16, th = 150;
   ctx.strokeRect(tx, ty, 14, th);
   const thr = cmd("cmd_throttle_norm");
   if (thr != null) {
     ctx.fillStyle = C.marking;
     ctx.fillRect(tx + 1, ty + th * (1 - thr), 12, th * thr);
   }
-  text(ctx, "Throttle", tx + 7, ty + th + 14, 13, C.dim);
-  // Pitch trim as a tick on the throttle's left edge (positive = nose down).
+  ctx.fillStyle = C.marking;
+  ctx.fillRect(tx - 5, ty + th / 2 - 1, 4, 2);
+  ctx.fillRect(tx + 15, ty + th / 2 - 1, 4, 2);
+  text(ctx, "THR", tx + 7, ty - 6, 10, C.dim);
+  if (thr != null) text(ctx, `${Math.round(thr * 100)}%`, tx + 7, ty + th + 14, 13, C.dim);
+  // Pitch trim (positive = nose down: down the scale).
+  const sx = 184, s0 = ty + 22, s1 = ty + th - 22, mid = (s0 + s1) / 2;
+  ctx.strokeStyle = C.dim;
+  ctx.beginPath();
+  ctx.moveTo(sx, s0); ctx.lineTo(sx, s1);
+  ctx.moveTo(sx - 4, mid); ctx.lineTo(sx + 4, mid);
+  ctx.stroke();
+  text(ctx, "UP", sx, s0 - 9, 10, C.dim);
+  text(ctx, "DN", sx, s1 + 9, 10, C.dim);
+  text(ctx, "Trim", sx, ty + th + 14, 13, C.dim);
   const trim = cmd("cmd_pitch_trim_norm");
   if (trim != null) {
+    const y = mid + ((s1 - s0) / 2) * Math.max(-1, Math.min(1, trim));
     ctx.fillStyle = C.bug;
-    ctx.fillRect(tx - 9, ty + th / 2 + (th / 2) * trim - 1.5, 7, 3);
+    ctx.beginPath();
+    ctx.moveTo(sx - 2, y); ctx.lineTo(sx - 9, y - 4); ctx.lineTo(sx - 9, y + 4);
+    ctx.closePath();
+    ctx.fill();
   }
 }
 
