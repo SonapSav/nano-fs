@@ -14,9 +14,10 @@ export function runwayDescriptor(rw) {
     colour: rw.colour ?? null, // its asphalt in the imagery (0xRRGGBB; scenery_colours.py), or null
     pavement: [xz(a.pavement), xz(b.pavement)],
     ends: [
-      { ident: a.ident, x: ax, z: az, y: a.elevation_m, dx: ux, dz: uz },
-      { ident: b.ident, x: bx, z: bz, y: b.elevation_m, dx: -ux, dz: -uz },
+      { ident: a.ident, x: ax, z: az, y: a.elevation_m, dx: ux, dz: uz, lighting: a.lighting ?? null },
+      { ident: b.ident, x: bx, z: bz, y: b.elevation_m, dx: -ux, dz: -uz, lighting: b.lighting ?? null },
     ],
+    centrelineM: rw.centreline_m ?? null, // runway centreline lights' spacing (runwayLighting.js), or none
     // Elevation along the pavement from its first end: a straight slope.
     base: rw.elevation_m - (rw.slope_pct / 100) * (rw.length_m / 2),
     slope: rw.slope_pct / 100,

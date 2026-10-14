@@ -298,7 +298,35 @@ airports:
     # 3202 x 45 m asphalt), retrieved 2026-10-09.
     elevation_ft: 16
     runways:
-      13/31: {length_m: 3202, width_m: 45}
+      13/31:
+        length_m: 3202
+        width_m: 45
+        # Lighting: GCAA AIP UAE, OMAD AD 2-21C (aerodrome ground lights chart, AIRAC 09/2026,
+        # effective 2026-09-03; retrieved 2026-10-14): PAPI 3.5 deg on both sides of the runway
+        # at both ends (MEHT 46.83 ft RWY 13, 46.50 ft RWY 31); RWY 13 elevated flashing
+        # runway threshold identification lights (RTIL), RWY 31 "LIH simplified CAT I 660 m"
+        # approach lights and RTIL; edge lights white and yellow (the caution zone), no
+        # centreline lights; ILS on RWY 31 (LOC 31, GP/DME 31).
+        lighting:
+          "13": {threshold_flash: true, papi: {angle_deg: 3.5, meht_ft: 46.83, sides: both}}
+          "31": {approach: {type: simple, length_m: 660}, threshold_flash: true, papi: {angle_deg: 3.5, meht_ft: 46.50, sides: both, ils: true}}
+  OMAA:
+    runways:
+      # Lighting: GCAA AIP UAE, OMAA AD 2-21C (AIRAC 08/2026; retrieved 2026-10-14): PAPI 3 deg
+      # on both sides at every end (MEHT 68.44 ft 13L, 67.28 ft 31R, 70.87 ft 13R, 69.13 ft
+      # 31L), ILS at every end; 13L, 31R and 31L CAT IIIB, 13R CAT I; runway centreline,
+      # touchdown zone, approach side row barrette and sequenced flashing lights.
+      # Centreline spacing 15 m for Category III (CAP 168 ed. 10, 6.66).
+      13L/31R:
+        centreline_m: 15
+        lighting:
+          13L: {approach: {type: cat3}, papi: {angle_deg: 3.0, meht_ft: 68.44, sides: both, ils: true}}
+          31R: {approach: {type: cat3}, papi: {angle_deg: 3.0, meht_ft: 67.28, sides: both, ils: true}}
+      13R/31L:
+        centreline_m: 15
+        lighting:
+          13R: {approach: {type: cat1}, papi: {angle_deg: 3.0, meht_ft: 70.87, sides: both, ils: true}}
+          31L: {approach: {type: cat3}, papi: {angle_deg: 3.0, meht_ft: 69.13, sides: both, ils: true}}
 default_runway_width_m: 30  # project choice for runways of unknown width
 
 # sha256 of each source file, filled in after the first download (scripts/build_scenery.py

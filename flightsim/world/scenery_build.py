@@ -815,6 +815,11 @@ def build_airfields(spec: RegionSpec, pbf: Path, out: Path, log=print) -> dict:
             rw["width_source"] = "osm"
         else:
             rw["width_m"], rw["width_source"] = spec.default_runway_width_m, "default"
+        if pub.get("centreline_m"):
+            rw["centreline_m"] = float(pub["centreline_m"])  # runway centreline lights' spacing
+        for end in rw["ends"]:  # the published lighting of each landing end (viewer/runwayLighting.js)
+            if end["ident"] in (pub.get("lighting") or {}):
+                end["lighting"] = pub["lighting"][end["ident"]]
         if "length_m" in pub:
             rw["published_length_m"] = float(pub["length_m"])
             if abs(rw["length_m"] - pub["length_m"]) > 30:

@@ -2,6 +2,7 @@
 
 import * as THREE from "three";
 import { lightMaterial, lightPoints as glowPoints } from "./nightLights.js";
+import { FLASH_HZ, papiColour, papiUnits, runwayLights } from "./runwayLighting.js";
 import { addGroundDetail } from "./groundDetail.js";
 import { AIRFIELD, height as terrainHeight } from "./terrain.js";
 import { buildC172 } from "./aircraft.js";
@@ -202,94 +203,91 @@ export const PROCEDURAL_RUNWAY = (() => {
 const leftOf = (e) => [e.dz, -e.dx];
 
 // --- Runway lights and PAPI -------------------------------------------------------------
+//
+// Laid out by runwayLighting.js (the standards' patterns, each landing end as published),
+// drawn as round glows (nightLights.js): full at night, dimmer by day, each face only
+// toward the direction it shines, the flashers flashing.
 
-// Lights are drawn as points of a fixed size on screen, so they stay visible from miles
-// out (as real lights do) while the runway itself is a few pixels wide.
-function lightPoints(positions, colour, sizePx) {
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions.flat(), 3));
-  const points = new THREE.Points(geo, new THREE.PointsMaterial({ color: colour, size: sizePx, sizeAttenuation: false, fog: false }));
-  points.frustumCulled = false;
-  return points;
-}
-
-const LIGHT_Y = 0.6; // light height above the runway (m)
+// The procedural airfield's runway (no published lighting): a simple approach system and a
+// 3 deg PAPI on the left at 250 m, as before.
+const PROCEDURAL_LIGHTING = { approach: { type: "simple", length_m: 420 } };
+const FALLBACK_PAPI = { angle_deg: 3, distance_m: 250, sides: "left" }; // also the home runway's when it has no published lighting
 
 export function addRunwayLights(scene, rw = PROCEDURAL_RUNWAY) {
-  const { widthM, pavement, ends } = rw;
-  const white = [], green = [];
-  const [[ax, az], [bx, bz]] = pavement;
-  const len = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / len, uz = (bz - az) / len;
-  const y0 = ends[0].y, y1 = ends[1].y;
-  for (let s = 0; s <= len + 0.1; s += 60) {
-    const y = y0 + (y1 - y0) * (s / len) + LIGHT_Y;
-    for (const side of [-1, 1]) white.push([ax + ux * s - uz * side * (widthM / 2 + 1.5), y, az + uz * s + ux * side * (widthM / 2 + 1.5)]); // edge lights
-  }
-  for (const e of ends) {
-    const [lx, lz] = leftOf(e);
-    for (let c = -widthM / 2; c <= widthM / 2 + 0.1; c += 3) green.push([e.x + e.dx * 1.0 + lx * c, e.y + LIGHT_Y, e.z + e.dz * 1.0 + lz * c]); // threshold bar
-    // Approach lights: bars of 5 lights every 60 m, out to 420 m before the threshold.
-    for (let d = 60; d <= 420; d += 60) for (let k = -2; k <= 2; k++) white.push([e.x - e.dx * d + lx * k, e.y + LIGHT_Y + 1, e.z - e.dz * d + lz * k]);
-  }
-  // Round glows (nightLights.js), full at night and dimmer by day.
-  const pos = [...white, ...green].flat(), col = [...white.map(() => [1.6, 1.5, 1.25]), ...green.map(() => [0.35, 1.7, 0.6])].flat();
+  const d = rw === PROCEDURAL_RUNWAY ? { ...rw, ends: rw.ends.map((e) => ({ ...e, lighting: PROCEDURAL_LIGHTING })) } : rw;
+  const lights = runwayLights(d);
   const group = new THREE.Group();
-  const points = glowPoints(new Float32Array(pos), new Float32Array(col), runwayLightMaterial());
-  points.frustumCulled = false;
-  group.add(points);
+  for (const [hz, pick] of [[FLASH_HZ.sequence, (l) => l.f === 0 || l.f > 1], [FLASH_HZ.threshold, (l) => l.f === 1]]) {
+    const set = lights.filter(pick);
+    if (!set.length) continue;
+    const points = glowPoints(
+      new Float32Array(set.flatMap((l) => l.p)), new Float32Array(set.flatMap((l) => l.c)), runwayLightMaterial(hz),
+      { dir: new Float32Array(set.flatMap((l) => l.d ?? [0, 0])), flash: new Float32Array(set.map((l) => l.f)) },
+    );  // fmt: skip
+    points.frustumCulled = false;
+    group.add(points);
+  }
   scene.add(group);
   return group;
 }
 
-let runwayLights = null;
-const runwayLightMaterial = () => (runwayLights ??= lightMaterial(5, { dayToo: 0.3, daySizeM: 0.5 })); // at night a glow larger than the fitting, by day the fitting (project choices)
+const runwayMaterials = new Map();
+const runwayLightMaterial = (hz) => {
+  if (!runwayMaterials.has(hz)) runwayMaterials.set(hz, lightMaterial(5, { dayToo: 0.3, daySizeM: 0.5, flashHz: hz })); // at night a glow larger than the fitting, by day the fitting (project choices)
+  return runwayMaterials.get(hz);
+};
 
-// PAPI (precision approach path indicator), FAA L-880 4-box siting for a 3 deg glide path
-// (manufacturer manual following FAA AC 150/5345-28 / 150/5340-30): on the left of the
-// runway at the glide path's intercept with the runway (the aim point, 250 m in), inboard
-// unit 15 m from the edge, units 9 m apart. Aiming angles from the unit nearest the
-// runway: glide path +30', +10', -10', -30' (3 deg 30', 3 deg 10', 2 deg 50', 2 deg 30').
-// A unit shows white when seen from above its angle, red from below: on the glide path
-// the two inner units are red and the two outer ones white.
-export const PAPI_AIM_POINT_M = 250;
-const PAPI_ANGLES_DEG = [3.5, 3 + 10 / 60, 2 + 50 / 60, 2.5];
-
+// The PAPIs of a runway (every landing end with one), coloured as seen from the pilot's eye
+// (runwayLighting.js papiColour: white above a unit's setting angle, red below, the
+// transition between), bright by day too.
 export class Papi {
-  constructor(scene, rw = PROCEDURAL_RUNWAY) {
-    this.units = [];
+  constructor(scene, rw = PROCEDURAL_RUNWAY, { fallback = true } = {}) {
+    this.units = papiUnits(rw, fallback ? FALLBACK_PAPI : null);
     this.group = new THREE.Group();
-    // On the left of each landing direction (runway 09 lands eastbound: its left is north).
-    for (const e of rw.ends) {
-      const [lx, lz] = leftOf(e);
-      PAPI_ANGLES_DEG.forEach((angle, i) => {
-        const off = rw.widthM / 2 + 15 + i * 9;
-        const pos = new THREE.Vector3(e.x + e.dx * PAPI_AIM_POINT_M + lx * off, e.y + LIGHT_Y + 0.4, e.z + e.dz * PAPI_AIM_POINT_M + lz * off);
-        const box = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 0.9), new THREE.MeshLambertMaterial({ color: 0x3a3d40 }));
-        box.position.copy(pos).setY(e.y + 0.4);
-        box.rotation.y = Math.atan2(-e.dz, e.dx);
-        const light = lightPoints([[pos.x, pos.y, pos.z]], 0xffffff, 9);
-        this.group.add(box, light);
-        this.units.push({ pos, dx: e.dx, dz: e.dz, angle: (angle * Math.PI) / 180, light });
+    if (this.units.length) {
+      const boxes = this.units.map((u) => {
+        const box = new THREE.BoxGeometry(1.2, 0.8, 0.9).rotateY(Math.atan2(-u.dz, u.dx));
+        return box.translate(u.p[0], u.p[1] - 0.5, u.p[2]);
       });
+      const merged = mergeBoxes(boxes);
+      this.group.add(new THREE.Mesh(merged, new THREE.MeshLambertMaterial({ color: 0x3a3d40 })));
+      this.colours = new Float32Array(this.units.length * 3);
+      this.points = glowPoints(new Float32Array(this.units.flatMap((u) => u.p)), this.colours, (papiMaterial ??= lightMaterial(7, { dayToo: 1, daySizeM: 2.5 })),
+                               { dir: new Float32Array(this.units.flatMap((u) => [-u.dx, -u.dz])) });  // fmt: skip
+      this.points.frustumCulled = false;
+      this.group.add(this.points);
     }
     scene.add(this.group);
   }
 
   // Colours as seen from the pilot's eye (world position), not from the camera.
   update(eye) {
-    for (const u of this.units) {
-      const rx = eye.x - u.pos.x, rz = eye.z - u.pos.z;
-      const ahead = -(rx * u.dx + rz * u.dz); // distance out on the approach side
-      const side = Math.abs(rx * u.dz - rz * u.dx);
-      const visible = ahead > 0 && side < ahead * 0.3; // the beam faces the approach
-      u.light.visible = visible;
-      if (visible) u.light.material.color.setHex(Math.atan2(eye.y - u.pos.y, ahead) > u.angle ? 0xffffff : 0xff2a1e);
-    }
+    if (!this.points) return;
+    const e = [eye.x, eye.y, eye.z];
+    this.units.forEach((u, i) => this.colours.set(papiColour(u, e) ?? [0, 0, 0], i * 3));
+    this.points.geometry.attributes.color.needsUpdate = true;
   }
 
   dispose(scene) {
     scene.remove(this.group);
+    this.group.traverse((o) => o.geometry?.dispose());
   }
+}
+
+let papiMaterial = null;
+
+function mergeBoxes(geos) {
+  const g = new THREE.BufferGeometry();
+  const attrs = ["position", "normal"];
+  for (const name of attrs) {
+    const parts = geos.map((x) => x.toNonIndexed().attributes[name].array);
+    const all = new Float32Array(parts.reduce((n, a) => n + a.length, 0));
+    let o = 0;
+    for (const a of parts) { all.set(a, o); o += a.length; }
+    g.setAttribute(name, new THREE.BufferAttribute(all, 3));
+  }
+  geos.forEach((x) => x.dispose());
+  return g;
 }
 
 // --- Windsock ----------------------------------------------------------------------------

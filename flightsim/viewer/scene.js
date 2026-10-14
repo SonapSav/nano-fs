@@ -21,7 +21,7 @@ import { Bridges } from "./bridges.js";
 import { ROADS, RegionRoads, marksMaterial, roadMaterial } from "./roadNetwork.js";
 import { ImageryClip } from "./imageryClip.js";
 import { SunShadows } from "./sunShadows.js";
-import { glowAtNight, pointScale } from "./nightLights.js";
+import { glowAtNight, lightTime, pointScale } from "./nightLights.js";
 import "./haze.js"; // height-aware haze in every material (patches three's fog chunks)
 import { world } from "./world.js";
 import { groundDetailStrength } from "./groundDetail.js";
@@ -365,8 +365,13 @@ export class FlightScene {
     this.sunShadows.set(real, QUALITY[this.quality].shadowMap);
     this._environment();
     const home = real ? this.realAirfields.nearest(near.x, near.z) : null;
+    if (real) {
+      // Every runway end's published PAPI; the home runway's a standard one where it has
+      // no published lighting.
+      const papis = this.realAirfields.runways.map((d) => new Papi(this.scene, d, { fallback: d === home }));
+      this.papi = { update: (eye) => papis.forEach((p) => p.update(eye)), dispose: (scene) => papis.forEach((p) => p.dispose(scene)) };
+    }
     if (home) {
-      this.papi = new Papi(this.scene, home);
       this.windsock = new Windsock(this.scene, home);
       const sock = this.realAirfields.windsockNear(w.airfields, home); // OSM's windsock, where mapped
       if (sock) this.windsock.group.position.set(sock.x, home.ends[0].y, sock.z);
@@ -587,6 +592,7 @@ export class FlightScene {
     this.bridges.update(this.camera.position, this.terrain);
     this.imageryClip.update(this.camera.position.x, this.camera.position.z); // last frame's camera
     waterUniforms.waterTime.value = (performance.now() / 1000) % 10000;
+    lightTime.value = (performance.now() / 1000) % 10000; // flashing lights
     this._stepRecentre();
     this._renderShadowMask();
     this.papi.update(new THREE.Vector3().copy(EYE_BODY).applyMatrix4(this.aircraft.matrix)); // as the pilot sees them

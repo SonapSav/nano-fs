@@ -1864,6 +1864,31 @@ landmarks; later night lighting, shadows, haze.
     Not done: lit aircraft taxiing lights on the ground, moving traffic.
   - [ ] If a steady 144 fps over Abu Dhabi is wanted in Chromium (~1-2 ms more): merge the
     flown aircraft's static parts (45 meshes), palms and bushes across tiles (~50).
+  - [x] Airport lighting and PAPI as published (2026-10-14, the owner: "go ahead with the
+    airport lighting and PAPI"; estimated ~4 h). Before: white edge lights, a green
+    threshold bar seen from every side, generic approach bars to 420 m, and a PAPI at the
+    home runway only (square fixed-size points, a hard red/white switch). Now
+    `viewer/runwayLighting.js` lays out every runway's lights to CAP 168 ed. 10 chapter 6 /
+    appendix 6B (follows ICAO Annex 14; the FAA AIM 2-1 for the flashers' rate): edge lights
+    every 60 m, red before a displaced threshold, yellow over the last 600 m (or a third)
+    without centreline lights; green threshold and wing bars, red end lights, each face
+    shining one way only; centreline lights (white, red/white over the last 900 m, red over
+    the last 300 m); touchdown zone barrettes; the 900 m approach system with five crossbars
+    and, for CAT II/III, red side rows and sequenced flashers (twice a second); the simple
+    system; flashing threshold lights; PAPIs on every end that has one, sited from the
+    published MEHT, standard or ILS setting angles, a 3' red-white transition, a 15 deg
+    beam, visible by day. Each runway end's lighting in the region file from the GCAA UAE
+    AIP aerodrome ground lights charts: OMAD AD 2-21C (AIRAC 09/2026: PAPI 3.5 deg both
+    sides, MEHT 46.83 / 46.50 ft; RWY 31 simplified CAT I 660 m; flashing threshold lights)
+    and OMAA AD 2-21C (AIRAC 08/2026: PAPI 3 deg both sides with ILS, MEHTs; 13L, 31R, 31L
+    CAT IIIB, 13R CAT I; centreline 15 m). Runways without published data: edge, threshold
+    and end lights only (the home runway keeps a standard 3 deg PAPI). Light shader: a
+    direction and flashing per point. Project choices (not in the sources' text): threshold
+    lights every 3 m, wing bars 5 lights 2.5 m apart, the approach barrettes' 1.2 m spacing
+    beyond the inner 300 m, sequenced flashers beyond 330 m, threshold flashers at 1 Hz.
+    Test caught the runway end lights facing away from the runway (fixed). Checked in night
+    and day screenshots: OMAD 31 on, above and below the 3.5 deg slope (2 red 2 white / all
+    white / all red), OMAA 13L CAT III. Scenery hash 91400598a627502f. (COMMIT)
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings
     (OSM 3D tags, shadows), night lighting, or ready-made models.
 

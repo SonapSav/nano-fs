@@ -110,7 +110,7 @@ flightsim/          # installable package (uv_build backend)
                     #   world.js: the flight's world (procedural or a real-world region) for every part of the viewer;
                     #     demCore.js (bit-identical to world/dem.py), demTiles.js, featureGeometry.js (region tiles, OSM
                     #     roads, paving and buildings, in the tile worker), realAirfields.js / runwayGeometry.js (its
-                    #     runways), mapRegion.js (its map tiles), landmarks.js / landmarkKit.js (landmark models,
+                    #     runways; runwayLighting.js: their lights and PAPIs as published, to the ICAO patterns), mapRegion.js (its map tiles), landmarks.js / landmarkKit.js (landmark models,
                     #     their materials and sun shadows; ?debug in the URL exposes the scene for screenshots),
                     #     staticMerge.js (static objects baked into one mesh per material: fewer draw calls),
                     #     bridges.js (every OSM bridge's deck and piers, the landmark bridges' arches and girders)
