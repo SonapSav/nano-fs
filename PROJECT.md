@@ -1888,7 +1888,7 @@ landmarks; later night lighting, shadows, haze.
     beyond the inner 300 m, sequenced flashers beyond 330 m, threshold flashers at 1 Hz.
     Test caught the runway end lights facing away from the runway (fixed). Checked in night
     and day screenshots: OMAD 31 on, above and below the 3.5 deg slope (2 red 2 white / all
-    white / all red), OMAA 13L CAT III. Scenery hash 91400598a627502f. (COMMIT)
+    white / all red), OMAA 13L CAT III. Scenery hash 91400598a627502f. (7547a52)
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings
     (OSM 3D tags, shadows), night lighting, or ready-made models.
 
