@@ -1709,6 +1709,13 @@ landmarks; later night lighting, shadows, haze.
     tiles, 671 of them on tile (-13, 4) at the west edge, up to 9 m; skipping them would
     change the scenery. The other PC's first build with it: 38 min, hash a2b5baef04183cd7
     (the owner, 2026-10-13). (f4c6001)
+  - [ ] Decide later (the owner, 2026-10-14): an agent for the project. Ideas discussed: AI
+    assistant agents on the Claude API (needs an API key and the `anthropic` dependency):
+    flight debrief instructor (a demonstration log against the 172P POH), research assistant
+    running batch experiments under the seed rules (recommended first), controller tuning,
+    scenery inspector (viewer screenshots after a rebuild), ATC / copilot callouts (reads
+    the state stream only); learning agents: imitation learning from the demonstrations,
+    PPO landing at OMAD, an AI mission planner over the autopilots.
   - [ ] Check (2026-10-13): tile (-13, 4) at the region's west edge has 671 trees (canopy up
     to 9 m) but all-water land cover: likely an island WorldCover and the water index miss.
   - [ ] Decide later (the owner, 2026-10-11): the clouds' whiteness and softness (clouds.js
