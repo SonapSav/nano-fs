@@ -630,7 +630,7 @@ owner before work can start.
       it); the mark was the pitch trim tick on the throttle bar's edge, at -0.12 trim (the
       flights' trimmed start) level with 56 %. The controls gauge now has notches at half
       throttle, the throttle in % under the bar, and the trim on its own UP / DN scale beside
-      it. (COMMIT)
+      it. (f209d0b)
 
 ### Viewer
 
