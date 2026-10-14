@@ -6,6 +6,10 @@ away; with a fixed-point depth buffer, the belly camera's 5 cm near plane and a 
 zoom, the drawn roads fell behind the ground (the owner's screenshot).
 - build/three.module.js, build/three.core.js
 - addons/objects/Sky.js (examples/jsm/objects/Sky.js), imported as three/addons/objects/Sky.js
+- addons/loaders/GLTFLoader.js (examples/jsm/loaders/GLTFLoader.js), imported as
+  three/addons/loaders/GLTFLoader.js (the parked models, realAirfields.js), with the two
+  modules it imports: addons/utils/BufferGeometryUtils.js and addons/utils/SkeletonUtils.js;
+  unmodified, from the same npm tarball (Sky.js there is byte-identical to ours)
 
 Barlow Condensed (Google Fonts v13, weights 400/500/600, latin subset), unmodified.
 SIL Open Font License 1.1: fonts/OFL.txt. fonts/barlow-condensed.css holds the

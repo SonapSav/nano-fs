@@ -239,11 +239,11 @@ physics only as policy actions through the environment, at the fixed decision ra
 | `flightsim/world/` | WGS84 geodesy and map projection; the terrain shared with the viewer |
 | `flightsim/datalog/` | log schema and Parquet reading and writing |
 | `flightsim/stream/` | WebSocket server, live and replay sources, flight results |
-| `flightsim/viewer/` | the browser viewer (no build step; three.js and the font vendored) |
+| `flightsim/viewer/` | the browser viewer (no build step; three.js and the font vendored); `models/`: glTF models it shows (an AW139 helicopter holding at Al Bateen) |
 | `flightsim/analysis/` | mode identification and validation manoeuvres |
 | `configs/` | tasks, autopilots, RL and validation configs |
 | `docs/` | references, validation reports |
-| `scripts/` | batch runs, controller comparison, RL training, validation, Docker |
+| `scripts/` | batch runs, controller comparison, RL training, validation, Docker; `blender/`: the viewer's models, built in [Blender](https://www.blender.org/) |
 
 ## Tests
 

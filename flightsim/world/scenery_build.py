@@ -34,6 +34,7 @@ import http.client
 import json
 import math
 import random
+import re
 import struct
 import time
 import urllib.error
@@ -871,8 +872,30 @@ def build_airfields(spec: RegionSpec, pbf: Path, out: Path, log=print) -> dict:
         for ix in range(lo, hi + 1):
             r0, c0 = (iz - lo) * HEIGHT_CELLS, (ix - lo) * HEIGHT_CELLS
             (out / heights_name(ix, iz)).write_bytes(grid[r0 : r0 + HEIGHT_CELLS + 1, c0 : c0 + HEIGHT_CELLS + 1].astype("<f4").tobytes())
+    fields["models"] = parked_models(spec, g)
     (out / "airfields.json").write_text(json.dumps(fields, indent=1, sort_keys=True) + "\n")
     return fields
+
+
+MODELS_DIR = Path(__file__).resolve().parents[1] / "viewer" / "models"
+
+
+def parked_models(spec: RegionSpec, g: geo.Geodesy, models_dir: Path = MODELS_DIR) -> list[dict]:
+    """The region file's parked models (airports.<ICAO>.parked_models: the viewer's
+    models/<model>.glb at a latitude, longitude and true heading; `turning`: its turning parts
+    turn) on the map: north, east and the map heading. Visual only: nothing reaches the physics."""
+    out = []
+    for icao, ad in sorted(spec.airports.items()):
+        for m in ad.get("parked_models") or []:
+            name = str(m["model"])
+            if not re.fullmatch(r"[a-z0-9_]+", name) or not (models_dir / f"{name}.glb").is_file():
+                raise ValueError(f"{icao}: parked model {name!r}: no {models_dir / name}.glb")
+            lat, lon = math.radians(float(m["lat_deg"])), math.radians(float(m["lon_deg"]))
+            north, east = g.to_map(lat, lon)
+            heading = (float(m["heading_deg"]) - math.degrees(g.convergence_rad(lat, lon))) % 360.0
+            out.append({"airport": icao, "model": name, "north": round(north, 3), "east": round(east, 3),
+                        "heading_deg": round(heading, 4), "turning": bool(m.get("turning", False))})  # fmt: skip
+    return out
 
 
 # --- Manifest --------------------------------------------------------------------------------

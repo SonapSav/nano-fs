@@ -9,6 +9,7 @@ const PARKED_RADIUS_M = 3000; // stands this close to the home runway's middle
 const HOLD_BAR_M = 23; // across the taxiway
 
 import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { addGroundDetail } from "./groundDetail.js";
 import { IMAGERY_GAIN } from "./featureGeometry.js";
 import { addRunwayLights, parkedMatrix } from "./scenery.js";
@@ -89,8 +90,10 @@ function runwayMesh(d) {
 }
 
 export class RealAirfields {
-  constructor(scene) {
+  // skyLight (sky.js): the sun for the turning parts' shadows (placeModel).
+  constructor(scene, skyLight = null) {
     this.scene = scene;
+    this.skyLight = skyLight;
     this.group = new THREE.Group();
     scene.add(this.group);
     this.runways = []; // descriptors
@@ -108,8 +111,8 @@ export class RealAirfields {
   }
 
   // Around the home runway: aircraft on some of its stands (every third, at most PARKED_MAX;
-  // the same stands each time) and hold-short bars, at the runway's elevation (a flat
-  // airfield; the region's ground tiles may still be loading).
+  // the same stands each time), hold-short bars and the region's parked models (placeModel),
+  // at the runway's elevation (a flat airfield; the region's ground tiles may still be loading).
   furnish(airfields, home) {
     this.clearFurniture();
     if (!home) return;
@@ -150,6 +153,81 @@ export class RealAirfields {
     for (const mesh of mergeByMaterial([{ object: bars, matrix: new THREE.Matrix4() }])) this.furniture.add(mesh);
     bars.traverse((o) => o.geometry?.dispose());
     this.group.add(this.furniture);
+    for (const m of (airfields?.models ?? []).filter(near)) this.placeModel(m, this.furniture, y + LIFT_M);
+  }
+
+  // A parked model (the region file's parked_models, through the scenery build): the
+  // viewer's models/<model>.glb (x nose, y up, ground at y = 0) at its stand, joined per
+  // material. With `turning`, the parts carrying spin extras (spin_pivot, spin_axis,
+  // spin_rev_per_s: rotors) turn about their axis, from the page's clock (they turn while a
+  // flight is paused), drawn each frame on their own. The sun shadow map is drawn only when
+  // the camera moves (sunShadows.js), so turning parts stay out of it: their shapes are
+  // flattened along the sun onto the plane just above the paved markings (hold bars 0.08 m)
+  // every frame instead, as the flown aircraft's shadow (scene.js). Visual only.
+  placeModel(m, group, y) {
+    const place = new THREE.Matrix4().makeRotationY(((90 - m.heading_deg) * Math.PI) / 180).setPosition(m.east, y, -m.north);
+    new GLTFLoader().load(`./models/${m.model}.glb`, (gltf) => {
+      if (this.furniture !== group) return; // the world changed meanwhile
+      const finish = (mesh) => {
+        // decals lying a few millimetres off the skin (windows, grilles): kept in front at a distance
+        if (mesh.material.userData.polygon_offset) Object.assign(mesh.material, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+        mesh.castShadow = mesh.receiveShadow = true;
+        return mesh;
+      };
+      const spinning = new Map(); // one group per pivot, axis and speed
+      if (m.turning) {
+        gltf.scene.traverse((o) => {
+          const u = o.userData;
+          if (!o.isMesh || !u.spin_axis) return;
+          const key = JSON.stringify([u.spin_pivot, u.spin_axis, u.spin_rev_per_s]);
+          if (!spinning.has(key)) spinning.set(key, { pivot: new THREE.Vector3(...u.spin_pivot), axis: new THREE.Vector3(...u.spin_axis).normalize(), revPerS: u.spin_rev_per_s, parts: new THREE.Group() });
+          spinning.get(key).parts.add(o.clone());
+          o.visible = false; // left out of the body's merge (mergeByMaterial skips hidden meshes)
+        });
+      }
+      const flatten = new THREE.Matrix4();
+      const shadowMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide });
+      for (const r of spinning.values()) {
+        const holder = new THREE.Group();
+        holder.matrixAutoUpdate = false;
+        holder.matrix.copy(place).multiply(new THREE.Matrix4().makeTranslation(r.pivot));
+        const spin = new THREE.Group();
+        holder.add(spin);
+        const turn = () => {
+          spin.quaternion.setFromAxisAngle(r.axis, (((performance.now() / 1000) * r.revPerS) % 1) * 2 * Math.PI);
+          spin.updateMatrixWorld(true);
+        };
+        for (const mesh of mergeByMaterial([{ object: r.parts, matrix: new THREE.Matrix4().makeTranslation(r.pivot.clone().negate()) }])) {
+          mesh.onBeforeRender = turn;
+          spin.add(finish(mesh));
+          mesh.castShadow = false;
+          const shadow = new THREE.Mesh(mesh.geometry, shadowMaterial);
+          shadow.matrixAutoUpdate = false;
+          shadow.matrixWorldAutoUpdate = false;
+          shadow.frustumCulled = false; // its matrix flattens it: the bounding sphere does not apply
+          shadow.renderOrder = 1;
+          shadow.onBeforeRender = () => {
+            turn();
+            const s = this.skyLight?.sunDir;
+            if (!s || s.y < 0.02) {
+              shadowMaterial.opacity = 0;
+              return;
+            }
+            shadowMaterial.opacity = 0.5 * (1 - 0.85 * (this.skyLight.night ?? 0)); // faint by moonlight
+            // (x, y, z) -> (x - sx/sy (y - h), h, z - sz/sy (y - h))
+            const h = y + 0.06, kx = s.x / s.y, kz = s.z / s.y;
+            flatten.set(1, -kx, 0, kx * h, 0, 0, 0, h, 0, -kz, 1, kz * h, 0, 0, 0, 1);
+            shadow.matrixWorld.multiplyMatrices(flatten, mesh.matrixWorld);
+          };
+          group.add(shadow);
+        }
+        group.add(holder);
+        holder.updateMatrixWorld(true);
+        r.parts.traverse((o) => o.geometry?.dispose());
+      }
+      for (const mesh of mergeByMaterial([{ object: gltf.scene, matrix: place }])) group.add(finish(mesh));
+      gltf.scene.traverse((o) => o.geometry?.dispose());
+    }, undefined, (e) => console.warn(`parked model ${m.model}:`, e));
   }
 
   clearFurniture() {

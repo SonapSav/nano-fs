@@ -1889,6 +1889,37 @@ landmarks; later night lighting, shadows, haze.
     Test caught the runway end lights facing away from the runway (fixed). Checked in night
     and day screenshots: OMAD 31 on, above and below the 3.5 deg slope (2 red 2 white / all
     white / all red), OMAA 13L CAT III. Scenery hash 91400598a627502f. (7547a52)
+  - [x] Parked AW139 helicopter at OMAD, rotors turning (2026-10-15, the owner: "fix them all
+    and then commit what needs to be committed"; tried uncommitted on 2026-10-14/15 first). A
+    model built in Blender (through the Blender MCP server) from Leonardo's published
+    three-view, traced at true scale (40.85 px/m): wheelbase 4.34 m, track 3.04 m, rotor
+    13.80 m (five blades, shaft tilted 5 deg forward as drawn), tail rotor 2.70 m on the right
+    (helis.com: "starboard mounted") 8.40 m behind the main shaft, stabiliser 4.22 m with end
+    plates; fuselage lofted from traced sections, windows as panels following the skin. The
+    drawing and photos the owner supplied were reference only, not in the repository.
+    `scripts/blender/aw139.py` builds and exports `flightsim/viewer/models/aw139.glb` headless
+    (byte-identical runs; 46k triangles, 0.84 MB); spinning parts carry glTF extras, decal
+    materials a polygon_offset flag. Placement: `parked_models` in the region file's airport
+    (latitude, longitude, true heading, `turning`) -> scenery build (`parked_models`, map
+    position and heading) -> `airfields.json` `models` -> `realAirfields.js` `placeModel`
+    (models within 3 km of the home runway, joined per material; turning parts drawn on
+    their own, with shadows flattened along the sun every frame since the sun shadow map is
+    drawn only when the camera moves). three.js's GLTFLoader (+ BufferGeometryUtils,
+    SkeletonUtils) vendored from the same 0.186.1 npm tarball. Position: holding short at
+    the hold the owner picked with the belly camera (taxiway joining runway 13/31's
+    south-east end, OSM hold 2.9 m from the cross hairs), nose 2 m short of the bar, facing
+    the runway, left of a landing on 31. Main rotor 5 rev/s (about 300 rpm, **from memory,
+    unverified**), tail rotor 6 rev/s (slower than real, which would strobe), both
+    anticlockwise from above (**direction unverified**). Tests: placement conversion and
+    validation, the model's dimensions, extras and budget, GLTFLoader reading it (Node), the
+    server serving it. Checked in screenshots: the hold, both rotors and their shadows
+    turning. Scenery hash 532858e3cd3aec74 (other machines: rebuild, about 11 min, to get
+    the helicopter). Known limits: no physics (aircraft pass through it); rotors turn while
+    a flight is paused; blade shadows fall on the ground only, not on its own cabin.
+    (COMMIT)
+  - [ ] AW139 details still missing: door outlines, antennas, steps, the sharp cabin-to-boom
+    break; the paint reads slightly grey in the viewer's light. Rotor speed and direction to
+    check against a source.
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings
     (OSM 3D tags, shadows), night lighting, or ready-made models.
 

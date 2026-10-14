@@ -1,0 +1,12 @@
+glTF models the viewer shows (realAirfields.js placeModel), placed by a region file's
+parked_models (configs/scenery/<region>.yaml, through the scenery build into
+airfields.json). Visual only: nothing here reaches the physics.
+
+aw139.glb: an AgustaWestland (Leonardo) AW139 helicopter, white, about 46,000 triangles.
+Built by scripts/blender/aw139.py (Blender 5.2, `blender --background --factory-startup
+--python scripts/blender/aw139.py`; the output is byte-identical run to run). The project's
+own work under the repository's licence: its shapes were traced from Leonardo's published
+three-view drawing and dimensions and compared with photos; those references are not in
+the repository. The dimensions it was built to, and its turning parts (glTF extras
+spin_pivot, spin_axis, spin_rev_per_s), are listed in the script and checked by
+tests/test_parked_models.py.

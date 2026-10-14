@@ -91,7 +91,8 @@ flightsim/          # installable package (uv_build backend)
   envs/             # Gymnasium envs (altitude/heading hold; approach and landing; takeoff; circuit; runway.py shared), config, policy adapters, metrics
   control/          # heading hold (step 1), PID autopilot (step 3), human pilot (step 5), gain-scheduled LQR, approach, takeoff and circuit autopilots
   stream/           # protocol, frame sources (replay, live PID), HTTP + WebSocket server
-  viewer/           # static Three.js app (no build step); three.js 0.186.1 + Sky addon + font vendored in viewer/vendor
+  viewer/           # static Three.js app (no build step); three.js 0.186.1 + Sky addon + GLTFLoader + font vendored in viewer/vendor
+                    #   models/: glTF models the viewer loads (aw139.glb, built by scripts/blender/aw139.py)
                     #   terrain.js / scenery.js: procedural, seeded, visual-only scenery (airfield at 0 m = physics ground);
                     #     terrainCore.js: height and tile data without three.js (also run in terrainWorker.js)
                     #   aircraft.js: C172P model built in code; control surfaces follow the logged positions
@@ -110,6 +111,7 @@ flightsim/          # installable package (uv_build backend)
                     #   world.js: the flight's world (procedural or a real-world region) for every part of the viewer;
                     #     demCore.js (bit-identical to world/dem.py), demTiles.js, featureGeometry.js (region tiles, OSM
                     #     roads, paving and buildings, in the tile worker), realAirfields.js / runwayGeometry.js (its
+                    #     parked models: the region file's parked_models, rotors turning with flattened sun shadows;
                     #     runways; runwayLighting.js: their lights and PAPIs as published, to the ICAO patterns), mapRegion.js (its map tiles), landmarks.js / landmarkKit.js (landmark models,
                     #     their materials and sun shadows; ?debug in the URL exposes the scene for screenshots),
                     #     staticMerge.js (static objects baked into one mesh per material: fewer draw calls),
@@ -138,7 +140,7 @@ flightsim/          # installable package (uv_build backend)
 configs/            # YAML run configs; configs/validation/ holds reference data + tolerances; configs/scenery/ real-world regions
 docs/               # REFERENCES.md (sources), VALIDATION.md (generated)
 tests/
-scripts/            # run_headless.py, replay.py, batch_run.py
+scripts/            # run_headless.py, replay.py, batch_run.py; blender/: viewer models built in Blender (not a dependency)
 ```
 
 ## Sign conventions (verified against JSBSim c172p)
@@ -195,6 +197,7 @@ scripts/            # run_headless.py, replay.py, batch_run.py
 - RL: `uv run python scripts/train_rl.py configs/rl/ppo_comfort.yaml [--set wall_clock_limit_min=5]` writes `data/rl/<run_id>/`; evaluate with `scripts/batch_run.py --policy rl --rl-model data/rl/<run_id>/best`. Long runs: start them in the background and write the console log to a file, so an interrupted session leaves the saved models and log behind.
 - Batch ids hash everything that determines results, including the flightsim source hash, but not the git fields (the same code committed or not is the same batch). Manifests record the full code version.
 - Real-world scenery: `uv run --group scenery python scripts/build_scenery.py configs/scenery/abu_dhabi.yaml` (downloads into and builds `data/scenery/abu_dhabi/`; `--pin` records the sources' sha256 in the region file; a build reruns only the steps whose inputs changed (fingerprints in `cache/stages.json`, trees cached per tile in `cache/trees/`), `--force` all of them; `--workers N` caps the parallel steps' processes, otherwise one per core as far as the free memory allows)
+- Viewer models: `blender --background --factory-startup --python scripts/blender/aw139.py` rebuilds `flightsim/viewer/models/aw139.glb` (Blender 5.2, byte-identical output; Blender is an authoring tool, not a project dependency; the model's tests check it against its published dimensions). Where models stand: `parked_models` in a region file's airport (scenery build, then `airfields.json`).
 - Logs go to `data/` (gitignored; `data/.gitkeep` is committed so Docker never creates it as root).
 - Viewer: `uv run python -m flightsim.stream` then open http://localhost:8686/ ; in Docker `docker compose up -d viewer` (published on all host interfaces)
 - Docker: `uv run python scripts/docker.py build` (passes the git commit into the image; any `docker compose` arguments work, e.g. `up -d --build viewer`), `docker compose run --rm sim pytest`, `docker compose run --rm sim python scripts/<script>.py`

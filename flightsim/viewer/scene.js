@@ -144,7 +144,7 @@ export class FlightScene {
     addRunwayLights(this.procedural);
     this.proceduralPapi = this.papi = new Papi(this.procedural);
     this.proceduralWindsock = this.windsock = new Windsock(this.procedural);
-    this.realAirfields = new RealAirfields(this.scene);
+    this.realAirfields = new RealAirfields(this.scene, this.skyLight);
     this.landmarks = new Landmarks(this.scene);
     this.bridges = new Bridges(this.scene);
     this.roadNet = new RegionRoads(); // the drawn road network: the bridges' lanes and alignment
