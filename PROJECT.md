@@ -1916,7 +1916,7 @@ landmarks; later night lighting, shadows, haze.
     turning. Scenery hash 532858e3cd3aec74 (other machines: rebuild, about 11 min, to get
     the helicopter). Known limits: no physics (aircraft pass through it); rotors turn while
     a flight is paused; blade shadows fall on the ground only, not on its own cabin.
-    (COMMIT)
+    (1c1e4cf)
   - [ ] AW139 details still missing: door outlines, antennas, steps, the sharp cabin-to-boom
     break; the paint reads slightly grey in the viewer's light. Rotor speed and direction to
     check against a source.
