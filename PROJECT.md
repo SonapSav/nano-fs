@@ -1925,6 +1925,16 @@ landmarks; later night lighting, shadows, haze.
     rotor really 1435 rpm (same notes, ch. 65: TGB output, "the nominal speed of the TR");
     kept at 6 rev/s, since 24 rev/s with 4 blades would strobe at screen frame rates. Only
     the model's spin_rev_per_s changed (geometry byte-identical); no scenery rebuild needed. (a6b8e7c)
+  - [x] AW139 rotors no longer look to turn backwards (2026-10-15; the owner saw the main
+    rotor turning clockwise): the wagon-wheel effect. At its true 296 rpm a five-bladed rotor
+    moves more than half its 72 deg blade spacing per frame below about 49 frames/s (the tail
+    rotor, 6 rev/s and four blades, below 48), so it looked to creep the wrong way. The
+    viewer now turns each rotor at most 0.3 of its blade spacing per frame
+    (`SPIN_MAX_STEP`, blade counts from the model's new `spin_blades` extra), once per frame
+    from the frame clock (document.timeline, the same for the main view and the belly
+    camera): true speed at 144 frames/s, slower at low frame rates, never backwards.
+    Measured in headless Chromium at 60 frames/s: main rotor 21.6 deg, tail 27 deg per
+    frame, main anticlockwise from above.
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings
     (OSM 3D tags, shadows), night lighting, or ready-made models.
 

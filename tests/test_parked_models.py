@@ -115,6 +115,8 @@ def test_the_aw139_model_marks_its_turning_parts_and_decals():
     tail = {k for k, v in spin.items() if v["spin_rev_per_s"] == 6.0}
     assert main == {"AW139_Mast", "AW139_HubPlate", "AW139_HubCap", *(f"AW139_MainBlade{i}" for i in range(5))}
     assert tail == {"AW139_TailHub", *(f"AW139_TailBlade{i}" for i in range(4))}
+    # blade counts: the viewer caps each rotor's turn per frame to a share of its blade spacing
+    assert {spin[k]["spin_blades"] for k in main} == {5} and {spin[k]["spin_blades"] for k in tail} == {4}
     m = spin["AW139_MainBlade0"]
     assert m["spin_pivot"] == pytest.approx([0, 3.1, 0]) and math.degrees(math.atan2(m["spin_axis"][0], m["spin_axis"][1])) == pytest.approx(5.0)  # tilted forward
     t = spin["AW139_TailBlade0"]

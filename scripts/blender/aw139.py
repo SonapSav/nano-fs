@@ -17,7 +17,8 @@ tilted 5 deg forward as drawn; overall length 16.66 m. Cross sections, windows a
 are traced or estimated from the drawing and photos.
 
 Parts that turn carry glTF extras (custom properties, in the .glb's axes): spin_pivot,
-spin_axis, spin_rev_per_s; the viewer spins them (realAirfields.js). Main rotor 296 rpm, its
+spin_axis, spin_rev_per_s, spin_blades; the viewer spins them (realAirfields.js; the blade
+count caps the turn per frame so a slow frame rate never makes them look backwards). Main rotor 296 rpm, its
 speed at 100 % NR (AW139 B2 training notes, 2010: "the 296 rpm of the MR speed (at 100% Nr)";
 EASA TCDS R.006 gives NR only in per cent), anticlockwise seen from above (Vertipedia:
 "Counterclockwise"). Tail rotor 6 rev/s, much slower than the real 1435 rpm (same notes),
@@ -399,15 +400,16 @@ for ob in rotor:
 
 # ------------------------------------------------------------------ turning parts (in the .glb's axes: x, z, -y)
 
-def spin(objs, pivot_blender, axis_blender, rev_per_s):
+def spin(objs, pivot_blender, axis_blender, rev_per_s, blades):
     px, py, pz = map(float, pivot_blender); ax, ay, az = map(float, axis_blender)
     for ob in objs:
         ob["spin_pivot"] = [px, pz, -py]
         ob["spin_axis"] = [ax, az, -ay]
         ob["spin_rev_per_s"] = rev_per_s
+        ob["spin_blades"] = blades
 
-spin(rotor, (0.0, 0.0, 3.10), (math.sin(tilt), 0.0, math.cos(tilt)), 296 / 60)  # 100 % NR
-spin([o for o in col.objects if o.name.startswith(("AW139_TailBlade", "AW139_TailHub"))], tuple(TR), (0.0, 1.0, 0.0), 6.0)
+spin(rotor, (0.0, 0.0, 3.10), (math.sin(tilt), 0.0, math.cos(tilt)), 296 / 60, 5)  # 100 % NR
+spin([o for o in col.objects if o.name.startswith(("AW139_TailBlade", "AW139_TailHub"))], tuple(TR), (0.0, 1.0, 0.0), 6.0, 4)
 
 if bpy.app.background:  # blender --background --python this file: write the viewer's model
     import pathlib

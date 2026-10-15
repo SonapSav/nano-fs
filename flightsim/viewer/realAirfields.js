@@ -6,6 +6,7 @@
 
 const PARKED_MAX = 8; // aircraft parked at the home airport (project choice: each is a model of many parts)
 const PARKED_RADIUS_M = 3000; // stands this close to the home runway's middle
+const SPIN_MAX_STEP = 0.3; // of a rotor's blade spacing per frame (below half, so it never looks to turn backwards)
 const HOLD_BAR_M = 23; // across the taxiway
 
 import * as THREE from "three";
@@ -159,8 +160,11 @@ export class RealAirfields {
   // A parked model (the region file's parked_models, through the scenery build): the
   // viewer's models/<model>.glb (x nose, y up, ground at y = 0) at its stand, joined per
   // material. With `turning`, the parts carrying spin extras (spin_pivot, spin_axis,
-  // spin_rev_per_s: rotors) turn about their axis, from the page's clock (they turn while a
-  // flight is paused), drawn each frame on their own. The sun shadow map is drawn only when
+  // spin_rev_per_s, spin_blades: rotors) turn about their axis, from the page's frame clock
+  // (they turn while a flight is paused), drawn each frame on their own. A rotor turns at most
+  // SPIN_MAX_STEP of its blade spacing per frame: at its true speed a five-bladed 296 rpm rotor
+  // moves more than half a spacing per frame below about 49 frames/s and looks to turn
+  // backwards (the wagon-wheel effect), so at low frame rates it is shown slower instead. The sun shadow map is drawn only when
   // the camera moves (sunShadows.js), so turning parts stay out of it: their shapes are
   // flattened along the sun onto the plane just above the paved markings (hold bars 0.08 m)
   // every frame instead, as the flown aircraft's shadow (scene.js). Visual only.
@@ -180,7 +184,7 @@ export class RealAirfields {
           const u = o.userData;
           if (!o.isMesh || !u.spin_axis) return;
           const key = JSON.stringify([u.spin_pivot, u.spin_axis, u.spin_rev_per_s]);
-          if (!spinning.has(key)) spinning.set(key, { pivot: new THREE.Vector3(...u.spin_pivot), axis: new THREE.Vector3(...u.spin_axis).normalize(), revPerS: u.spin_rev_per_s, parts: new THREE.Group() });
+          if (!spinning.has(key)) spinning.set(key, { pivot: new THREE.Vector3(...u.spin_pivot), axis: new THREE.Vector3(...u.spin_axis).normalize(), revPerS: u.spin_rev_per_s, blades: u.spin_blades ?? 1, parts: new THREE.Group() });
           spinning.get(key).parts.add(o.clone());
           o.visible = false; // left out of the body's merge (mergeByMaterial skips hidden meshes)
         });
@@ -193,8 +197,15 @@ export class RealAirfields {
         holder.matrix.copy(place).multiply(new THREE.Matrix4().makeTranslation(r.pivot));
         const spin = new THREE.Group();
         holder.add(spin);
+        // document.timeline's time is the frame's: the same for every render within a frame
+        // (main view, belly camera), so the rotor advances once per frame
+        let angle = 0, last = null;
         const turn = () => {
-          spin.quaternion.setFromAxisAngle(r.axis, (((performance.now() / 1000) * r.revPerS) % 1) * 2 * Math.PI);
+          const t = document.timeline.currentTime ?? performance.now();
+          if (t === last) return;
+          if (last !== null) angle = (angle + Math.min(((t - last) / 1000) * r.revPerS * 2 * Math.PI, (SPIN_MAX_STEP * 2 * Math.PI) / r.blades)) % (2 * Math.PI);
+          last = t;
+          spin.quaternion.setFromAxisAngle(r.axis, angle);
           spin.updateMatrixWorld(true);
         };
         for (const mesh of mergeByMaterial([{ object: r.parts, matrix: new THREE.Matrix4().makeTranslation(r.pivot.clone().negate()) }])) {
