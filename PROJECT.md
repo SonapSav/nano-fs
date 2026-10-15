@@ -1919,7 +1919,7 @@ landmarks; later night lighting, shadows, haze.
     tinted panel on each side of the cockpit roof, from the three-view's top view (X 1.93 to
     2.62, 0.25 to 0.98 m off the centre line, rounded corners), kept above the door frame
     (Z 2.06) and checked against the ambulance photo; two more glass meshes (57). Checked
-    in Blender renders and a viewer screenshot.
+    in Blender renders and a viewer screenshot. (05be631)
   - [ ] AW139 details still missing: door outlines, antennas, steps, the sharp cabin-to-boom
     break; the paint reads slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
