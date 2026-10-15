@@ -175,7 +175,8 @@ def _tile(args):
     n = 0
     if f["buildings"]:
         colours = roof_colours(f["buildings"], img, x0, z0)
-        f["buildings"] = [b[:3] + ([c] if c is not None else []) for b, c in zip(f["buildings"], colours)]
+        # [height, source, ring, colour (when measured), airport info (when any: colour None if unmeasured)]
+        f["buildings"] = [b[:3] + [c] + b[4:] if c is not None or len(b) > 4 else b[:3] for b, c in zip(f["buildings"], colours)]
         path.write_text(json.dumps(f, separators=(",", ":"), sort_keys=True))
         n = sum(c is not None for c in colours)
     roads = {cls: [_samples(img, mask, _along(line), x0, z0) for line in lines] for cls, lines in f["roads"].items()}

@@ -640,7 +640,7 @@ def _measured_heights(spec: RegionSpec, g: geo.Geodesy, tiles: dict, raster: Pat
         if hm >= 2.5:  # a cell with buildings
             b = t["buildings"][k]
             measured = min(float(hm), small_max) if b[1] == "estimate_small" else float(hm)
-            t["buildings"][k] = [round(measured, 1), "measured", b[2]]
+            t["buildings"][k] = [round(measured, 1), "measured", *b[2:]]
             used += 1
     log(f"building heights: {used} of {len(todo)} estimated buildings take the measured cell average")
 

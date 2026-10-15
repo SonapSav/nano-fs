@@ -129,7 +129,8 @@ flightsim/          # installable package (uv_build backend)
                     #   geo.py: WGS84 latitude/longitude <-> map metres around the world's origin (viewer/geo.js the same)
                     #   scenery.py: built real-world regions (tile grid, files, manifest); scenery_build.py: the build
                     #   dem.py: a region's height and water (viewer/demCore.js the same); ground.py: the ground of a config
-                    #   scenery_osm.py: the build's OpenStreetMap runways and features; scenery_bridges.py: bridge decks
+                    #   scenery_osm.py: the build's OpenStreetMap runways and features (airport buildings classed by
+                    #     their tags: hangars, shelters, terminals, towers); scenery_bridges.py: bridge decks
                     #   scenery_hires.py: the build's 1 m imagery (Satellogic EarthView), colour-matched to Sentinel-2
                     #   scenery_colours.py: building roof, road, bridge and runway colours from the imagery
                     #   scenery_heights.py: building heights per building (GlobalBuildingAtlas)

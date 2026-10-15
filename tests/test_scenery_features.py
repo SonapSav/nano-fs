@@ -244,3 +244,85 @@ def test_roads_lie_on_the_drawn_terrain():
     out = json.loads(subprocess.run([NODE, "--input-type=module"], input=script, capture_output=True, text=True, check=True).stdout)
     assert out["vertexErr"] < 1e-3
     assert out["minClear"] > 0.3
+
+
+def test_airport_buildings_are_classed_by_their_tags(tmp_path):
+    """Hangars (with the door on the wall facing the apron), shelters (building=roof) only
+    inside an aerodrome, terminals and towers; untagged buildings stay ordinary (no size rule)."""
+    pytest.importorskip("osmium")
+    pytest.importorskip("shapely")
+    from flightsim.world.scenery_osm import extract_features
+
+    g = geo.Geodesy("wgs84", 24.0, 54.0)
+    # (north, east): aerodrome 0..1000 x 0..1000; apron north 300..400, east 100..400; a hangar
+    # south of it (north 200..260, east 150..250); shelters inside and outside; a terminal,
+    # a tower, a big untagged building.
+    nodes, xml_ways, nid = {}, [], [100]
+
+    def ring(pts, tags, wid):
+        ids = []
+        for p in pts:
+            nid[0] += 1
+            nodes[nid[0]] = p
+            ids.append(nid[0])
+        xml_ways.append(f'<way id="{wid}" version="1">' + "".join(f'<nd ref="{i}"/>' for i in ids + ids[:1])
+                        + "".join(f'<tag k="{k}" v="{v}"/>' for k, v in tags.items()) + "</way>")  # fmt: skip
+
+    box = lambda n0, n1, e0, e1: [(n0, e0), (n0, e1), (n1, e1), (n1, e0)]  # noqa: E731
+    ring(box(0, 1000, 0, 1000), {"aeroway": "aerodrome"}, 1)
+    ring(box(300, 400, 100, 400), {"aeroway": "apron"}, 2)
+    ring(box(200, 260, 150, 250), {"aeroway": "hangar", "building": "yes"}, 3)
+    ring(box(500, 520, 100, 140), {"building": "roof"}, 4)
+    ring(box(500, 520, 2000, 2040), {"building": "roof"}, 5)  # outside the aerodrome
+    ring(box(600, 640, 100, 200), {"aeroway": "terminal", "building": "yes"}, 6)
+    ring(box(700, 708, 100, 108), {"aeroway": "tower", "building": "yes"}, 7)
+    ring(box(800, 860, 100, 200), {"building": "yes"}, 8)
+    xml = ['<?xml version="1.0" encoding="UTF-8"?>', '<osm version="0.6">']
+    for i, (n, e) in nodes.items():
+        lat, lon = (math.degrees(v) for v in g.to_geodetic(n, e))
+        xml.append(f'<node id="{i}" version="1" lat="{lat:.9f}" lon="{lon:.9f}"/>')
+    xml += xml_ways + ["</osm>"]
+    (tmp_path / "t.osm").write_text("\n".join(xml))
+    f = extract_features(tmp_path / "t.osm", g, (23.9, 53.9, 24.1, 54.1), 8000, 4000)
+    f.pop("bridges")
+    kinds = {}
+    for t in f.values():
+        for b in t["buildings"]:
+            xs, zs = b[2][0::2], b[2][1::2]
+            kinds[(round(sum(zs) / len(zs)), round(sum(xs) / len(xs)))] = b[4] if len(b) > 4 else None  # (z = -north, x = east)
+    assert kinds[(-230, 200)]["kind"] == "hangar"
+    assert kinds[(-510, 120)] == {"kind": "shelter"} and kinds[(-510, 2020)] is None
+    assert kinds[(-620, 150)] == {"kind": "terminal"} and kinds[(-704, 104)] == {"kind": "tower"} and kinds[(-830, 150)] is None
+    # the door: the hangar's north wall (z = -260), facing the apron
+    (h,) = [b for t in f.values() for b in t["buildings"] if len(b) > 4 and b[4]["kind"] == "hangar"]
+    k = h[4]["door"]
+    r = h[2]
+    z0, z1 = r[2 * k + 1], r[(2 * k + 3) % len(r)]
+    assert z0 == z1 == pytest.approx(-260, abs=0.2)
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_airport_building_meshes():
+    """A hangar: the kind in its facade values, a door panel on the chosen wall, a gable ridge
+    above the eaves; a shelter: a roof on posts (no wall reaches its eaves from the ground)."""
+    script = f"""
+    const fg = await import({json.dumps((VIEWER / "featureGeometry.js").as_uri())});
+    const d = await import({json.dumps((VIEWER / "demCore.js").as_uri())});
+    const n = d.HEIGHT_CELLS + 1;
+    const h = new Float32Array(n * n).fill(0);
+    const tiles = {{ heights: (ix, iz) => (ix === 0 && iz === 0 ? h : null), landcover: () => null }};
+    const hangar = fg.buildingData({{ buildings: [[12, "gba", [100, 100, 160, 100, 160, 140, 100, 140], null, {{ kind: "hangar", door: 0 }}]] }}, tiles, 0);
+    const shelter = fg.buildingData({{ buildings: [[6, "gba", [0, 0, 30, 0, 30, 20, 0, 20], null, {{ kind: "shelter" }}]] }}, tiles, 0);
+    const kinds = (m) => [...new Set([...Array(m.position.length / 3).keys()].map((i) => Math.floor(m.facade[3 * i + 2] / 1000)))].sort();
+    const ys = (m) => [...m.position].filter((_, i) => i % 3 === 1);
+    const doorZ = [...Array(hangar.position.length / 3).keys()].filter((i) => Math.floor(hangar.facade[3 * i + 2] / 1000) === 5).map((i) => hangar.position[3 * i + 2]);
+    // shelter walls: vertices with a horizontal normal and the shelter's height tag that reach the ground (posts) and the eaves (roof edge)
+    const wallYs = [...Array(shelter.position.length / 3).keys()].filter((i) => shelter.normal[3 * i + 1] === 0).map((i) => shelter.position[3 * i + 1]);
+    console.log(JSON.stringify({{ hangarKinds: kinds(hangar), shelterKinds: kinds(shelter), top: Math.max(...ys(hangar)), doorZ: [Math.min(...doorZ), Math.max(...doorZ)],
+      shelterTop: Math.max(...ys(shelter)), shelterWallCount: wallYs.length }}));
+    """
+    out = json.loads(subprocess.run([NODE, "--input-type=module"], input=script, capture_output=True, text=True, check=True).stdout)
+    assert out["hangarKinds"] == [1, 5] and out["shelterKinds"] == [2]
+    assert out["top"] == pytest.approx(12.0, abs=0.01)  # the ridge at the building's height (eaves 12 - 0.08 x 40 = 8.8 m)
+    assert out["doorZ"][0] == out["doorZ"][1] == pytest.approx(100 - 0.06, abs=0.01)  # in front of wall 0 (z = 100, facing z < 100)
+    assert out["shelterTop"] == pytest.approx(6.0, abs=0.01)

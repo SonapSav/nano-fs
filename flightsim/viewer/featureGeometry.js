@@ -310,17 +310,30 @@ export function barrierData(f, tiles, segments = null) {
 
 const WALLS = [0xe9e2d2, 0xdcd3bf, 0xf1eee6, 0xcfc4ad, 0xe3dccb].map(linear); // render and stone
 const GLASS = [0x7d93a6, 0x8aa1ae, 0x6f8494].map(linear); // towers
+const CLADDING = [0xd8dbdc, 0xcfd3d5, 0xe2e3e1].map(linear); // hangars: light grey metal (project choice)
+const DOOR = linear(0x9aa0a4); // hangar doors: darker grey panels (project choice)
 const ROOF_SHADE = 0.85;
 const WALL_FROM_ROOF = 0.45; // how much of the roof's colour the walls take (project choice)
+// Airport buildings (scenery_osm.py _airport_kind): their kind rides in the facade
+// attribute's third value as kind x 1000 + the building's height, for the shader (terrain.js).
+export const FACADE_KIND = { hangar: 1, shelter: 2, terminal: 3, tower: 4, door: 5 };
+const DOOR_WIDTH = 0.85; // of the door wall's length (project choice)
+const DOOR_HEIGHT = 0.8; // of the eaves' height, and 1.5 m under them at least (project choice)
+const GABLE_RISE = 0.08; // a hangar's ridge above its eaves, of the span across (project choice; four-sided footprints)
+const SHELTER_ROOF_M = 0.4; // shelters: the roof's depth and its posts' size and spacing (project choices)
+const POST_M = 0.35;
+const POST_SPACING_M = 12;
 
 // Buildings with at least `minHeightM` (e.g. only towers on distant tiles), one mesh with
 // vertex colours and, for the facade shader (terrain.js), a "facade" attribute in metres:
-// along the wall, up from the building's base, the building's height (walls); along = -1
-// marks a roof. Null where none.
+// along the wall, up from the building's base, the building's height (walls; plus 1000 x its
+// FACADE_KIND for airport buildings); along = -1 marks a roof. Hangars: cladding, a door
+// panel on the wall the build chose, a gable roof on four-sided footprints; shelters: a roof
+// on posts, open sides. Null where none.
 export function buildingData(f, tiles, minHeightM = 0) {
   const mesh = new Mesh(true, true);
   let i = 0;
-  for (const [height, , ring, colour] of f.buildings ?? []) {
+  for (const [height, , ring, colour, info] of f.buildings ?? []) {
     i++;
     if (height < minHeightM || ring.length < 6) continue;
     let cx = 0, cz = 0;
@@ -333,11 +346,14 @@ export function buildingData(f, tiles, minHeightM = 0) {
     const y0 = heightAt(tiles, cx, cz) - 0.5; // a little into the ground on slopes
     const y1 = y0 + 0.5 + height;
     const hash = Math.abs(Math.round(cx * 7 + cz * 13 + i)) % 15;
-    let wall = height >= 40 ? GLASS[hash % GLASS.length] : WALLS[hash % WALLS.length];
+    const kind = info?.kind ?? null;
+    const code = FACADE_KIND[kind] ?? 0;
+    const tag = height + 1000 * code;
+    let wall = kind === "hangar" ? CLADDING[hash % CLADDING.length] : height >= 40 && !code ? GLASS[hash % GLASS.length] : WALLS[hash % WALLS.length];
     let roof = wall.map((v) => v * ROOF_SHADE);
-    if (colour !== undefined && height < 40) {
+    if (colour != null && (height < 40 || code)) {
       roof = linear(colour).map((v) => Math.min(1, v * IMAGERY_GAIN));
-      wall = wall.map((v, k) => v + (roof[k] - v) * WALL_FROM_ROOF);
+      if (kind !== "hangar") wall = wall.map((v, k) => v + (roof[k] - v) * WALL_FROM_ROOF);
     }
     const n = ring.length / 2;
     let area = 0;
@@ -346,6 +362,14 @@ export function buildingData(f, tiles, minHeightM = 0) {
       area += ring[2 * k] * ring[2 * j + 1] - ring[2 * j] * ring[2 * k + 1];
     }
     const ccw = area > 0; // in (x, z)
+    if (kind === "shelter") {
+      shelter(mesh, ring, n, ccw, y0, y1, wall, roof, tag);
+      continue;
+    }
+    // A hangar's gable: a four-sided footprint, its ridge along the longer pair of sides.
+    const gable = kind === "hangar" && n === 4 ? gableOf(ring) : null;
+    const rise = gable ? gable.rise : 0;
+    const eaves = y1 - rise;
     let along = 0;
     for (let k = 0; k < n; k++) {
       const j = (k + 1) % n;
@@ -354,17 +378,108 @@ export function buildingData(f, tiles, minHeightM = 0) {
       if (len < 0.01) continue;
       // Outward normal of an edge of a counter-clockwise (x, z) ring: (dz, -dx) / len.
       const nx = (bz - az) / len, nz = -(bx - ax) / len;
-      const v0 = mesh.vertex(ax, y0, az, nx, 0, nz, wall, along, -0.5, height);
-      mesh.vertex(bx, y0, bz, nx, 0, nz, wall, along + len, -0.5, height);
-      mesh.vertex(ax, y1, az, nx, 0, nz, wall, along, height, height);
-      mesh.vertex(bx, y1, bz, nx, 0, nz, wall, along + len, height, height);
-      along += len;
+      const v0 = mesh.vertex(ax, y0, az, nx, 0, nz, wall, along, -0.5, tag);
+      mesh.vertex(bx, y0, bz, nx, 0, nz, wall, along + len, -0.5, tag);
+      mesh.vertex(ax, eaves, az, nx, 0, nz, wall, along, eaves - y0 - 0.5, tag);
+      mesh.vertex(bx, eaves, bz, nx, 0, nz, wall, along + len, eaves - y0 - 0.5, tag);
       mesh.idx.push(v0, v0 + 2, v0 + 1, v0 + 1, v0 + 2, v0 + 3);
+      if (gable && gable.ends.includes(k)) { // the gable end's triangle up to the ridge
+        const t = mesh.vertex((ax + bx) / 2, y1, (az + bz) / 2, nx, 0, nz, wall, along + len / 2, height, tag);
+        mesh.idx.push(v0 + 2, t, v0 + 3);
+      }
+      if (kind === "hangar" && k === info.door) {
+        const w = len * DOOR_WIDTH, dh = Math.max(0, Math.min((eaves - y0 - 0.5) * DOOR_HEIGHT, eaves - y0 - 0.5 - 1.5));
+        const ux = (bx - ax) / len, uz = (bz - az) / len, s0 = (len - w) / 2, off = 0.06; // in front of the wall
+        const px = ax + nx * off + ux * s0, pz = az + nz * off + uz * s0;
+        const d0 = mesh.vertex(px, y0 + 0.5, pz, nx, 0, nz, DOOR, 0, 0, dh + 1000 * FACADE_KIND.door);
+        mesh.vertex(px + ux * w, y0 + 0.5, pz + uz * w, nx, 0, nz, DOOR, w, 0, dh + 1000 * FACADE_KIND.door);
+        mesh.vertex(px, y0 + 0.5 + dh, pz, nx, 0, nz, DOOR, 0, dh, dh + 1000 * FACADE_KIND.door);
+        mesh.vertex(px + ux * w, y0 + 0.5 + dh, pz + uz * w, nx, 0, nz, DOOR, w, dh, dh + 1000 * FACADE_KIND.door);
+        if (dh > 0) mesh.idx.push(d0, d0 + 2, d0 + 1, d0 + 1, d0 + 2, d0 + 3);
+      }
+      along += len;
+    }
+    if (gable) {
+      // Two roof planes from the eaves (the long sides) up to the ridge.
+      for (const [p, q] of gable.sides) {
+        const [ax, az, bx, bz] = [ring[2 * p], ring[2 * p + 1], ring[2 * q], ring[2 * q + 1]];
+        const [rax, raz] = gable.ridge[p === gable.sides[0][0] ? 0 : 1], [rbx, rbz] = gable.ridge[q === gable.sides[0][1] ? 1 : 0];
+        // the plane's normal: up and away from the ridge
+        const ox = (ax + bx) / 2 - (rax + rbx) / 2, oz = (az + bz) / 2 - (raz + rbz) / 2, ol = Math.hypot(ox, oz) || 1;
+        const slope = rise / ol, nl = Math.hypot(slope, 1);
+        const nx = ox / ol * slope / nl, ny = 1 / nl, nz = oz / ol * slope / nl;
+        const b0 = mesh.vertex(ax, eaves, az, nx, ny, nz, roof, -1, 0, tag);
+        mesh.vertex(bx, eaves, bz, nx, ny, nz, roof, -1, 0, tag);
+        mesh.vertex(rax, y1, raz, nx, ny, nz, roof, -1, 0, tag);
+        mesh.vertex(rbx, y1, rbz, nx, ny, nz, roof, -1, 0, tag);
+        mesh.idx.push(b0, b0 + 1, b0 + 2, b0 + 1, b0 + 3, b0 + 2, b0, b0 + 2, b0 + 1, b0 + 1, b0 + 2, b0 + 3); // both faces (winding either way)
+      }
+      continue;
     }
     const tris = triangulate(ring);
     const base = mesh.pos.length / 3;
-    for (let k = 0; k < ring.length; k += 2) mesh.vertex(ring[k], y1, ring[k + 1], 0, 1, 0, roof, -1, 0, height);
+    for (let k = 0; k < ring.length; k += 2) mesh.vertex(ring[k], y1, ring[k + 1], 0, 1, 0, roof, -1, 0, tag);
     for (let k = 0; k < tris.length; k += 3) mesh.idx.push(base + tris[k], base + tris[k + 2], base + tris[k + 1]);
   }
   return mesh.arrays();
+}
+
+// A four-sided hangar footprint's gable: the ridge joins the middles of the two shorter
+// sides (the gable ends), GABLE_RISE of the span between the long sides above the eaves
+// (at most 3 m). sides: the long sides' corner indices; ridge: its two ends, next to
+// sides[0][0] and sides[0][1].
+function gableOf(ring) {
+  const P = (k) => [ring[2 * (k % 4)], ring[2 * (k % 4) + 1]];
+  const len = (k) => Math.hypot(P(k + 1)[0] - P(k)[0], P(k + 1)[1] - P(k)[1]);
+  const s = len(0) + len(2) >= len(1) + len(3) ? 0 : 1; // the long sides: k = s and s + 2
+  const ends = [(s + 1) % 4, (s + 3) % 4];
+  const mid = (k) => [(P(k)[0] + P(k + 1)[0]) / 2, (P(k)[1] + P(k + 1)[1]) / 2];
+  const span = (len(ends[0]) + len(ends[1])) / 2;
+  const rise = Math.min(3, GABLE_RISE * span);
+  // side s runs from corner s to s + 1; the ridge end next to corner s is the middle of the end wall (s + 3) % 4
+  return { rise, ends, sides: [[s % 4, (s + 1) % 4], [(s + 2) % 4, (s + 3) % 4]], ridge: [mid((s + 3) % 4), mid((s + 1) % 4)] };
+}
+
+// An open shelter: its roof (SHELTER_ROOF_M deep, top at y1) on square posts at its
+// corners and every POST_SPACING_M along its sides; no walls.
+function shelter(mesh, ring, n, ccw, y0, y1, wall, roof, tag) {
+  const yb = y1 - SHELTER_ROOF_M;
+  const box = (x0, z0, x1, z1, ya, yc) => { // posts: four faces
+    for (const [ax, az, bx, bz, nx, nz] of [[x0, z1, x1, z1, 0, 1], [x1, z1, x1, z0, 1, 0], [x1, z0, x0, z0, 0, -1], [x0, z0, x0, z1, -1, 0]]) {
+      const v = mesh.vertex(ax, ya, az, nx, 0, nz, wall, 0, ya - y0 - 0.5, tag);
+      mesh.vertex(bx, ya, bz, nx, 0, nz, wall, POST_M, ya - y0 - 0.5, tag);
+      mesh.vertex(ax, yc, az, nx, 0, nz, wall, 0, yc - y0 - 0.5, tag);
+      mesh.vertex(bx, yc, bz, nx, 0, nz, wall, POST_M, yc - y0 - 0.5, tag);
+      mesh.idx.push(v, v + 2, v + 1, v + 1, v + 2, v + 3);
+    }
+  };
+  let along = 0;
+  for (let k = 0; k < n; k++) {
+    const j = (k + 1) % n;
+    const [ax, az, bx, bz] = ccw ? [ring[2 * k], ring[2 * k + 1], ring[2 * j], ring[2 * j + 1]] : [ring[2 * j], ring[2 * j + 1], ring[2 * k], ring[2 * k + 1]];
+    const len = Math.hypot(bx - ax, bz - az);
+    if (len < 0.01) continue;
+    const ux = (bx - ax) / len, uz = (bz - az) / len, nx = uz, nz = -ux;
+    // posts just inside the edge, at its start and every POST_SPACING_M
+    const posts = Math.max(1, Math.round(len / POST_SPACING_M));
+    for (let p = 0; p < posts; p++) {
+      const t = (p * len) / posts, px = ax + ux * t - nx * POST_M, pz = az + uz * t - nz * POST_M;
+      box(px - POST_M / 2, pz - POST_M / 2, px + POST_M / 2, pz + POST_M / 2, y0, yb);
+    }
+    // the roof's edge band
+    const v0 = mesh.vertex(ax, yb, az, nx, 0, nz, wall, along, yb - y0 - 0.5, tag);
+    mesh.vertex(bx, yb, bz, nx, 0, nz, wall, along + len, yb - y0 - 0.5, tag);
+    mesh.vertex(ax, y1, az, nx, 0, nz, wall, along, y1 - y0 - 0.5, tag);
+    mesh.vertex(bx, y1, bz, nx, 0, nz, wall, along + len, y1 - y0 - 0.5, tag);
+    mesh.idx.push(v0, v0 + 2, v0 + 1, v0 + 1, v0 + 2, v0 + 3);
+    along += len;
+  }
+  const tris = triangulate(ring);
+  const top = mesh.pos.length / 3;
+  for (let k = 0; k < ring.length; k += 2) mesh.vertex(ring[k], y1, ring[k + 1], 0, 1, 0, roof, -1, 0, tag);
+  for (let k = 0; k < tris.length; k += 3) mesh.idx.push(top + tris[k], top + tris[k + 2], top + tris[k + 1]);
+  const under = mesh.pos.length / 3; // the underside, seen from below
+  const shade = roof.map((v) => v * 0.55);
+  for (let k = 0; k < ring.length; k += 2) mesh.vertex(ring[k], yb, ring[k + 1], 0, -1, 0, shade, -1, 0, tag);
+  for (let k = 0; k < tris.length; k += 3) mesh.idx.push(under + tris[k], under + tris[k + 1], under + tris[k + 2]);
 }

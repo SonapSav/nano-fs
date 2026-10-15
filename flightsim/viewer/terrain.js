@@ -253,9 +253,12 @@ function fenceMaterial() {
 }
 
 // Building facades (featureGeometry.js `facade`: metres along the wall, up from the base,
-// the building's height): window bays every 3.3 m floor and 3.2 m across on ordinary
-// buildings; from 40 m up, glass towers: continuous glass bands with thin floor slabs,
-// reflecting the haze (Schlick's Fresnel) and the sun. The pattern fades out with
+// the building's height plus 1000 x its airport kind): window bays every 3.3 m floor and
+// 3.2 m across on ordinary buildings; from 40 m up, glass towers: continuous glass bands
+// with thin floor slabs, reflecting the haze (Schlick's Fresnel) and the sun. Airport
+// buildings: hangars and shelters no windows (hangars: cladding ribs every 0.9 m), hangar
+// doors leaves every 5 m and panel lines, terminals a glazed ground floor under ordinary
+// windows, the control tower a glazed cab (its top 4 m). The pattern fades out with
 // distance (it would shimmer). At night windows light up (nightLights.js). Sizes and
 // colours project choices, by eye.
 function facadeMaterial() {
@@ -273,6 +276,8 @@ function facadeMaterial() {
         `#include <color_fragment>
 float glassAmount = 0.0;
 vec3 nightGlow = vec3(0.0);
+float fKind = floor(vFacade.z / 1000.0 + 0.0005);
+float fH = vFacade.z - fKind * 1000.0;
 if (vFacade.x >= 0.0) {
   // (Far off, where the pattern has faded and it is day, only the wall-foot shading.)
   // Darker toward the foot of the wall (the ground and neighbours hide part of the sky
@@ -280,11 +285,25 @@ if (vFacade.x >= 0.0) {
   diffuseColor.rgb *= mix(0.6, 1.0, smoothstep(0.0, 5.0, vFacade.y));
   float fade = 1.0 - smoothstep(500.0, 2500.0, length(vViewPosition));
   if (fade > 0.0 || nightLevel > 0.001) {
-  float tower = step(40.0, vFacade.z);
+  float tower = step(40.0, fH) * step(fKind, 0.5);
   float fy = fract(vFacade.y / 3.3), fx = fract(vFacade.x / 3.2);
   float aa = clamp(fwidth(vFacade.y / 3.3) * 1.5, 0.002, 0.2);
-  float window = band(fy, 0.32, 0.80, aa) * band(fx, 0.15, 0.85, aa) * step(0.8, vFacade.y) * step(vFacade.y, vFacade.z - 1.0);
-  float glassBand = (1.0 - band(fy, 0.0, 0.12, aa)) * step(vFacade.y, vFacade.z - 0.5);
+  float window = band(fy, 0.32, 0.80, aa) * band(fx, 0.15, 0.85, aa) * step(0.8, vFacade.y) * step(vFacade.y, fH - 1.0);
+  float glassBand = (1.0 - band(fy, 0.0, 0.12, aa)) * step(vFacade.y, fH - 0.5);
+  if (fKind > 0.5) {
+    float k1 = 1.0 - step(0.5, abs(fKind - 1.0)), k5 = 1.0 - step(0.5, abs(fKind - 5.0));
+    float k3 = 1.0 - step(0.5, abs(fKind - 3.0)), k4 = 1.0 - step(0.5, abs(fKind - 4.0));
+    // hangars: vertical cladding ribs; doors: leaves every 5 m, panel lines every 1.2 m
+    float ribW = clamp(fwidth(vFacade.x / 0.9) * 1.5, 0.002, 0.3);
+    diffuseColor.rgb *= 1.0 - 0.10 * k1 * band(fract(vFacade.x / 0.9), 0.0, 0.14, ribW) * fade;
+    float leafW = clamp(fwidth(vFacade.x / 5.0) * 1.5, 0.002, 0.3), lineW = clamp(fwidth(vFacade.y / 1.2) * 1.5, 0.002, 0.3);
+    diffuseColor.rgb *= 1.0 - k5 * fade * (0.35 * band(fract(vFacade.x / 5.0), 0.0, 0.02, leafW) + 0.08 * band(fract(vFacade.y / 1.2), 0.0, 0.05, lineW));
+    // terminals: glass from 0.6 to 3.6 m, ordinary windows above 4.2 m; tower: its glazed cab
+    float ground = band(vFacade.y, 0.6, 3.6, 0.05) * (1.0 - band(fract(vFacade.x / 2.4), 0.0, 0.04, aa));
+    window = k3 * max(ground, window * step(4.2, vFacade.y));
+    glassBand = k4 * step(fH - 4.0, vFacade.y) * step(vFacade.y, fH - 0.3) * (1.0 - band(fract(vFacade.x / 2.4), 0.0, 0.05, aa));
+    tower = k4;
+  }
   glassAmount = mix(window * 0.55, glassBand, tower) * fade;
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.07, 0.09), glassAmount * 0.8);
   // At night: windows lit at random (about 4 in 10), warm or cool, per window cell and
@@ -293,12 +312,12 @@ if (vFacade.x >= 0.0) {
   if (nightLevel > 0.001) {
     vec2 cell = vec2(floor(vFacade.x / 3.2), floor(vFacade.y / 3.3)) + floor(vFacadePos.xz / 37.0) * 17.0;
     float h = fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453);
-    float lit = step(0.6, h) * step(0.8, vFacade.y) * step(vFacade.y, vFacade.z - 1.0);
+    float lit = step(0.6, h) * step(0.8, vFacade.y) * step(vFacade.y, fH - 1.0);
     vec3 tint = mix(vec3(1.0, 0.72, 0.42), vec3(0.82, 0.88, 1.0), step(0.85, fract(h * 7.31)));
     float near = mix(window, glassBand * 0.9, tower) * lit;
     // Far: each neighbourhood's own share of lit windows (some dark), in its window area.
     float share = fract(sin(dot(floor(vFacadePos.xz / 37.0), vec2(39.3468, 11.1353))) * 24634.6345);
-    float far = mix(0.33, 0.8, tower) * 0.4 * share * share;
+    float far = mix(0.33, 0.8, tower) * 0.4 * share * share * (1.0 - step(0.5, fKind) * (1.0 - step(2.5, fKind)) - step(4.5, fKind)); // no glow from hangars, shelters, doors
     nightGlow = tint * mix(far, near, fade) * 1.6;
   }
   }

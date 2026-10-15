@@ -2091,6 +2091,27 @@ landmarks; later night lighting, shadows, haze.
     unverified**). Hands-off after 20 s: 90 kt within 2 deg of bank, 110 kt about 12 deg
     right, idle glide a few deg. The model's own torque roll is unchanged (option B, rigging
     the aircraft model for every task, would change its hash, trims and validation). (eabd5ba)
+  - [x] Airport buildings drawn as what they are (2026-10-15; the owner: the hangars looked
+    like office buildings). The build kept only footprints and heights, so every building had
+    office window rows. Now the features build classes airport buildings by their OSM tags
+    only (no size rule, the owner's choice: at OMAD 29 untagged buildings stay ordinary, 4 of
+    them over 1000 m2; any can be fixed by OSM id if spotted): hangar (aeroway=hangar or
+    building=hangar), shelter (building=roof: with aeroway=hangar anywhere, otherwise only
+    inside an aerodrome boundary, since the tag also marks petrol station canopies and car
+    park shades), terminal, tower. Building records gain an optional fifth field ({kind,
+    door}; the colour at index 4 null when unmeasured), kept by the height and colour steps.
+    Viewer (featureGeometry.js, terrain.js): the kind rides in the facade attribute (1000 x
+    kind + height). Hangars: light grey cladding with vertical ribs, no windows, a door panel
+    (85 % of the wall, 80 % of the eaves' height, leaves every 5 m) on the wall whose outside
+    is nearest paving (apron, helicopter strip or taxiway; chosen in the build), a gable roof
+    on four-sided footprints (rise 8 % of the span, at most 3 m; the ridge at the building's
+    height). Shelters: a 0.4 m roof on 0.35 m posts at the corners and every 12 m, open
+    sides. Terminals: a glazed ground floor, ordinary windows above 4.2 m. Towers: a glazed
+    cab in their top 4 m. No glow from hangars and shelters at night. Sizes and colours
+    project choices, by eye. Region-wide: 468 hangars, 88 shelters, 10 terminals, 3 towers
+    (OMAD 94 tagged hangars). Scenery hash 79e38696a649bef6 (other machines: rebuild).
+    Checked in viewer screenshots at Apron A (doors facing the apron) and the south apron
+    (shelters on posts). Tests: classing and door choice, the hangar and shelter meshes.
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.

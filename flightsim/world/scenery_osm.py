@@ -275,6 +275,58 @@ def _strip(pts: list[tuple[float, float]], half_w: float) -> list[tuple[float, f
     return left + right[::-1]
 
 
+# Airport buildings drawn as what they are, not as offices with windows (viewer/
+# featureGeometry.js, terrain.js): by their OSM tags only (no guessing from size; the owner,
+# 2026-10-15). Shelters (building=roof: open-sided roofs on posts) only inside an aerodrome:
+# elsewhere the tag also marks petrol station canopies and car park shades.
+DOOR_REACH_M = 30.0  # a hangar's door faces paving (apron, taxiway) this close to its wall
+
+
+def _airport_candidate(tags) -> str | None:
+    aw, b = tags.get("aeroway"), tags.get("building")
+    if b == "roof":
+        return "shelter" if aw == "hangar" else "shelter_in_aerodrome"
+    if aw == "hangar" or b == "hangar":
+        return "hangar"
+    if aw == "terminal" or b == "terminal":
+        return "terminal"
+    if aw == "tower" or b == "control_tower":
+        return "tower"
+    return None
+
+
+def _airport_kind(candidate: str, ring, aerodromes, paved_rings, paved_lines) -> dict | None:
+    """{"kind", "door"?} of a candidate airport building (x, z ring), or None (stays ordinary).
+    A hangar's door: the wall whose outside, DOOR_REACH_M out from its middle, is nearest to
+    paving (an apron, a helicopter runway strip or a taxiway line); its longest such wall."""
+    from shapely.geometry import LineString, Point, Polygon
+
+    cx, cz = sum(p[0] for p in ring) / len(ring), sum(p[1] for p in ring) / len(ring)
+    if candidate == "shelter_in_aerodrome":
+        inside = any(len(a) >= 3 and Polygon(a).contains(Point(cx, cz)) for a in aerodromes)
+        return {"kind": "shelter"} if inside else None
+    if candidate != "hangar":
+        return {"kind": candidate}
+    near = [r for r in paved_rings if len(r) >= 3 and Polygon(r).distance(Point(cx, cz)) < 300]
+    near_lines = [l for l in paved_lines if len(l) >= 2 and LineString(l).distance(Point(cx, cz)) < 300]
+    shapes = [Polygon(r).buffer(0) for r in near] + [LineString(l).buffer(11.5) for l in near_lines]  # taxiways 23 m
+    area = sum((p[0] * q[1] - q[0] * p[1]) for p, q in zip(ring, ring[1:] + ring[:1]))
+    best, best_key = 0, None
+    for k, (a, b) in enumerate(zip(ring, ring[1:] + ring[:1])):
+        dx, dz = b[0] - a[0], b[1] - a[1]
+        length = math.hypot(dx, dz)
+        if length < 1.0:
+            continue
+        # Outward normal: (dz, -dx) for a counter-clockwise ring in (x, z), else the opposite.
+        nx, nz = (dz / length, -dx / length) if area > 0 else (-dz / length, dx / length)
+        probe = Point((a[0] + b[0]) / 2 + nx * DOOR_REACH_M, (a[1] + b[1]) / 2 + nz * DOOR_REACH_M)
+        d = min((sh.distance(probe) for sh in shapes), default=math.inf)
+        key = (d > 0.0, round(d, 1) if d > 0 else 0.0, -length)  # on paving first, then nearest, then longest
+        if best_key is None or key < best_key:
+            best, best_key = k, key
+    return {"kind": "hangar", "door": best}
+
+
 def _ring_area(ring: list[tuple[float, float]]) -> float:
     return 0.5 * abs(sum(x0 * z1 - x1 * z0 for (x0, z0), (x1, z1) in zip(ring, ring[1:] + ring[:1])))
 
@@ -332,7 +384,9 @@ def extract_parts(pbf_path, geodesy: geo.Geodesy, sites: dict[str, tuple[float, 
 def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: float, tile_m: float, capture: set | None = None,
                      wall_heights: dict | None = None) -> dict:  # fmt: skip
     """{(ix, iz): {"roads": {class: [polyline, ...]}, "rail": [...], "taxiway": [...],
-    "apron": [ring, ...], "buildings": [[height_m, source, ring], ...], "wall": [polyline, ...],
+    "apron": [ring, ...], "buildings": [[height_m, source, ring], ...] (airport buildings: [height_m,
+    source, ring, None, {"kind": "hangar" | "shelter" | "terminal" | "tower", "door": wall index}],
+    see _airport_kind; index 3 is the roof colour, set later), "wall": [polyline, ...],
     "wall_m": [height_m or None, ...] (per wall: its OSM height tag, else `wall_heights`
     {way id: metres}, else None: the viewer's default), "fence": [polyline, ...]}}
     (barrier=wall / fence: walls and fences) in world x (east),
@@ -372,7 +426,11 @@ def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: fl
         if abs(cx) > half_size_m or abs(cz) > half_size_m:
             return
         flat = [c for p in ring for c in p]
-        tile((math.floor(cx / tile_m), math.floor(cz / tile_m)))[kind].append(flat if extra is None else [*extra, flat])
+        rec = flat if extra is None else [*extra, flat]
+        tile((math.floor(cx / tile_m), math.floor(cz / tile_m)))[kind].append(rec)
+        return rec
+
+    aerodromes, paved_rings, paved_lines, airport_buildings = [], [], [], []  # for _airport_kind, after the pass
 
     fp = (osmium.FileProcessor(str(pbf_path)).with_areas(osmium.filter.KeyFilter("building", "aeroway")).with_locations()
           .with_filter(osmium.filter.KeyFilter("highway", "railway", "aeroway", "building", "barrier")))  # fmt: skip
@@ -380,7 +438,14 @@ def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: fl
         tags = o.tags
         if o.is_area():
             aeroway = tags.get("aeroway")
-            kind = "building" if "building" in tags or aeroway in ("hangar", "terminal") else "apron" if aeroway == "apron" else None
+            if aeroway == "aerodrome":
+                for outer in o.outer_rings():
+                    try:
+                        aerodromes.append([xz(nd.lat, nd.lon) for nd in outer])
+                    except osmium.InvalidLocationError:
+                        pass
+                continue
+            kind = "building" if "building" in tags or aeroway in ("hangar", "terminal", "tower") else "apron" if aeroway == "apron" else None
             if kind is None:
                 continue
             for outer in o.outer_rings():
@@ -397,9 +462,13 @@ def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: fl
                     captured[obj] = {"outer": [c for p in ring for c in p], "inner": inner}
                 if kind == "apron":
                     add_area("apron", ring)
+                    paved_rings.append(ring)
                 else:
                     h, src = building_height(dict(tags), _ring_area(ring))
-                    add_area("buildings", ring, (round(h, 1), src))
+                    rec = add_area("buildings", ring, (round(h, 1), src))
+                    candidate = _airport_candidate(tags)
+                    if rec is not None and candidate:
+                        airport_buildings.append((rec, candidate, ring))
             continue
         if not o.is_way():
             continue
@@ -428,8 +497,15 @@ def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: fl
             continue
         height_m = (_metres(tags.get("height")) or (wall_heights or {}).get(o.id)) if kind == "wall" else None
         add_lines(kind, pts, cls, height_m)
+        if kind == "taxiway":
+            paved_lines.append(pts)
         if heli and len(pts) >= 2:
-            add_area("apron", _strip(pts, (_metres(tags.get("width")) or HELI_RUNWAY_WIDTH_M) / 2))
+            paved_rings.append(_strip(pts, (_metres(tags.get("width")) or HELI_RUNWAY_WIDTH_M) / 2))
+            add_area("apron", paved_rings[-1])
+    for rec, candidate, ring in airport_buildings:
+        info = _airport_kind(candidate, ring, aerodromes, paved_rings, paved_lines)
+        if info is not None:
+            rec.extend([None, info])  # [height, source, ring, colour (scenery_colours), info]
     if capture:
         tiles["captured"] = captured
     tiles["bridges"] = sorted(bridges, key=lambda b: b["id"])
