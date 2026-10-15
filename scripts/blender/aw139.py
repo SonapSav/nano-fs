@@ -17,10 +17,13 @@ tilted 5 deg forward as drawn; overall length 16.66 m. Cross sections, windows a
 are traced or estimated from the drawing and photos.
 
 Parts that turn carry glTF extras (custom properties, in the .glb's axes): spin_pivot,
-spin_axis, spin_rev_per_s; the viewer spins them (realAirfields.js). Main rotor 5 rev/s
-(about 300 rpm, a value from memory, unverified); tail rotor 6 rev/s, slower than the real
-one, which would strobe at screen frame rates. Materials drawn a few millimetres off the skin
-(windows, grilles) carry polygon_offset.
+spin_axis, spin_rev_per_s; the viewer spins them (realAirfields.js). Main rotor 296 rpm, its
+speed at 100 % NR (AW139 B2 training notes, 2010: "the 296 rpm of the MR speed (at 100% Nr)";
+EASA TCDS R.006 gives NR only in per cent), anticlockwise seen from above (Vertipedia:
+"Counterclockwise"). Tail rotor 6 rev/s, much slower than the real 1435 rpm (same notes),
+which would strobe at screen frame rates; it turns top blade forward, a direction not checked
+against a source. Materials drawn a few millimetres off the skin (windows, grilles) carry
+polygon_offset.
 """
 import math
 
@@ -403,7 +406,7 @@ def spin(objs, pivot_blender, axis_blender, rev_per_s):
         ob["spin_axis"] = [ax, az, -ay]
         ob["spin_rev_per_s"] = rev_per_s
 
-spin(rotor, (0.0, 0.0, 3.10), (math.sin(tilt), 0.0, math.cos(tilt)), 5.0)
+spin(rotor, (0.0, 0.0, 3.10), (math.sin(tilt), 0.0, math.cos(tilt)), 296 / 60)  # 100 % NR
 spin([o for o in col.objects if o.name.startswith(("AW139_TailBlade", "AW139_TailHub"))], tuple(TR), (0.0, 1.0, 0.0), 6.0)
 
 if bpy.app.background:  # blender --background --python this file: write the viewer's model

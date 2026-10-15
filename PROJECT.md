@@ -1908,9 +1908,7 @@ landmarks; later night lighting, shadows, haze.
     SkeletonUtils) vendored from the same 0.186.1 npm tarball. Position: holding short at
     the hold the owner picked with the belly camera (taxiway joining runway 13/31's
     south-east end, OSM hold 2.9 m from the cross hairs), nose 2 m short of the bar, facing
-    the runway, left of a landing on 31. Main rotor 5 rev/s (about 300 rpm, **from memory,
-    unverified**), tail rotor 6 rev/s (slower than real, which would strobe), both
-    anticlockwise from above (**direction unverified**). Tests: placement conversion and
+    the runway, left of a landing on 31. Rotors: see the check below. Tests: placement conversion and
     validation, the model's dimensions, extras and budget, GLTFLoader reading it (Node), the
     server serving it. Checked in screenshots: the hold, both rotors and their shadows
     turning. Scenery hash 532858e3cd3aec74 (other machines: rebuild, about 11 min, to get
@@ -1918,8 +1916,15 @@ landmarks; later night lighting, shadows, haze.
     a flight is paused; blade shadows fall on the ground only, not on its own cabin.
     (1c1e4cf)
   - [ ] AW139 details still missing: door outlines, antennas, steps, the sharp cabin-to-boom
-    break; the paint reads slightly grey in the viewer's light. Rotor speed and direction to
-    check against a source.
+    break; the paint reads slightly grey in the viewer's light. The tail rotor's turning
+    direction (the model: top blade forward) is still unchecked; no source found.
+  - [x] AW139 rotor speed and direction checked (2026-10-15): main rotor 296 rpm at 100 % NR
+    (AW139 B2 training notes, 2010: "the 296 rpm of the MR speed (at 100% Nr)"; EASA
+    TCDS R.006 issue 27 gives NR only in per cent, 98-101 % continuous), was 300 rpm from
+    memory; anticlockwise from above as modelled (Vertipedia: "Counterclockwise"). Tail
+    rotor really 1435 rpm (same notes, ch. 65: TGB output, "the nominal speed of the TR");
+    kept at 6 rev/s, since 24 rev/s with 4 blades would strobe at screen frame rates. Only
+    the model's spin_rev_per_s changed (geometry byte-identical); no scenery rebuild needed.
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings
     (OSM 3D tags, shadows), night lighting, or ready-made models.
 

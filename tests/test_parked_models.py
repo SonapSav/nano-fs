@@ -111,7 +111,7 @@ def test_the_aw139_model_has_the_published_dimensions():
 def test_the_aw139_model_marks_its_turning_parts_and_decals():
     j = _gltf()
     spin = {n["name"]: n["extras"] for n in j["nodes"] if "spin_axis" in n.get("extras", {})}
-    main = {k for k, v in spin.items() if v["spin_rev_per_s"] == 5.0}
+    main = {k for k, v in spin.items() if v["spin_rev_per_s"] == pytest.approx(296 / 60)}  # 296 rpm, 100 % NR
     tail = {k for k, v in spin.items() if v["spin_rev_per_s"] == 6.0}
     assert main == {"AW139_Mast", "AW139_HubPlate", "AW139_HubCap", *(f"AW139_MainBlade{i}" for i in range(5))}
     assert tail == {"AW139_TailHub", *(f"AW139_TailBlade{i}" for i in range(4))}
