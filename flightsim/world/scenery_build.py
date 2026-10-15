@@ -1149,7 +1149,9 @@ def build_features(spec: RegionSpec, pbf: Path, out: Path, log=print, building_h
     half = max(abs(lo), hi + 1) * TILE_SIZE_M
     marks = spec.sources.get("landmarks") or []
     walls = {int(k): float(v) for k, v in (spec.sources["osm"].get("wall_heights") or {}).items()}
-    tiles = extract_features(pbf, g, region_bounds_deg(spec, 0.0), half, TILE_SIZE_M, capture={o for m in marks for o in _osm_ids(m)}, wall_heights=walls)
+    overrides = {int(k): dict(v) for k, v in (spec.sources["osm"].get("building_overrides") or {}).items()}
+    tiles = extract_features(pbf, g, region_bounds_deg(spec, 0.0), half, TILE_SIZE_M, capture={o for m in marks for o in _osm_ids(m)},
+                             wall_heights=walls, building_overrides=overrides)  # fmt: skip
     captured = tiles.pop("captured", {})
     ways = tiles.pop("bridges", [])
     _embankments(spec, g, ways, tiles, out, dsm or [], log)

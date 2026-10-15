@@ -327,6 +327,29 @@ def _airport_kind(candidate: str, ring, aerodromes, paved_rings, paved_lines) ->
     return {"kind": "hangar", "door": best}
 
 
+def _override_info(ov: dict, ring) -> dict:
+    """A building's kind set in the region file: "office" (one storey, large windows), an
+    airport kind, or "open_shed" (a barrel roof on side walls, open at both ends, e.g. a wash
+    bay: four-sided footprints; "open": the open end walls, the one whose outside faces the
+    map bearing `open_toward_deg` first)."""
+    kind = str(ov["kind"])
+    if kind != "open_shed":
+        return {"kind": kind}
+    if len(ring) != 4:
+        raise ValueError(f"open_shed: a four-sided footprint, not {len(ring)} corners")
+    b = math.radians(float(ov["open_toward_deg"]))
+    dx, dz = math.sin(b), -math.cos(b)  # the bearing in (x east, z south)
+    area = sum((p[0] * q[1] - q[0] * p[1]) for p, q in zip(ring, ring[1:] + ring[:1]))
+    facing = []
+    for k, (p, q) in enumerate(zip(ring, ring[1:] + ring[:1])):
+        ex, ez = q[0] - p[0], q[1] - p[1]
+        length = math.hypot(ex, ez) or 1.0
+        nx, nz = (ez / length, -ex / length) if area > 0 else (-ez / length, ex / length)
+        facing.append((nx * dx + nz * dz, k))
+    front = max(facing)[1]
+    return {"kind": "open_shed", "open": [front, (front + 2) % 4]}
+
+
 def _ring_area(ring: list[tuple[float, float]]) -> float:
     return 0.5 * abs(sum(x0 * z1 - x1 * z0 for (x0, z0), (x1, z1) in zip(ring, ring[1:] + ring[:1])))
 
@@ -382,7 +405,7 @@ def extract_parts(pbf_path, geodesy: geo.Geodesy, sites: dict[str, tuple[float, 
 
 
 def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: float, tile_m: float, capture: set | None = None,
-                     wall_heights: dict | None = None) -> dict:  # fmt: skip
+                     wall_heights: dict | None = None, building_overrides: dict | None = None) -> dict:  # fmt: skip
     """{(ix, iz): {"roads": {class: [polyline, ...]}, "rail": [...], "taxiway": [...],
     "apron": [ring, ...], "buildings": [[height_m, source, ring], ...] (airport buildings: [height_m,
     source, ring, None, {"kind": "hangar" | "shelter" | "terminal" | "tower", "door": wall index}],
@@ -396,7 +419,9 @@ def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: fl
     also returned under the key "captured" ({object: {"outer": ring, "inner": [ring, ...]}}).
     Roads and railways on bridges are left out of the tiles and returned whole under the
     key "bridges" ([{"id", "nodes" (OSM node ids), "pts" ([[x, z], ...]), "kind" ("roads"
-    or "rail"), "cls", "lanes", "layer", "name"}]; scenery_bridges.py)."""
+    or "rail"), "cls", "lanes", "layer", "name"}]; scenery_bridges.py). `building_overrides`:
+    {way id: {"kind"?: "office" | "open_shed" | an airport kind, "height_m"?, "open_toward_deg"?}}
+    for buildings OSM tags wrongly (the region file's; see _override_info)."""
     import osmium
 
     s, w, n, e = bounds_deg
@@ -465,7 +490,13 @@ def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: fl
                     paved_rings.append(ring)
                 else:
                     h, src = building_height(dict(tags), _ring_area(ring))
+                    ov = (building_overrides or {}).get(o.orig_id()) if o.from_way() else None
+                    if ov and ov.get("height_m") is not None:
+                        h, src = float(ov["height_m"]), "override"
                     rec = add_area("buildings", ring, (round(h, 1), src))
+                    if rec is not None and ov and ov.get("kind"):
+                        rec.extend([None, _override_info(ov, ring)])
+                        continue
                     candidate = _airport_candidate(tags)
                     if rec is not None and candidate:
                         airport_buildings.append((rec, candidate, ring))

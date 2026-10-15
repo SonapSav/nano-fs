@@ -326,3 +326,62 @@ def test_airport_building_meshes():
     assert out["top"] == pytest.approx(12.0, abs=0.01)  # the ridge at the building's height (eaves 12 - 0.08 x 40 = 8.8 m)
     assert out["doorZ"][0] == out["doorZ"][1] == pytest.approx(100 - 0.06, abs=0.01)  # in front of wall 0 (z = 100, facing z < 100)
     assert out["shelterTop"] == pytest.approx(6.0, abs=0.01)
+
+
+def test_region_file_overrides_fix_wrongly_tagged_buildings(tmp_path):
+    """building_overrides by way id: a hangar that is an office (and lower), a hangar that is
+    an open shed (open at the end facing the given bearing and the one opposite)."""
+    pytest.importorskip("osmium")
+    pytest.importorskip("shapely")
+    from flightsim.world.scenery_osm import extract_features
+
+    g = geo.Geodesy("wgs84", 24.0, 54.0)
+    xml = ['<?xml version="1.0" encoding="UTF-8"?>', '<osm version="0.6">']
+    nid = 100
+    ways = []
+    for wid, (n0, e0) in ((1, (0, 0)), (2, (0, 200))):
+        ids = []
+        for n, e in ((n0, e0), (n0, e0 + 40), (n0 + 60, e0 + 40), (n0 + 60, e0)):  # 40 m east-west, 60 m north-south
+            nid += 1
+            lat, lon = (math.degrees(v) for v in g.to_geodetic(n, e))
+            xml.append(f'<node id="{nid}" version="1" lat="{lat:.9f}" lon="{lon:.9f}"/>')
+            ids.append(nid)
+        ways.append(f'<way id="{wid}" version="1">' + "".join(f'<nd ref="{i}"/>' for i in ids + ids[:1])
+                    + '<tag k="aeroway" v="hangar"/><tag k="building" v="yes"/></way>')  # fmt: skip
+    xml += ways + ["</osm>"]
+    (tmp_path / "t.osm").write_text("\n".join(xml))
+    f = extract_features(tmp_path / "t.osm", g, (23.9, 53.9, 24.1, 54.1), 8000, 4000,
+                         building_overrides={1: {"kind": "office", "height_m": 4.5}, 2: {"kind": "open_shed", "open_toward_deg": 0}})  # fmt: skip
+    f.pop("bridges")
+    bs = {round(sum(b[2][0::2]) / 4): b for t in f.values() for b in t["buildings"]}
+    assert bs[20][:2] == [4.5, "override"] and bs[20][4] == {"kind": "office"}
+    shed = bs[220][4]
+    assert shed["kind"] == "open_shed"
+    r = bs[220][2]
+    front = shed["open"][0]
+    # the front open wall: the north one (z = -60), facing bearing 0; the back one opposite
+    assert r[2 * front + 1] == r[(2 * front + 3) % 8] == pytest.approx(-60, abs=0.2)
+    assert shed["open"][1] == (front + 2) % 4
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_open_shed_mesh():
+    """An open shed: a barrel roof reaching the building's height in the middle, side walls to
+    the eaves, nothing across its open ends."""
+    script = f"""
+    const fg = await import({json.dumps((VIEWER / "featureGeometry.js").as_uri())});
+    const d = await import({json.dumps((VIEWER / "demCore.js").as_uri())});
+    const n = d.HEIGHT_CELLS + 1;
+    const h = new Float32Array(n * n).fill(0);
+    const tiles = {{ heights: (ix, iz) => (ix === 0 && iz === 0 ? h : null), landcover: () => null }};
+    // 40 m across (x), 60 m deep (z); open at the z = 0 and z = 60 walls (0 and 2)
+    const m = fg.buildingData({{ buildings: [[13, "gba", [0, 0, 40, 0, 40, 60, 0, 60], null, {{ kind: "open_shed", open: [0, 2] }}]] }}, tiles, 0);
+    const v = [...Array(m.position.length / 3).keys()].map((i) => [m.position[3 * i], m.position[3 * i + 1], m.position[3 * i + 2], m.normal[3 * i + 1]]);
+    const walls = v.filter((p) => p[3] === 0);
+    console.log(JSON.stringify({{ top: Math.max(...v.map((p) => p[1])), wallX: [...new Set(walls.map((p) => p[0]))].sort((a, b) => a - b),
+      wallTop: Math.max(...walls.map((p) => p[1])), midTop: Math.max(...v.filter((p) => Math.abs(p[0] - 20) < 2).map((p) => p[1])) }}));
+    """
+    out = json.loads(subprocess.run([NODE, "--input-type=module"], input=script, capture_output=True, text=True, check=True).stdout)
+    assert out["top"] == pytest.approx(13.0, abs=0.05) and out["midTop"] == pytest.approx(13.0, abs=0.1)
+    assert out["wallX"] == [0, 40]  # only the side walls: the ends are open
+    assert out["wallTop"] == pytest.approx(13 - min(0.2 * 40, 0.6 * 13), abs=0.05)  # the eaves under the rise (0.2 x the span, at most 0.6 x the height)

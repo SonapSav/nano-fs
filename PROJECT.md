@@ -2112,6 +2112,17 @@ landmarks; later night lighting, shadows, haze.
     (OMAD 94 tagged hangars). Scenery hash 79e38696a649bef6 (other machines: rebuild).
     Checked in viewer screenshots at Apron A (doors facing the apron) and the south apron
     (shelters on posts). Tests: classing and door choice, the hangar and shelter meshes. (034e703)
+  - [x] Three Apron A buildings OSM tags as hangars corrected (2026-10-15, the owner's belly
+    camera shots; each building found as the first on the camera's ray from the aircraft,
+    the three rays meeting near helipad A2): region file `osm.building_overrides` by way id
+    (scenery_osm._override_info; heights so set are kept by the later height steps). Way
+    200467368: a wash bay and sheltered parking, "open_shed": side walls to the eaves, a
+    barrel roof across up to its 13.3 m (GlobalBuildingAtlas, as the hangar beside it, way
+    200467382), open at both ends (toward the owner's camera, 341 deg, and away; rise 0.2 of
+    the span, at most 0.6 of the height: project choices). Ways 170928400 and 170928403:
+    one-storey offices with large windows ("office": a terminal's glazed ground floor), 4.5 m
+    (project choice; the atlas gave 9.4 and 8.3 m). Scenery hash 64b30887c21096c8 (other
+    machines: rebuild). Tests: the overrides, the open shed's mesh.
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.

@@ -30,6 +30,17 @@ sources:
     # 3 m). OMAD's perimeter wall, about 4 m (the owner, 2026-10-12): the three walls that
     # follow the aerodrome's outline (way 159458774) all the way round, 9.06 km of its 9.05.
     wall_heights: {391966353: 4.0, 200430162: 4.0, 391966111: 4.0}
+    # Buildings OSM tags wrongly (scenery_osm._override_info), from the owner's belly camera
+    # (2026-10-15; each picked as the first building on the camera's ray from the aircraft,
+    # near helipad A2): way 200467368, tagged a hangar, is a wash bay and sheltered parking,
+    # open at both ends (toward the camera, 341 deg, and away), with a rounded roof across, as
+    # tall as the hangar beside it (way 200467382; both 13.3 m in GlobalBuildingAtlas, kept);
+    # ways 170928400 and 170928403, tagged hangars, are one-storey offices with large windows
+    # (4.5 m: project choice; GlobalBuildingAtlas gave 9.4 and 8.3 m).
+    building_overrides:
+      200467368: {kind: open_shed, open_toward_deg: 341}
+      170928400: {kind: office, height_m: 4.5}
+      170928403: {kind: office, height_m: 4.5}
   imagery:
     # Sentinel-2 L2A surface reflectance, red/green/blue bands (B04, B03, B02; 10 m), AWS Earth
     # Search (collection sentinel-2-l2a; reflectance = value x 0.0001 - 0.1 per the items'

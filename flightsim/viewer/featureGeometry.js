@@ -316,7 +316,10 @@ const ROOF_SHADE = 0.85;
 const WALL_FROM_ROOF = 0.45; // how much of the roof's colour the walls take (project choice)
 // Airport buildings (scenery_osm.py _airport_kind): their kind rides in the facade
 // attribute's third value as kind x 1000 + the building's height, for the shader (terrain.js).
-export const FACADE_KIND = { hangar: 1, shelter: 2, terminal: 3, tower: 4, door: 5 };
+// Offices (region file overrides): a terminal's glazed ground floor; open sheds: a hangar's walls.
+export const FACADE_KIND = { hangar: 1, shelter: 2, terminal: 3, tower: 4, door: 5, office: 3, open_shed: 1 };
+const SHED_RISE = 0.2; // an open shed's barrel roof: its rise, of the span (at most 0.6 of the height; project choice)
+const SHED_STEPS = 12;
 const DOOR_WIDTH = 0.85; // of the door wall's length (project choice)
 const DOOR_HEIGHT = 0.8; // of the eaves' height, and 1.5 m under them at least (project choice)
 const GABLE_RISE = 0.08; // a hangar's ridge above its eaves, of the span across (project choice; four-sided footprints)
@@ -349,11 +352,11 @@ export function buildingData(f, tiles, minHeightM = 0) {
     const kind = info?.kind ?? null;
     const code = FACADE_KIND[kind] ?? 0;
     const tag = height + 1000 * code;
-    let wall = kind === "hangar" ? CLADDING[hash % CLADDING.length] : height >= 40 && !code ? GLASS[hash % GLASS.length] : WALLS[hash % WALLS.length];
+    let wall = kind === "hangar" || kind === "open_shed" ? CLADDING[hash % CLADDING.length] : height >= 40 && !code ? GLASS[hash % GLASS.length] : WALLS[hash % WALLS.length];
     let roof = wall.map((v) => v * ROOF_SHADE);
     if (colour != null && (height < 40 || code)) {
       roof = linear(colour).map((v) => Math.min(1, v * IMAGERY_GAIN));
-      if (kind !== "hangar") wall = wall.map((v, k) => v + (roof[k] - v) * WALL_FROM_ROOF);
+      if (kind !== "hangar" && kind !== "open_shed") wall = wall.map((v, k) => v + (roof[k] - v) * WALL_FROM_ROOF);
     }
     const n = ring.length / 2;
     let area = 0;
@@ -364,6 +367,10 @@ export function buildingData(f, tiles, minHeightM = 0) {
     const ccw = area > 0; // in (x, z)
     if (kind === "shelter") {
       shelter(mesh, ring, n, ccw, y0, y1, wall, roof, tag);
+      continue;
+    }
+    if (kind === "open_shed" && n === 4 && info.open) {
+      openShed(mesh, ring, info.open[0], y0, y1, height, wall, roof, tag);
       continue;
     }
     // A hangar's gable: a four-sided footprint, its ridge along the longer pair of sides.
@@ -438,6 +445,51 @@ function gableOf(ring) {
   const rise = Math.min(3, GABLE_RISE * span);
   // side s runs from corner s to s + 1; the ridge end next to corner s is the middle of the end wall (s + 3) % 4
   return { rise, ends, sides: [[s % 4, (s + 1) % 4], [(s + 2) % 4, (s + 3) % 4]], ridge: [mid((s + 3) % 4), mid((s + 1) % 4)] };
+}
+
+// An open shed (a wash bay, sheltered parking): a barrel roof across, from the top of its two
+// side walls to its height, open at both ends (walls `front` and front + 2 of a four-sided
+// footprint); the roof seen from below too.
+function openShed(mesh, ring, front, y0, y1, height, wall, roof, tag) {
+  const P = (k) => [ring[2 * (k % 4)], ring[2 * (k % 4) + 1]];
+  const [a, b, c, d] = [P(front), P(front + 1), P(front + 2), P(front + 3)]; // front a-b, back d-c
+  const span = (Math.hypot(b[0] - a[0], b[1] - a[1]) + Math.hypot(c[0] - d[0], c[1] - d[1])) / 2;
+  const rise = Math.min(SHED_RISE * span, 0.6 * height), eaves = y1 - rise;
+  const lerp = (p, q, t) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+  // side walls: d-a (beside a) and b-c (beside b), up to the eaves, facing out
+  for (const [p, q] of [[d, a], [b, c]]) {
+    const len = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    // outward: away from the other side wall's middle
+    const o = p === d ? lerp(b, c, 0.5) : lerp(d, a, 0.5);
+    let nx = (q[1] - p[1]) / len, nz = -(q[0] - p[0]) / len;
+    const m = lerp(p, q, 0.5);
+    if ((m[0] - o[0]) * nx + (m[1] - o[1]) * nz < 0) [nx, nz] = [-nx, -nz];
+    const [s, e] = nx * (q[1] - p[1]) - nz * (q[0] - p[0]) > 0 ? [q, p] : [p, q]; // wound like the other walls
+    const v = mesh.vertex(s[0], y0, s[1], nx, 0, nz, wall, 0, -0.5, tag);
+    mesh.vertex(e[0], y0, e[1], nx, 0, nz, wall, len, -0.5, tag);
+    mesh.vertex(s[0], eaves, s[1], nx, 0, nz, wall, 0, eaves - y0 - 0.5, tag);
+    mesh.vertex(e[0], eaves, e[1], nx, 0, nz, wall, len, eaves - y0 - 0.5, tag);
+    mesh.idx.push(v, v + 2, v + 1, v + 1, v + 2, v + 3, v, v + 1, v + 2, v + 1, v + 3, v + 2); // both faces: open ends show the inside
+  }
+  // the barrel: strips from the front edge to the back, across from side a to side b
+  const across = [b[0] - a[0], b[1] - a[1]], al = Math.hypot(...across);
+  const ux = across[0] / al, uz = across[1] / al;
+  const under = roof.map((v) => v * 0.55);
+  const top = [], bottom = [];
+  for (let i = 0; i <= SHED_STEPS; i++) {
+    const t = i / SHED_STEPS, y = eaves + rise * Math.sin(Math.PI * t);
+    const slope = (rise * Math.PI * Math.cos(Math.PI * t)) / span; // dy / d(across)
+    const nl = Math.hypot(slope, 1), nx = (-slope * ux) / nl, ny = 1 / nl, nz = (-slope * uz) / nl;
+    const f = lerp(a, b, t), k = lerp(d, c, t);
+    top.push(mesh.vertex(f[0], y, f[1], nx, ny, nz, roof, -1, 0, tag), mesh.vertex(k[0], y, k[1], nx, ny, nz, roof, -1, 0, tag));
+    bottom.push(mesh.vertex(f[0], y - 0.15, f[1], -nx, -ny, -nz, under, -1, 0, tag), mesh.vertex(k[0], y - 0.15, k[1], -nx, -ny, -nz, under, -1, 0, tag));
+  }
+  for (let i = 0; i < SHED_STEPS; i++) {
+    const [f0, k0, f1, k1] = [top[2 * i], top[2 * i + 1], top[2 * i + 2], top[2 * i + 3]];
+    mesh.idx.push(f0, f1, k0, k0, f1, k1, f0, k0, f1, k0, k1, f1); // both windings (the side the ring was drawn from varies)
+    const [g0, h0, g1, h1] = [bottom[2 * i], bottom[2 * i + 1], bottom[2 * i + 2], bottom[2 * i + 3]];
+    mesh.idx.push(g0, h0, g1, h0, h1, g1, g0, g1, h0, h0, g1, h1);
+  }
 }
 
 // An open shelter: its roof (SHELTER_ROOF_M deep, top at y1) on square posts at its
