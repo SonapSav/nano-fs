@@ -12,3 +12,7 @@ actions: [elevator, aileron, rudder, throttle, flaps, pitch_trim, brake]
 free:
   start: {north_m: 185, east_m: 35, heading_deg: 180}
   max_sink_fpm: 600           # as the approach task's hard landing (project choice)
+  # Centred stick and pedals: the model's trim at 90 kt, 2000 ft (aileron +0.040 on the
+  # standard day, +0.043 on the Abu Dhabi summer day; rudder -0.007 / -0.008), rounded:
+  # rigged for cruise as a real 172 is (envs/free.py). Without it the model rolls left hard.
+  rigging: {aileron: 0.042, rudder: -0.008}

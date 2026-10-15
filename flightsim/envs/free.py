@@ -17,6 +17,15 @@ holds it at idle and up to 20 % power in calm air. Applied in the env, so it rea
 other command. Buildings are not
 known to the physics (only the terrain), so flying into one is not a crash.
 
+Rigging (`free.rigging`): the aileron and rudder commands the centred stick and pedals give
+(the episode's trim; the pilot's input is relative to it). The airborne tasks start
+trimmed by JSBSim, so centred flies straight there; parked, there is no such trim, and with
+centred controls at zero the model rolls left hard (propeller torque, P-factor: 30-50 deg
+of bank in 20 s hands-off at 70-110 kt). As a mechanic rigs a real 172 to fly hands-off in
+cruise, the free flight centres on the model's trim at 90 kt (the owner's choice A,
+2026-10-15): hands-off nearly straight at cruise, a little right at 110 kt, left at climb
+power. A constant command offset through the action like any other command.
+
 Wind (`free.wind`, optional): the runway tasks' low-altitude wind (MIL-F-8785C 3.7.3: log
 profile and Dryden turbulence aligned with the wind), built up while the aircraft waits on
 its stand; its crosswind and tailwind limits are against the stand's heading (the windy
@@ -55,7 +64,8 @@ class FreeFlightEnv(AltitudeHeadingHoldEnv):
         return ic, ic.alt_msl_m, ic.heading_rad  # no targets: the start's, unused
 
     def _start_controls(self) -> Controls:
-        return Controls(throttle=0.0, brake=PARKING_BRAKE)  # parked: the parking brake
+        f = self.cfg.free  # parked: the parking brake; centred stick and pedals at the rigging
+        return Controls(throttle=0.0, brake=PARKING_BRAKE, aileron=f.rigging_aileron, rudder=f.rigging_rudder)
 
     def _start_core(self, ic: InitialConditions) -> tuple[Controls, State]:
         w, wind_n, wind_e = self.free_wind, 0.0, 0.0

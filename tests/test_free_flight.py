@@ -110,3 +110,28 @@ def test_abu_dhabi_starts_on_apron_a(name):
     for _ in range(20 * 10):
         _, _, term, _, info = env.step(_act(env))
     assert not term and info["state"].alt_agl_m == pytest.approx(1.33, abs=0.1)  # resting on its wheels
+
+
+@pytest.mark.parametrize("name", ["free", "abu_dhabi_free"])
+def test_centred_controls_are_rigged_for_cruise(name):
+    """Centred stick and pedals (the episode's trim) give the model's 90 kt trim aileron and
+    rudder, so a free flight flies nearly straight hands-off in cruise; without them the
+    model rolls left hard (envs/free.py)."""
+    if name.startswith("abu_dhabi") and not SCENERY.exists():
+        pytest.skip("Abu Dhabi scenery not built")
+    from flightsim.core import InitialConditions, JSBSimCore
+
+    cfg = load_env_config(CONFIGS / f"{name}.yaml")
+    env = make_env(cfg)
+    _, info = env.reset(seed=0)
+    assert (info["trim"].aileron, info["trim"].rudder) == (cfg.free.rigging_aileron, cfg.free.rigging_rudder) == (0.042, -0.008)
+    core = JSBSimCore(cfg.aircraft, 1 / cfg.sim_rate_hz)
+    if cfg.atmosphere is not None:
+        core.set_atmosphere(cfg.atmosphere)
+    core.reset(InitialConditions(610.0, 90 * 0.514444, 0.0), cfg.loading)
+    u = core.trim()
+    assert u.aileron == pytest.approx(0.042, abs=0.004) and u.rudder == pytest.approx(-0.008, abs=0.002)
+    rigged = replace(u, aileron=0.042, rudder=-0.008)
+    for _ in range(20 * 120):
+        s = core.step(rigged)
+    assert abs(math.degrees(s.phi_rad)) < 5 and abs(math.degrees(math.remainder(s.psi_rad, 2 * math.pi))) < 10  # 20 s hands-off

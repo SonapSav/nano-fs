@@ -2080,6 +2080,17 @@ landmarks; later night lighting, shadows, haze.
     parking brake, time cap, crash rules, forgetting and never saving, the Abu Dhabi start),
     a helicopter-runway paving test. Checked in the viewer: the list, hint, clock, start at
     the cross hairs, nothing saved on Stop. (9370b92, cc2e373)
+  - [x] Free flight rigged for cruise (2026-10-15; the owner: the aircraft rolls left a lot).
+    The model needs right aileron to fly straight, more with power (propeller torque,
+    P-factor): 7 % at 70 kt level (5 % gliding, 10 % climbing), 4 % at 90 kt, 3 % at
+    110 kt; hands-off with zero aileron and rudder it reaches 30-50 deg of left bank in 20 s.
+    The airborne scenarios start trimmed (centred = JSBSim's trim), the free flight starts
+    parked (centred was zero). Option A (the owner): `free.rigging` {aileron 0.042, rudder
+    -0.008}, the model's 90 kt trim, as the free flight's centred controls, like a real
+    172's rigging (that a rigged 172 flies roughly hands-off in cruise is **from memory,
+    unverified**). Hands-off after 20 s: 90 kt within 2 deg of bank, 110 kt about 12 deg
+    right, idle glide a few deg. The model's own torque roll is unchanged (option B, rigging
+    the aircraft model for every task, would change its hash, trims and validation).
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.

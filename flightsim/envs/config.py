@@ -297,6 +297,8 @@ class FreeConfig:
     start_heading_rad: float  # true
     max_sink_mps: float  # a touchdown harder than this is a crash
     wind: dict | None = None  # low-altitude wind (envs/runway.py draw_low_altitude_wind), any direction
+    rigging_aileron: float = 0.0  # the centred stick's aileron and rudder (normalized commands)
+    rigging_rudder: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -411,6 +413,7 @@ def _parse_free(f: dict | None, geodesy) -> FreeConfig | None:
     return FreeConfig(
         start_north_m=north, start_east_m=east, start_heading_rad=math.radians(st["heading_deg"]),
         max_sink_mps=float(f["max_sink_fpm"]) * FPM_TO_MPS, wind=w or None,
+        rigging_aileron=float((f.get("rigging") or {}).get("aileron", 0.0)), rigging_rudder=float((f.get("rigging") or {}).get("rudder", 0.0)),
     )  # fmt: skip
 
 
