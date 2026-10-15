@@ -1934,7 +1934,7 @@ landmarks; later night lighting, shadows, haze.
     from the frame clock (document.timeline, the same for the main view and the belly
     camera): true speed at 144 frames/s, slower at low frame rates, never backwards.
     Measured in headless Chromium at 60 frames/s: main rotor 21.6 deg, tail 27 deg per
-    frame, main anticlockwise from above.
+    frame, main anticlockwise from above. (d9dfbcb)
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings
     (OSM 3D tags, shadows), night lighting, or ready-made models.
 
