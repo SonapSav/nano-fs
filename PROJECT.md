@@ -1941,7 +1941,7 @@ landmarks; later night lighting, shadows, haze.
     from (X 1.01, Z 2.75) to (X 0.64, Z 3.22); dark faces on the fairing (AW139_Grille). The
     forward fairing between the windscreen and the intakes lowered to the side view's line
     (Z 2.75 at X 1.0, was 2.88). Model 68 meshes, 56.2k triangles (budget 60k), 1.1 MB.
-    Checked in Blender renders against the front and side views.
+    Checked in Blender renders against the front and side views. (64f3a49)
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
