@@ -1984,6 +1984,11 @@ landmarks; later night lighting, shadows, haze.
     diagonal (the drawing agrees; the convex D was overdone). Roof windows match the photo
     as they were. Budget raised to 80k triangles and 2 MB (test); model 68 meshes, 57.6k
     triangles, 1.13 MB. (c67617c)
+  - [x] AW139 tail bumper heel (2026-10-15; the owner compared a photo with the model: the
+    heel was missing). The boom's end now forms the heel: below the fin's trailing edge its
+    top turns aft nearly level to a rounded point at X -8.43, Z 2.08, 0.32 m behind the
+    trailing edge's waist (X -8.11 at Z 2.33); the boom sampled every 4 cm there. Checked in
+    Blender renders from the owner's angle and the side.
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
