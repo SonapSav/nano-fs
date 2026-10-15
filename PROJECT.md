@@ -1924,7 +1924,7 @@ landmarks; later night lighting, shadows, haze.
     memory; anticlockwise from above as modelled (Vertipedia: "Counterclockwise"). Tail
     rotor really 1435 rpm (same notes, ch. 65: TGB output, "the nominal speed of the TR");
     kept at 6 rev/s, since 24 rev/s with 4 blades would strobe at screen frame rates. Only
-    the model's spin_rev_per_s changed (geometry byte-identical); no scenery rebuild needed.
+    the model's spin_rev_per_s changed (geometry byte-identical); no scenery rebuild needed. (a6b8e7c)
   - [ ] The owner's verdict on the landmarks; next options: the city's other buildings
     (OSM 3D tags, shadows), night lighting, or ready-made models.
 
