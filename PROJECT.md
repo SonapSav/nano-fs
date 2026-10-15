@@ -2079,7 +2079,7 @@ landmarks; later night lighting, shadows, haze.
     9b764d7c59bc7d93 (other machines: rebuild). Tests: tests/test_free_flight.py (start,
     parking brake, time cap, crash rules, forgetting and never saving, the Abu Dhabi start),
     a helicopter-runway paving test. Checked in the viewer: the list, hint, clock, start at
-    the cross hairs, nothing saved on Stop.
+    the cross hairs, nothing saved on Stop. (9370b92, cc2e373)
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
