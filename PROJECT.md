@@ -2002,7 +2002,7 @@ landmarks; later night lighting, shadows, haze.
     (Z 2.18 at X -8.21, 2.14 at X -8.32) to a rounded tip at X -8.36, Z 2.09, the bottom
     rising to Z 2.03; about 0.21 m wide (photos). The drawing's outline and both photo
     overlays agree to within the cameras' errors (a constant 7 px shift along the whole
-    trailing edge on the ambulance photo). Comparison images in data/shots/aw139tail/.
+    trailing edge on the ambulance photo). Comparison images in data/shots/aw139tail/. (4a6f005)
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
