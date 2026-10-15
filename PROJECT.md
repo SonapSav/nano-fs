@@ -2003,6 +2003,17 @@ landmarks; later night lighting, shadows, haze.
     rising to Z 2.03; about 0.21 m wide (photos). The drawing's outline and both photo
     overlays agree to within the cameras' errors (a constant 7 px shift along the whole
     trailing edge on the ambulance photo). Comparison images in data/shots/aw139tail/. (4a6f005)
+  - [x] AW139 tail end rebuilt as a keel (2026-10-15; the owner, rightly: the last heel was
+    poor). The outline matched the drawing, but the 3D shape did not: the boom was a round
+    tube running on behind the fin and ending in a small nub, with a ledge along both sides
+    of the fin (from squaring the boom's top under the fin). Now the fin's lower part is a
+    keel whose thick, round trailing edge (new fin_section: NACA thickness plus a rounded
+    trailing edge, half-thickness tb) traces the drawing's S and is itself the bumper heel
+    (tip X -8.355, Z 2.09, about 0.19 m across, as wide as the boom where they meet); the
+    boom ends inside it (X -8.12) and its top narrows to a ridge running up inside the fin,
+    so its sides sweep into the fin's. Checked from behind, below, above and both sides,
+    and against the side view and both photos through their solved cameras (overlays and a
+    side-by-side in data/shots/aw139tail/).
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.

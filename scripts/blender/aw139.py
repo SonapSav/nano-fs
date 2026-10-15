@@ -245,21 +245,18 @@ FUS = [(4.62, 0, 0.80, 0.92, 0.05, 0.86, 2.2, 2.2),
        (-3.40, 0, 1.07, 2.50, 0.62, 1.70, 2.8, 3.0),
        (-3.75, 0, 1.22, 2.56, 0.46, 1.85, 2.6, 2.6),
        (-4.60, 0, 1.35, 2.55, 0.36, 1.95, 2.4, 2.4),
-       (-6.00, 0, 1.56, 2.53, 0.25, 2.05, 2.6, 2.3),
-       (-7.05, 0, 1.71, 2.51, 0.18, 2.10, 3.2, 2.2),
-       (-7.80, 0, 1.90, 2.50, 0.14, 2.20, 3.2, 2.2),
-       # the tail bumper's heel, the boom's end below the fin (the side view's outline, the
-       # ambulance photo's shape through its solved camera): from the trailing edge's waist (X -8.115,
-       # Z 2.37) the top turns aft nearly level (Z 2.18 at X -8.21, 2.14 at X -8.32) to a rounded tip
-       # at X -8.355, Z 2.09, the bottom rising to Z 2.03 at X -8.30; about 0.21 m wide
-       (-8.00, 0, 1.93, 2.40, 0.12, 2.13, 2.6, 2.2),
-       (-8.12, 0, 1.96, 2.27, 0.115, 2.10, 2.3, 2.1),
-       (-8.21, 0, 1.99, 2.18, 0.105, 2.085, 2.1, 2.0),
-       (-8.29, 0, 2.02, 2.145, 0.09, 2.08, 2.0, 2.0),
-       (-8.33, 0, 2.04, 2.125, 0.07, 2.08, 2.0, 2.0)]
-X = np.concatenate([np.arange(4.62, 2.2, -0.05), np.arange(2.2, -2.2, -0.1), np.arange(-2.2, -7.9, -0.15), np.arange(-7.9, -8.33, -0.03), [-8.33]])
+       # under the fin the boom's top narrows to a ridge running up inside the fin, so its sides
+       # sweep up into the fin's (photos; a round or square top left a ledge along the fin)
+       (-6.00, 0, 1.56, 2.53, 0.25, 2.05, 2.2, 2.3),
+       (-6.60, 0, 1.63, 2.56, 0.21, 2.07, 1.7, 2.2),
+       (-7.05, 0, 1.71, 2.60, 0.18, 2.10, 1.5, 2.2),
+       (-7.80, 0, 1.90, 2.58, 0.14, 2.20, 1.5, 2.2),
+       # the boom ends inside the fin's keel, flush with its sides (the heel is the fin's)
+       (-7.98, 0, 1.93, 2.40, 0.11, 2.12, 1.8, 2.2),
+       (-8.08, 0, 1.955, 2.28, 0.085, 2.10, 2.0, 2.0)]
+X = np.concatenate([np.arange(4.62, 2.2, -0.05), np.arange(2.2, -2.2, -0.1), np.arange(-2.2, -7.9, -0.15), np.arange(-7.9, -8.08, -0.03), [-8.08]])
 fus = loft_x("AW139_Fuselage", FUS, X, ["AW139_Paint"],
-             tip_front=(4.665, 0, 0.86), tip_back=(-8.36, 0, 2.085))
+             tip_front=(4.665, 0, 0.86), tip_back=(-8.12, 0, 2.10))
 
 # up to the centre post; its top edge level with the roof panel (Z 2.03 in the front view); its
 # bottom edge and the door window measured on a photo of A6-AWB (left side, camera solved from
@@ -432,22 +429,37 @@ for s, sgn in (("L", 1), ("R", -1)):
 
 # ------------------------------------------------------------------ tail
 
-def fin_section(z, le, te, t, y=0.0):
-    return [(p[0], y + p[1], z) for p in airfoil((le, 0), (te, 0), t)]
+def fin_section(z, le, te, w, tb, n_side=18, n_cap=5):
+    """A fin section at height z from le to te (X): a NACA 00xx half-thickness w at its
+    thickest, its trailing edge rounded off with half-thickness tb (the outline still ends at
+    te). Same point count for every section."""
+    d = -1.0 if te < le else 1.0
+    te_c = te - d * tb  # the round end's centre
+    b = np.linspace(0, np.pi, n_side); xc = (1 - np.cos(b)) / 2
+    f = 10 * (0.2969 * np.sqrt(xc) - 0.126 * xc - 0.3516 * xc ** 2 + 0.2843 * xc ** 3 - 0.1036 * xc ** 4)
+    hw = w * np.clip(f, 0, None) + tb * xc ** 3
+    x = le + (te_c - le) * xc
+    up = [(xx, yy, z) for xx, yy in zip(x, hw)]
+    cap = [(te_c + d * tb * math.cos(a), tb * math.sin(a), z) for a in np.linspace(np.pi / 2, -np.pi / 2, n_cap + 2)[1:-1]]
+    lo = [(xx, -yy, z) for xx, yy in zip(x[::-1], hw[::-1])][:-1]
+    return up + cap + lo
 
 # the fin (side view): a straight swept leading edge from a fillet on the boom top (X -6.55 at
 # Z 2.49, X -7.03 at Z 2.63) to the top front corner (X -8.23, Z 3.78); the trailing edge from
-# the top rear corner (X -9.03, Z 3.64) down to Z 2.51, then the S of the tail bumper (X -8.11
-# at Z 2.33, out to X -8.32 at Z 2.11) to the bottom at Z 2.02. As thick as the boom where it
-# grows out of it (about 0.25 m; the boom's top is squarer there); below Z 2.5 forward of X -8
-# it is inside the boom.
-FIN_Z = [2.02, 2.11, 2.20, 2.33, 2.45, 2.49, 2.53, 2.58, 2.63, 3.00, 3.40, 3.64, 3.74, 3.80]
-FIN_LE = [-7.30, -7.10, -6.90, -6.70, -6.56, -6.55, -6.82, -6.95, -7.03, -7.41, -7.83, -8.08, -8.20, -8.30]
-FIN_TE = [-8.32, -8.32, -8.16, -8.11, -8.17, -8.19, -8.21, -8.25, -8.29, -8.56, -8.85, -9.03, -9.00, -8.90]
-FIN_T = [0.14, 0.14, 0.15, 0.15, 0.15, 0.15, 0.17, 0.20, 0.22, 0.24, 0.24, 0.24, 0.22, 0.12]
-fz = np.linspace(FIN_Z[0], FIN_Z[-1], 32)
-loft_sections("AW139_Fin", [fin_section(z, le, te, t) for z, le, te, t in
-                            zip(fz, pchip(FIN_Z, FIN_LE, fz), pchip(FIN_Z, FIN_TE, fz), pchip(FIN_Z, FIN_T, fz))], ["AW139_Paint"])
+# the top rear corner (X -9.03, Z 3.64) down to Z 2.51, then the S of the tail bumper: its waist
+# at X -8.115, Z 2.37, out aft nearly level (Z 2.18 at X -8.21, 2.14 at X -8.32) to the heel's
+# round tip at X -8.355, Z 2.09, and back under it to X -8.02 at Z 1.93, where the boom's
+# underside meets it. Below about Z 2.5 the fin is a keel: its trailing edge thick and round
+# (about 0.19 m across at the heel's tip, as wide as the boom where it meets it, photos), so
+# the bumper is the fin's own end and the boom ends inside it. Half-thickness w at its thickest, trailing edge half-thickness tb.
+FIN_Z = [1.93, 1.98, 2.03, 2.09, 2.14, 2.18, 2.25, 2.33, 2.45, 2.53, 2.58, 2.63, 3.00, 3.40, 3.64, 3.74, 3.80]
+FIN_LE = [-7.60, -7.45, -7.30, -7.20, -7.10, -7.00, -6.85, -6.70, -6.56, -6.82, -6.95, -7.03, -7.41, -7.83, -8.08, -8.20, -8.30]
+FIN_TE = [-8.02, -8.17, -8.30, -8.355, -8.32, -8.21, -8.13, -8.11, -8.16, -8.21, -8.25, -8.29, -8.56, -8.85, -9.03, -9.00, -8.90]
+FIN_W = [0.07, 0.11, 0.13, 0.135, 0.135, 0.13, 0.125, 0.12, 0.12, 0.12, 0.125, 0.13, 0.135, 0.125, 0.11, 0.09, 0.04]
+FIN_TB = [0.05, 0.075, 0.09, 0.095, 0.09, 0.085, 0.075, 0.06, 0.04, 0.025, 0.02, 0.015, 0.01, 0.008, 0.008, 0.006, 0.004]
+fz = np.concatenate([np.linspace(1.93, 2.45, 18), np.linspace(2.45, 3.80, 25)[1:]])
+loft_sections("AW139_Fin", [fin_section(z, le, te, w, tb) for z, le, te, w, tb in
+                            zip(fz, *(pchip(FIN_Z, v, fz) for v in (FIN_LE, FIN_TE, FIN_W, FIN_TB)))], ["AW139_Paint"])
 
 # the tail rotor gearbox fairing on the fin top: 0.7 m across (top view, from X -8.15), its aft
 # end a wedge to a point at X -9.22 near its top line, past the fin's trailing edge (photos; the
