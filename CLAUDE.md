@@ -116,6 +116,8 @@ flightsim/          # installable package (uv_build backend)
                     #     their materials and sun shadows; ?debug in the URL exposes the scene for screenshots),
                     #     staticMerge.js (static objects baked into one mesh per material: fewer draw calls),
                     #     bridges.js (every OSM bridge's deck and piers, the landmark bridges' arches and girders)
+                    #     traffic.js / trafficCore.js (a region's moving traffic: models flown along its traffic.json
+                    #     routes, timed to pass a meeting point when the flown aircraft does; visual only)
                     #     imageryClip.js (a region's 1 m / 4 m imagery streamed around the camera: two fixed clipmap textures)
                     #     groundTextures.js (close-up sand, paving and plant detail blended into a region's imagery)
                     #     sunShadows.js (a region's sun shadows: one map around the camera, drawn only when it moves)
@@ -133,6 +135,7 @@ flightsim/          # installable package (uv_build backend)
                     #   scenery_heights.py: building heights per building (GlobalBuildingAtlas)
                     #   scenery_trees.py: trees from the canopy height map (Meta and WRI); viewer/trees.js draws them
                     #   scenery_embankments.py: approach banks at landmark bridges' ends (Copernicus GLO-30), in the height tiles
+                    #   scenery_traffic.py: moving traffic's routes along OSM roads (a region file's `traffic`), traffic.json
                     #   scenery_roads.py: the drawn road network (OSM roads aligned to the 1 m imagery, junction shapes); viewer/roadGeometry.js, roadNetwork.js
   batch.py          # parallel seeded episode batches
   config.py         # YAML loading (base: inheritance, overrides) + config hash

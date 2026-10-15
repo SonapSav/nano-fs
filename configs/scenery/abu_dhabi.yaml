@@ -290,6 +290,16 @@ bridges:
   - {name: Sheikh Khalifa Bridge, kind: box_girder, osm_name: Sheikh Khalifa Bridge, clearance_m: 31.5, deck_depth_m: 3.5,
      main_spans_m: [110, 200, 135, 70, 45], girder_max_m: 10.25, v_pier_deg: 27.45}
 
+# Moving traffic the viewer flies (visual only; flightsim/world/scenery_traffic.py, viewer/
+# traffic.js). The owner's scene (2026-10-15): an AW139 along Al Khaleej Al Arabi Street (E20),
+# on its south-east-bound carriageway (OSM way 24151136, the Mussafah Bridge's deck, 2.8 km out
+# on runway 31's final and 420 m left of its centreline), at 80 kt, against an aircraft landing
+# on 31: started so that it passes the bridge's middle when the flown aircraft passes closest
+# to it. Altitude 500 ft, nose 4 deg down and the 300 m smoothing: project choices.
+traffic:
+  - {name: E20 helicopter, model: aw139, speed_kt: 80, altitude_ft: 500, pitch_deg: -4, trigger_m: 9000,
+     route: {osm_way: 24151136, before_m: 7000, after_m: 6000, smooth_m: 300}, meet_osm_way: 24151136}
+
 # Published airfield data where OSM lacks or disagrees (OSM gives positions and numbers).
 # Runways without a width here or in OSM get default_runway_width_m.
 airports:

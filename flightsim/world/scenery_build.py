@@ -85,6 +85,7 @@ class RegionSpec:
     airports: dict = field(default_factory=dict)  # ICAO -> published data (elevation_ft, runways)
     origin_airport: str | None = None  # the airport at the origin (ICAO), for displays
     default_runway_width_m: float = 30.0
+    traffic: list = field(default_factory=list)  # moving models the viewer flies (scenery_traffic.py)
 
     @property
     def ix_range(self) -> tuple[int, int]:
@@ -98,7 +99,7 @@ def load_spec(path: str | Path) -> RegionSpec:
         tiles_radius=int(raw["tiles_radius"]), sources={**raw["sources"], "landmarks": raw.get("landmarks") or [], "bridges": raw.get("bridges") or []},
         pinned=raw.get("pinned", {}) or {},
         airports=raw.get("airports", {}) or {}, default_runway_width_m=float(raw.get("default_runway_width_m", 30.0)),
-        origin_airport=raw.get("origin_airport"),
+        origin_airport=raw.get("origin_airport"), traffic=raw.get("traffic") or [],
     )  # fmt: skip
 
 
@@ -991,7 +992,7 @@ def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print, workers: int | 
     `force`) and write its manifest."""
     import sys
 
-    from flightsim.world import dem, scenery, scenery_bridges, scenery_colours, scenery_embankments, scenery_heights, scenery_hires, scenery_osm, scenery_roads, scenery_trees
+    from flightsim.world import dem, scenery, scenery_bridges, scenery_colours, scenery_embankments, scenery_heights, scenery_hires, scenery_osm, scenery_roads, scenery_traffic, scenery_trees
 
     me = sys.modules[__name__]
 
@@ -1012,7 +1013,7 @@ def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print, workers: int | 
     # embankments, bridges, OSM features, landmarks (about 4 minutes).
     terrain_fp = _fingerprint(
         "terrain", _code(me, scenery_osm, scenery_bridges, scenery_heights, scenery_embankments, geo, scenery, dem),
-        {**{k: v for k, v in spec.__dict__.items() if k not in ("sources", "pinned")},
+        {**{k: v for k, v in spec.__dict__.items() if k not in ("sources", "pinned", "traffic")},
          "sources": {k: v for k, v in spec.sources.items() if k not in ("hires_imagery", "canopy_height")}},
         sorted((f["name"], f["sha256"]) for f in sources if f["kind"] != "canopy_height"),
     )  # fmt: skip
@@ -1048,6 +1049,14 @@ def build(spec: RegionSpec, root: Path = SCENERY_DIR, log=print, workers: int | 
             stages.finish("trees", trees_fp)
     if terrain:
         stages.finish("terrain", terrain_fp)
+
+    # Moving traffic: its routes from OSM (traffic.json; a minute or two to read the extract).
+    osm_entry = next(f for f in sources if f["kind"] == "osm")
+    traffic_fp = _fingerprint("traffic", _code(scenery_traffic, geo), spec.traffic, region, osm_entry["sha256"])
+    if not (out / "traffic.json").exists() or not stages.done("traffic", traffic_fp, "traffic"):
+        stages.start("traffic")
+        scenery_traffic.build_traffic(spec, src / osm_entry["name"], out, MODELS_DIR, log)
+        stages.finish("traffic", traffic_fp)
 
     # 1 m imagery (from the Sentinel imagery and land cover tiles).
     hires_fp = None

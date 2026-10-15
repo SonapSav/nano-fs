@@ -2019,6 +2019,29 @@ landmarks; later night lighting, shadows, haze.
     one forward and two aft 120 deg apart as asked, tilted with the mast; stationary (they
     do not spin). The ambulance photo, read through its solved camera, rather suggests two
     forward and one aft (unconfirmed at that resolution; one line to flip). (fc62002)
+  - [x] Moving traffic: an AW139 along Al Khaleej Al Arabi Street (E20) through the
+    Mussafah Bridge, against an approach to OMAD 31 (2026-10-15, the owner's scene). Region
+    file `traffic` (model, speed 80 kt, altitude 500 ft, nose 4 deg down, trigger 9 km, route
+    = OSM way 24151136, the bridge's south-east-bound deck, 7 km back and 6 km on, 300 m
+    smoothing; altitude, pitch and smoothing project choices) -> scenery build step
+    `traffic` (world/scenery_traffic.py: the carriageway chained through ways joined end to
+    end with the same name or ref, in its one-way direction, resampled every 10 m and
+    smoothed; its own fingerprint, left out of the terrain step's) -> traffic.json (16.6 km
+    route, meeting point 8.1 km along) -> viewer/traffic.js (loadModel, shared with the
+    parked models, rotors turning, body and rotor shadows flattened onto the ground below)
+    and trafficCore.js (timing: once the flown aircraft is within the trigger distance and
+    closing, the model starts at meet_s - speed x the aircraft's time to its closest
+    approach, then flies at a constant 80 kt on the frames' clock: stops when paused,
+    replays the same, set again after a seek or a new approach; banks for the route's
+    curves). The bridge lies 2.8 km out on 31's final, 420 m left of the centreline: the
+    helicopter passes about 440 m to the left, head-on to within 20 deg. Tests: chaining,
+    resampling, smoothing, the meeting point, the region entry, the timing in Node (at the
+    closest approach the model is within 10 m of the meeting point, 80 kt throughout).
+    Checked with a headless approach (data/shots/traffic_approach.py): at the closest
+    approach the model is 12 m from the bridge's middle, in view to the left. Scenery hash
+    b69dbfb757185d73 (other machines: rebuild, about 14 min). Limits: the start uses the
+    aircraft's ground speed when it starts (slowing down afterwards makes the helicopter
+    early); no physics (it can be flown through); not in the map window.
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.

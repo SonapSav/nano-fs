@@ -18,6 +18,7 @@ import { QUALITY, Terrain, waterUniforms } from "./terrain.js";
 import { LIFT_M as RUNWAY_LIFT_M, RealAirfields } from "./realAirfields.js";
 import { Landmarks } from "./landmarks.js";
 import { Bridges } from "./bridges.js";
+import { Traffic } from "./traffic.js";
 import { ROADS, RegionRoads, marksMaterial, roadMaterial } from "./roadNetwork.js";
 import { ImageryClip } from "./imageryClip.js";
 import { SunShadows } from "./sunShadows.js";
@@ -145,6 +146,7 @@ export class FlightScene {
     this.proceduralPapi = this.papi = new Papi(this.procedural);
     this.proceduralWindsock = this.windsock = new Windsock(this.procedural);
     this.realAirfields = new RealAirfields(this.scene, this.skyLight);
+    this.traffic = new Traffic(this.scene, this.skyLight);
     this.landmarks = new Landmarks(this.scene);
     this.bridges = new Bridges(this.scene);
     this.roadNet = new RegionRoads(); // the drawn road network: the bridges' lanes and alignment
@@ -358,6 +360,7 @@ export class FlightScene {
     this.realAirfields.build(real ? w.airfields : null);
     this.landmarks.build(real ? w.landmarks : null);
     this.bridges.build(real ? w.bridges : null);
+    this.traffic.set(real ? w.traffic : null);
     if (ROADS) this.roadNet.load(real ? w.scenery : null).then(() => real && this.bridges.build(w.bridges)); // the decks again, with their lanes
     this.landmarks.setNight(this.skyLight.night);
     this.bridges.setNight(this.skyLight.night);
@@ -465,6 +468,7 @@ export class FlightScene {
     const dt = this.lastT === null || row.t_s < this.lastT || row.t_s - this.lastT > 1 ? 0 : row.t_s - this.lastT;
     this.lastT = row.t_s;
     this.model.update(row, dt);
+    this.traffic.update(row, this.geodesy);
     this.groundUnder = null; // gear and shadow placed again on the next drawing (_followGround)
 
     // Trail: a point every 1/30 s of flight time at most (the view is drawn at the screen's

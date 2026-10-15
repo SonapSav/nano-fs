@@ -157,88 +157,12 @@ export class RealAirfields {
     for (const m of (airfields?.models ?? []).filter(near)) this.placeModel(m, this.furniture, y + LIFT_M);
   }
 
-  // A parked model (the region file's parked_models, through the scenery build): the
-  // viewer's models/<model>.glb (x nose, y up, ground at y = 0) at its stand, joined per
-  // material. With `turning`, the parts carrying spin extras (spin_pivot, spin_axis,
-  // spin_rev_per_s, spin_blades: rotors) turn about their axis, from the page's frame clock
-  // (they turn while a flight is paused), drawn each frame on their own. A rotor turns at most
-  // SPIN_MAX_STEP of its blade spacing per frame: at its true speed a five-bladed 296 rpm rotor
-  // moves more than half a spacing per frame below about 49 frames/s and looks to turn
-  // backwards (the wagon-wheel effect), so at low frame rates it is shown slower instead. The sun shadow map is drawn only when
-  // the camera moves (sunShadows.js), so turning parts stay out of it: their shapes are
-  // flattened along the sun onto the plane just above the paved markings (hold bars 0.08 m)
-  // every frame instead, as the flown aircraft's shadow (scene.js). Visual only.
+  // A parked model (the region file's parked_models, through the scenery build) at its
+  // stand: loadModel with the stand's place, its shadows on the plane just above the paved
+  // markings (hold bars 0.08 m). Visual only.
   placeModel(m, group, y) {
     const place = new THREE.Matrix4().makeRotationY(((90 - m.heading_deg) * Math.PI) / 180).setPosition(m.east, y, -m.north);
-    new GLTFLoader().load(`./models/${m.model}.glb`, (gltf) => {
-      if (this.furniture !== group) return; // the world changed meanwhile
-      const finish = (mesh) => {
-        // decals lying a few millimetres off the skin (windows, grilles): kept in front at a distance
-        if (mesh.material.userData.polygon_offset) Object.assign(mesh.material, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-        mesh.castShadow = mesh.receiveShadow = true;
-        return mesh;
-      };
-      const spinning = new Map(); // one group per pivot, axis and speed
-      if (m.turning) {
-        gltf.scene.traverse((o) => {
-          const u = o.userData;
-          if (!o.isMesh || !u.spin_axis) return;
-          const key = JSON.stringify([u.spin_pivot, u.spin_axis, u.spin_rev_per_s]);
-          if (!spinning.has(key)) spinning.set(key, { pivot: new THREE.Vector3(...u.spin_pivot), axis: new THREE.Vector3(...u.spin_axis).normalize(), revPerS: u.spin_rev_per_s, blades: u.spin_blades ?? 1, parts: new THREE.Group() });
-          spinning.get(key).parts.add(o.clone());
-          o.visible = false; // left out of the body's merge (mergeByMaterial skips hidden meshes)
-        });
-      }
-      const flatten = new THREE.Matrix4();
-      const shadowMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide });
-      for (const r of spinning.values()) {
-        const holder = new THREE.Group();
-        holder.matrixAutoUpdate = false;
-        holder.matrix.copy(place).multiply(new THREE.Matrix4().makeTranslation(r.pivot));
-        const spin = new THREE.Group();
-        holder.add(spin);
-        // document.timeline's time is the frame's: the same for every render within a frame
-        // (main view, belly camera), so the rotor advances once per frame
-        let angle = 0, last = null;
-        const turn = () => {
-          const t = document.timeline.currentTime ?? performance.now();
-          if (t === last) return;
-          if (last !== null) angle = (angle + Math.min(((t - last) / 1000) * r.revPerS * 2 * Math.PI, (SPIN_MAX_STEP * 2 * Math.PI) / r.blades)) % (2 * Math.PI);
-          last = t;
-          spin.quaternion.setFromAxisAngle(r.axis, angle);
-          spin.updateMatrixWorld(true);
-        };
-        for (const mesh of mergeByMaterial([{ object: r.parts, matrix: new THREE.Matrix4().makeTranslation(r.pivot.clone().negate()) }])) {
-          mesh.onBeforeRender = turn;
-          spin.add(finish(mesh));
-          mesh.castShadow = false;
-          const shadow = new THREE.Mesh(mesh.geometry, shadowMaterial);
-          shadow.matrixAutoUpdate = false;
-          shadow.matrixWorldAutoUpdate = false;
-          shadow.frustumCulled = false; // its matrix flattens it: the bounding sphere does not apply
-          shadow.renderOrder = 1;
-          shadow.onBeforeRender = () => {
-            turn();
-            const s = this.skyLight?.sunDir;
-            if (!s || s.y < 0.02) {
-              shadowMaterial.opacity = 0;
-              return;
-            }
-            shadowMaterial.opacity = 0.5 * (1 - 0.85 * (this.skyLight.night ?? 0)); // faint by moonlight
-            // (x, y, z) -> (x - sx/sy (y - h), h, z - sz/sy (y - h))
-            const h = y + 0.06, kx = s.x / s.y, kz = s.z / s.y;
-            flatten.set(1, -kx, 0, kx * h, 0, 0, 0, h, 0, -kz, 1, kz * h, 0, 0, 0, 1);
-            shadow.matrixWorld.multiplyMatrices(flatten, mesh.matrixWorld);
-          };
-          group.add(shadow);
-        }
-        group.add(holder);
-        holder.updateMatrixWorld(true);
-        r.parts.traverse((o) => o.geometry?.dispose());
-      }
-      for (const mesh of mergeByMaterial([{ object: gltf.scene, matrix: place }])) group.add(finish(mesh));
-      gltf.scene.traverse((o) => o.geometry?.dispose());
-    }, undefined, (e) => console.warn(`parked model ${m.model}:`, e));
+    loadModel(m, group, { place, skyLight: this.skyLight, shadowY: () => y + 0.06, alive: () => this.furniture === group });
   }
 
   clearFurniture() {
@@ -279,4 +203,99 @@ export class RealAirfields {
     this.group.clear();
     this.runways = [];
   }
+}
+
+
+// A model of the viewer's models/<model>.glb (x nose, y up, ground at y = 0) into `group`,
+// at `place` (a matrix within the group), joined per material. With `turning`, the parts
+// carrying spin extras (spin_pivot, spin_axis, spin_rev_per_s, spin_blades: rotors) turn
+// about their axis, from the page's frame clock (they turn while a flight is paused), drawn
+// each frame on their own. A rotor turns at most SPIN_MAX_STEP of its blade spacing per
+// frame: at its true speed a five-bladed 296 rpm rotor moves more than half a spacing per
+// frame below about 49 frames/s and looks to turn backwards (the wagon-wheel effect), so at
+// low frame rates it is shown slower instead. The sun shadow map is drawn only when the
+// camera moves (sunShadows.js), so turning parts stay out of it: their shapes are flattened
+// along the sun onto the plane at shadowY() every frame instead, as the flown aircraft's
+// shadow (scene.js); with `flatBody` (a moving model) the body's too. alive(): false once
+// the world changed while loading. Visual only.
+export function loadModel(m, group, { place = new THREE.Matrix4(), skyLight = null, shadowY = () => 0.06, flatBody = false, alive = () => true } = {}) {
+  new GLTFLoader().load(`./models/${m.model}.glb`, (gltf) => {
+    if (!alive()) return;
+    const finish = (mesh) => {
+      // decals lying a few millimetres off the skin (windows, grilles): kept in front at a distance
+      if (mesh.material.userData.polygon_offset) Object.assign(mesh.material, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      mesh.castShadow = mesh.receiveShadow = true;
+      return mesh;
+    };
+    const spinning = new Map(); // one group per pivot, axis and speed
+    if (m.turning) {
+      gltf.scene.traverse((o) => {
+        const u = o.userData;
+        if (!o.isMesh || !u.spin_axis) return;
+        const key = JSON.stringify([u.spin_pivot, u.spin_axis, u.spin_rev_per_s]);
+        if (!spinning.has(key)) spinning.set(key, { pivot: new THREE.Vector3(...u.spin_pivot), axis: new THREE.Vector3(...u.spin_axis).normalize(), revPerS: u.spin_rev_per_s, blades: u.spin_blades ?? 1, parts: new THREE.Group() });
+        spinning.get(key).parts.add(o.clone());
+        o.visible = false; // left out of the body's merge (mergeByMaterial skips hidden meshes)
+      });
+    }
+    const flatten = new THREE.Matrix4();
+    const shadowMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide });
+    // A mesh's shape flattened along the sun onto the plane at shadowY() (before: run first).
+    const flatShadow = (mesh, before = () => {}) => {
+      const shadow = new THREE.Mesh(mesh.geometry, shadowMaterial);
+      shadow.matrixAutoUpdate = false;
+      shadow.matrixWorldAutoUpdate = false;
+      shadow.frustumCulled = false; // its matrix flattens it: the bounding sphere does not apply
+      shadow.renderOrder = 1;
+      shadow.onBeforeRender = () => {
+        before();
+        const s = skyLight?.sunDir;
+        if (!s || s.y < 0.02) {
+          shadowMaterial.opacity = 0;
+          return;
+        }
+        shadowMaterial.opacity = 0.5 * (1 - 0.85 * (skyLight.night ?? 0)); // faint by moonlight
+        // (x, y, z) -> (x - sx/sy (y - h), h, z - sz/sy (y - h))
+        const h = shadowY(), kx = s.x / s.y, kz = s.z / s.y;
+        flatten.set(1, -kx, 0, kx * h, 0, 0, 0, h, 0, -kz, 1, kz * h, 0, 0, 0, 1);
+        shadow.matrixWorld.multiplyMatrices(flatten, mesh.matrixWorld);
+      };
+      group.add(shadow);
+    };
+    for (const r of spinning.values()) {
+      const holder = new THREE.Group();
+      holder.matrixAutoUpdate = false;
+      holder.matrix.copy(place).multiply(new THREE.Matrix4().makeTranslation(r.pivot));
+      const spin = new THREE.Group();
+      holder.add(spin);
+      // document.timeline's time is the frame's: the same for every render within a frame
+      // (main view, belly camera), so the rotor advances once per frame
+      let angle = 0, last = null;
+      const turn = () => {
+        const t = document.timeline.currentTime ?? performance.now();
+        if (t === last) return;
+        if (last !== null) angle = (angle + Math.min(((t - last) / 1000) * r.revPerS * 2 * Math.PI, (SPIN_MAX_STEP * 2 * Math.PI) / r.blades)) % (2 * Math.PI);
+        last = t;
+        spin.quaternion.setFromAxisAngle(r.axis, angle);
+        spin.updateMatrixWorld(true);
+      };
+      for (const mesh of mergeByMaterial([{ object: r.parts, matrix: new THREE.Matrix4().makeTranslation(r.pivot.clone().negate()) }])) {
+        mesh.onBeforeRender = turn;
+        spin.add(finish(mesh));
+        mesh.castShadow = false;
+        flatShadow(mesh, turn);
+      }
+      group.add(holder);
+      holder.updateMatrixWorld(true);
+      r.parts.traverse((o) => o.geometry?.dispose());
+    }
+    for (const mesh of mergeByMaterial([{ object: gltf.scene, matrix: place }])) {
+      group.add(finish(mesh));
+      if (flatBody) {
+        mesh.castShadow = false;
+        flatShadow(mesh);
+      }
+    }
+    gltf.scene.traverse((o) => o.geometry?.dispose());
+  }, undefined, (e) => console.warn(`model ${m.model}:`, e));
 }

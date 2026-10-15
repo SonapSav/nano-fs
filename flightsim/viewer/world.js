@@ -17,6 +17,7 @@ const state = {
   airfields: null, // the region's airfields.json: {aerodromes, runways}
   landmarks: [], // the region's landmarks.json (none for older builds)
   bridges: [], // the region's bridges.json (none for older builds)
+  traffic: [], // the region's traffic.json routes (traffic.js; none for older builds)
   hires: null, // the region's hires.json: high-resolution imagery chunks (imageryClip.js; none for older builds)
   heights: new Map(), // "ix,iz" -> Float32Array | null (outside the region) | "loading"
   landcover: new Map(),
@@ -78,6 +79,9 @@ export const world = {
   get hires() {
     return state.hires;
   },
+  get traffic() {
+    return state.traffic;
+  },
   get manifest() {
     return state.manifest;
   },
@@ -94,6 +98,7 @@ export const world = {
     state.manifest = state.airfields = null;
     state.landmarks = [];
     state.bridges = [];
+    state.traffic = [];
     state.hires = null;
     state.heights.clear();
     state.landcover.clear();
@@ -110,6 +115,9 @@ export const world = {
         }
         if ("bridges.json" in (manifest.files ?? {})) {
           state.bridges = await fetch(sceneryUrl(scenery, "bridges.json")).then((r) => (r.ok ? r.json() : [])).catch(() => []);
+        }
+        if ("traffic.json" in (manifest.files ?? {})) {
+          state.traffic = await fetch(sceneryUrl(scenery, "traffic.json")).then((r) => (r.ok ? r.json() : null)).then((t) => t?.traffic ?? []).catch(() => []);
         }
         if ("hires.json" in (manifest.files ?? {})) {
           state.hires = await fetch(sceneryUrl(scenery, "hires.json")).then((r) => (r.ok ? r.json() : null)).catch(() => null);
