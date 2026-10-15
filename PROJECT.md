@@ -1933,7 +1933,7 @@ landmarks; later night lighting, shadows, haze.
     front of the boom. Not modelled: the swept blade on the cabin roof ahead of the engines in
     both photos, taken for the upper wire-strike cutter (**from memory, unverified**). Model
     66 meshes, 53.8k triangles (budget 60k), 1.06 MB. Checked in Blender renders against the
-    drawings and photos and in viewer screenshots.
+    drawings and photos and in viewer screenshots. (5746db1)
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
