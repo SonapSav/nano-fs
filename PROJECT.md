@@ -1967,7 +1967,7 @@ landmarks; later night lighting, shadows, haze.
     outward normal now measured from the section's centre including its sideways offset
     (the sponsons'; the fuselage's and cowling's patches unchanged). Model 68 meshes, 57.6k
     triangles (budget 60k), 1.13 MB. Checked in Blender renders, the side view overlay and
-    a viewer screenshot.
+    a viewer screenshot. (b503d8c)
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
