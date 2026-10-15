@@ -2013,7 +2013,7 @@ landmarks; later night lighting, shadows, haze.
     boom ends inside it (X -8.12) and its top narrows to a ridge running up inside the fin,
     so its sides sweep into the fin's. Checked from behind, below, above and both sides,
     and against the side view and both photos through their solved cameras (overlays and a
-    side-by-side in data/shots/aw139tail/).
+    side-by-side in data/shots/aw139tail/). (b3e1806)
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
