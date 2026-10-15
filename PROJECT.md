@@ -1991,7 +1991,7 @@ landmarks; later night lighting, shadows, haze.
     Blender renders from the owner's angle and the side. (aef01a4)
   - [x] AW139 tail heel thicker and rounder (2026-10-15, the owner): about 0.2 m across and
     0.14 m tall near its end (was 0.10 by 0.08, to a point), ending in a rounded tip at
-    X -8.465.
+    X -8.465. (36c2656)
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
