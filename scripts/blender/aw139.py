@@ -147,16 +147,17 @@ def cylinder(name, p0, p1, r, mats, n=24, cap=True):
     return loft_sections(name, [[p0 + d for d in loop], [p1 + d for d in loop]], mats, cap=cap)
 
 
-def wheel(name, centre, r, width, axis=(0, 1, 0)):
+def wheel(name, centre, r, width, axis=(0, 1, 0), rim=0.62):
+    """rim: the white rim's diameter over the tyre's."""
     c = np.asarray(centre, float); ax = np.asarray(axis, float) * width / 2
     # tyre: rounded profile lofted around the axle
-    prof = [(r * 0.62, -1.0), (r * 0.92, -1.0), (r, -0.6), (r, 0.6), (r * 0.92, 1.0), (r * 0.62, 1.0)]
+    prof = [(r * rim, -1.0), (r * 0.92, -1.0), (r, -0.6), (r, 0.6), (r * 0.92, 1.0), (r * rim, 1.0)]
     ang = np.linspace(0, 2 * np.pi, 32, endpoint=False)
     secs = []
     for rr, w in prof:
         secs.append([c + ax * w + np.array([math.cos(q) * rr, 0, math.sin(q) * rr]) for q in ang])
-    t = loft_sections(name + "Tyre", secs, ["AW139_Rubber"])
-    h = cylinder(name + "Hub", c - ax * 0.9, c + ax * 0.9, r * 0.62, ["AW139_Metal"], n=32)
+    t = loft_sections(name + "Tyre", secs, ["AW139_Rubber"], cap=False)  # open bore: the rim shows
+    h = cylinder(name + "Hub", c - ax * 0.9, c + ax * 0.9, r * rim, ["AW139_Rim"], n=32)
     return t, h
 
 
@@ -201,7 +202,9 @@ material("AW139_Grille", (0.05, 0.05, 0.05), 0.7)["polygon_offset"] = True
 material("AW139_Blade", (0.18, 0.19, 0.2), 0.5)
 material("AW139_Metal", (0.55, 0.56, 0.58), 0.35, 0.8)
 material("AW139_Rubber", (0.03, 0.03, 0.03), 0.9)
-material("AW139_Exhaust", (0.12, 0.11, 0.1), 0.6, 0.5)
+material("AW139_Exhaust", (0.70, 0.71, 0.73), 0.35, 0.2)  # silver-grey (no reflections in the viewer: not metal)
+material("AW139_Rim", (0.92, 0.92, 0.91), 0.4)
+material("AW139_Step", (0.04, 0.04, 0.04), 0.9)["polygon_offset"] = True  # anti-slip step on the sponsons
 material("AW139_Seam", (0.42, 0.43, 0.44), 0.5)["polygon_offset"] = True  # door outlines: 8 mm off the skin
 material("AW139_Antenna", (0.25, 0.26, 0.27), 0.5)
 
@@ -285,7 +288,7 @@ def window_patch(name, inside, x0, x1, sgn, dx=0.025, k=10, lift=0.008, table=No
         pts = np.stack([np.interp(u, L, seg[:, 0]), np.interp(u, L, seg[:, 1])], 1)
         t = np.gradient(pts, axis=0); nrm = np.stack([t[:, 1], -t[:, 0]], 1)
         nrm /= np.linalg.norm(nrm, axis=1, keepdims=True) + 1e-12
-        mid = pts[k // 2] - np.array([0, prm[4]])  # outward = away from the section centre
+        mid = pts[k // 2] - np.array([prm[0], prm[4]])  # outward = away from the section centre
         if np.dot(nrm[k // 2], mid) < 0: nrm = -nrm
         rows.append((x, pts + nrm * lift, nrm))
     if bulge:
@@ -391,13 +394,18 @@ MAST_FAIRING = [(1.20, 0, 2.60, 2.86, 0.30, 2.70, 2.5, 2.0),
 loft_x("AW139_MastFairing", MAST_FAIRING, np.arange(1.20, -1.81, -0.12), ["AW139_Paint"],
        tip_front=(1.25, 0, 2.72), tip_back=(-1.85, 0, 2.72), n=48)
 
-# sponsons (house the retracted main gear): rows X, y_in, y_out, zb, zt
+# sponsons (house the retracted main gear): rows X, y_in, y_out, zb, zt. Side view: X -0.57 to
+# -1.81, Z 0.48 to 0.70, rounded ends; top view: a straight front at X -0.5, the outer side
+# 1.60 m off the centre line, the rear swept in to X -2.18 at the fuselage. A black step on top.
+SP = [(-0.50, 0.95, 1.30, 0.47, 0.66), (-0.58, 0.95, 1.52, 0.46, 0.69), (-0.70, 0.95, 1.60, 0.46, 0.70),
+      (-1.66, 0.95, 1.60, 0.46, 0.70), (-1.80, 0.95, 1.52, 0.46, 0.69), (-2.00, 0.95, 1.33, 0.47, 0.67),
+      (-2.12, 0.95, 1.16, 0.48, 0.64)]
 for s, sgn in (("L", 1), ("R", -1)):
-    SP = [(1.05, 0.95, 1.00, 0.44, 0.60), (0.80, 0.95, 1.20, 0.44, 0.66), (0.30, 0.95, 1.40, 0.44, 0.70),
-          (-0.40, 0.95, 1.55, 0.44, 0.72), (-1.90, 0.95, 1.57, 0.44, 0.72), (-2.10, 0.95, 1.48, 0.46, 0.70)]
     tb = [(x, sgn * (a + b) / 2, zb, zt, (b - a) / 2, (zb + zt) / 2, 3.0, 4.0) for x, a, b, zb, zt in SP]
-    loft_x(f"AW139_Sponson_{s}", tb, np.arange(1.05, -2.11, -0.12), ["AW139_Paint"],
-           tip_front=(1.08, sgn * 0.975, 0.52), tip_back=(-2.20, sgn * 1.22, 0.58), n=32)
+    loft_x(f"AW139_Sponson_{s}", tb, np.arange(-0.50, -2.13, -0.06), ["AW139_Paint"],
+           tip_front=(-0.46, sgn * 1.12, 0.57), tip_back=(-2.17, sgn * 1.05, 0.56), n=32)
+    window_patch(f"AW139_Step{s}", lambda x, y, z: rrect(x, np.abs(y), -1.62, -0.76, 1.16, 1.54, 0.04) & (z > 0.66),
+                 -1.64, -0.74, sgn, dx=0.02, k=10, table=np.array(tb, float), mat="AW139_Step")
 
 # ------------------------------------------------------------------ tail
 
@@ -418,12 +426,13 @@ fz = np.linspace(FIN_Z[0], FIN_Z[-1], 32)
 loft_sections("AW139_Fin", [fin_section(z, le, te, t) for z, le, te, t in
                             zip(fz, pchip(FIN_Z, FIN_LE, fz), pchip(FIN_Z, FIN_TE, fz), pchip(FIN_Z, FIN_T, fz))], ["AW139_Paint"])
 
-# the tail rotor gearbox fairing on the fin top: a teardrop 0.7 m across (top view: X -8.15 to
-# the round end at X -9.06), the tail rotor on its right
+# the tail rotor gearbox fairing on the fin top: 0.7 m across (top view, from X -8.15), its aft
+# end a wedge to a point at X -9.22 near its top line, past the fin's trailing edge (photos; the
+# top view rounds it), the tail rotor on its right
 loft_x("AW139_TailFairing", [(-8.12, 0, 3.58, 3.76, 0.12, 3.68, 2.2, 2.2), (-8.25, 0, 3.50, 3.80, 0.26, 3.66, 2.4, 2.4),
-                             (-8.45, 0, 3.44, 3.81, 0.34, 3.64, 2.6, 2.6), (-8.70, 0, 3.44, 3.79, 0.34, 3.63, 2.6, 2.6),
-                             (-8.90, 0, 3.48, 3.74, 0.26, 3.63, 2.4, 2.4), (-9.02, 0, 3.55, 3.69, 0.14, 3.63, 2.2, 2.2)],
-       np.linspace(-8.12, -9.02, 16), ["AW139_Paint"], tip_front=(-8.06, 0, 3.69), tip_back=(-9.08, 0, 3.64), n=40)
+                             (-8.45, 0, 3.44, 3.81, 0.34, 3.64, 2.6, 2.6), (-8.70, 0, 3.44, 3.79, 0.33, 3.63, 2.6, 2.6),
+                             (-8.92, 0, 3.53, 3.77, 0.21, 3.66, 2.3, 2.3), (-9.08, 0, 3.62, 3.75, 0.09, 3.69, 2.1, 2.1)],
+       np.linspace(-8.12, -9.08, 18), ["AW139_Paint"], tip_front=(-8.06, 0, 3.69), tip_back=(-9.22, 0, 3.72), n=40)
 
 STAB_Z, STAB_LE, STAB_TE, STAB_HALF = 1.90, -7.05, -7.67, 2.05
 secs = []
@@ -466,8 +475,9 @@ loft_sections("AW139_AntennaBlade", [[(p[0], p[1], z) for p in airfoil((le, 0), 
 # ------------------------------------------------------------------ gear
 
 for s, sgn in (("L", 1), ("R", -1)):
-    wheel(f"AW139_NoseWheel{s}", (2.93, sgn * 0.17, 0.19), 0.19, 0.12)
-    wheel(f"AW139_MainWheel{s}", (-1.40, sgn * 1.52, 0.22), 0.22, 0.18)
+    # white rims, 0.45 (nose) and 0.6 (main) of the tyres' diameter (both photos)
+    wheel(f"AW139_NoseWheel{s}", (2.93, sgn * 0.17, 0.19), 0.19, 0.12, rim=0.45)
+    wheel(f"AW139_MainWheel{s}", (-1.40, sgn * 1.52, 0.22), 0.22, 0.18, rim=0.60)
     cylinder(f"AW139_MainLeg{s}", (-1.05, sgn * 1.42, 0.55), (-1.40, sgn * 1.42, 0.22), 0.05, ["AW139_Metal"], n=12)
     cylinder(f"AW139_MainAxle{s}", (-1.40, sgn * 1.40, 0.22), (-1.40, sgn * 1.52, 0.22), 0.04, ["AW139_Metal"], n=12)
 cylinder("AW139_NoseLeg", (2.86, 0, 0.50), (2.93, 0, 0.19), 0.055, ["AW139_Metal"], n=12)

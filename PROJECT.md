@@ -1954,6 +1954,20 @@ landmarks; later night lighting, shadows, haze.
     Checked against the ambulance photo (front tip halfway from the nose to the cockpit
     door, rear edge just ahead of the door), in Blender renders and a viewer screenshot.
     Model 56.1k triangles, 1.10 MB. (587c7f9)
+  - [x] AW139 wheels, sponsons, tail tip and exhausts (2026-10-15, the owner's list).
+    White rims (new AW139_Rim), 0.6 of the tyre's diameter on the main wheels and 0.45 on
+    the nose wheels (both photos); the tyres had end caps that hid the rims, now open.
+    Sponsons were 1.5 m too long forward (from X +1.05): now as drawn, side view X -0.57 to
+    -1.81, Z 0.48 to 0.70, top view a straight front at X -0.5, the outer side 1.60 m off
+    the centre line, the rear swept in to X -2.18 (overlaid on the side view); a black
+    anti-slip step on top (new AW139_Step, polygon offset). The tail rotor gearbox
+    fairing's aft end is now a pointed wedge at X -9.22 past the fin's trailing edge, as both
+    photos show (the top view rounds it). Exhaust pipes silver-grey (AW139_Exhaust, not
+    metal: the viewer gives the model no reflections, so metal renders dark). window_patch's
+    outward normal now measured from the section's centre including its sideways offset
+    (the sponsons'; the fuselage's and cowling's patches unchanged). Model 68 meshes, 57.6k
+    triangles (budget 60k), 1.13 MB. Checked in Blender renders, the side view overlay and
+    a viewer screenshot.
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
