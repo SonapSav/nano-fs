@@ -544,6 +544,19 @@ for ob in rotor:
         v.co = (x * math.cos(tilt) + z * math.sin(tilt) + pivot[0], y + pivot[1], -x * math.sin(tilt) + z * math.cos(tilt) + pivot[2])
     ob.data.update()
 
+# the swashplate under the hub and its three control rods from the cowling (stationary: they do
+# not turn with the rotor), one forward and two aft 120 deg apart, 0.33 m from the mast (photos:
+# thin upright rods between the cowling top and the head); tilted with the mast
+head = [cylinder("AW139_Swashplate", (0, 0, 3.40), (0, 0, 3.46), 0.36, ["AW139_Metal"], n=40)]
+for i, a in enumerate((0, 120, 240)):
+    ca, sa = math.cos(math.radians(a)), math.sin(math.radians(a))
+    head.append(cylinder(f"AW139_SwashRod{i}", (0.33 * ca, 0.33 * sa, 3.15), (0.33 * ca, 0.33 * sa, 3.41), 0.02, ["AW139_Metal"], n=10))
+for ob in head:
+    for v in ob.data.vertices:
+        x, y, z = np.array(v.co) - pivot
+        v.co = (x * math.cos(tilt) + z * math.sin(tilt) + pivot[0], y + pivot[1], -x * math.sin(tilt) + z * math.cos(tilt) + pivot[2])
+    ob.data.update()
+
 # ------------------------------------------------------------------ turning parts (in the .glb's axes: x, z, -y)
 
 def spin(objs, pivot_blender, axis_blender, rev_per_s, blades):
