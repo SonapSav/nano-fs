@@ -1934,14 +1934,16 @@ landmarks; later night lighting, shadows, haze.
     both photos, taken for the upper wire-strike cutter (**from memory, unverified**). Model
     66 meshes, 53.8k triangles (budget 60k), 1.06 MB. Checked in Blender renders against the
     drawings and photos and in viewer screenshots. (5746db1)
-  - [x] AW139 engine intakes (2026-10-15; the owner noticed them missing): two
-    forward-facing openings at the front of the fairing over the engines, either side of a
-    pointed central divider, as the front view draws them (a U from |Y| 0.53 at Z 2.97 down
-    to Z 2.64, divider 0.14 m each side at its base), ahead of the edge the side view draws
-    from (X 1.01, Z 2.75) to (X 0.64, Z 3.22); dark faces on the fairing (AW139_Grille). The
-    forward fairing between the windscreen and the intakes lowered to the side view's line
-    (Z 2.75 at X 1.0, was 2.88). Model 68 meshes, 56.2k triangles (budget 60k), 1.1 MB.
-    Checked in Blender renders against the front and side views. (64f3a49)
+  - [x] AW139 engine intakes (2026-10-15; the owner noticed them missing). A first try
+    (64f3a49) read the front view's U at the front of the engine fairing as two intakes and
+    lowered the forward fairing to fit them; wrong, removed at the owner's word (the
+    forward fairing is back as it was). The intakes are the screens on each side of the
+    cowling behind the mast: the side view hatches X -1.46 to -1.84, Z 2.38 to 2.95 (in the
+    model since the start as an "oil cooler outlet grille", a wrong name); both photos show
+    the screen reaching forward to about X -1.05 (measured between the mast and the
+    exhausts) with rounded top corners, one with an inlet filter box over it (not modelled).
+    Now X -1.84 to -1.05, renamed AW139_Intake. Model 66 meshes, 54.6k triangles, 1.08 MB.
+    Checked in Blender renders against the photos.
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.

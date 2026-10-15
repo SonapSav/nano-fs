@@ -346,25 +346,25 @@ for s, sgn in (("L", 1), ("R", -1)):
     seam(f"AW139_BaggageDoor{s}", rrect_path(*BAGGAGE_DOOR), sgn)
 
 
-# engine cowling over the cabin roof, and the fairing round the rotor shaft; the forward fairing
-# rises from the windscreen to Z 2.75 at X 1.0 (side view), then the intakes' steep face to the
-# engines' cowling
+# engine cowling over the cabin roof, and the fairing round the rotor shaft
 COWL = [(2.40, 0, 2.00, 2.28, 0.30, 2.10, 2.5, 2.0),
         (2.00, 0, 2.00, 2.45, 0.52, 2.15, 2.6, 2.0),
-        (1.50, 0, 2.00, 2.58, 0.71, 2.20, 3.0, 2.0),
-        (1.00, 0, 2.00, 2.75, 0.82, 2.25, 3.0, 2.0),
-        (0.70, 0, 2.00, 2.93, 0.85, 2.28, 3.1, 2.0),
+        (1.50, 0, 2.00, 2.66, 0.71, 2.20, 3.0, 2.0),
+        (1.00, 0, 2.00, 2.88, 0.82, 2.25, 3.0, 2.0),
         (0.50, 0, 2.00, 2.96, 0.86, 2.30, 3.2, 2.0),
         (-1.70, 0, 2.00, 3.00, 0.85, 2.30, 3.2, 2.0),
         (-2.80, 0, 2.00, 2.82, 0.66, 2.30, 3.0, 2.0),
         (-3.75, 0, 2.00, 2.58, 0.44, 2.20, 2.6, 2.0),
         (-4.40, 0, 2.00, 2.53, 0.33, 2.10, 2.4, 2.0)]
-cowl = loft_x("AW139_Cowling", COWL, np.concatenate([np.arange(2.40, 1.60, -0.15), np.arange(1.60, 0.40, -0.075), np.arange(0.40, -4.41, -0.15)]), ["AW139_Paint"],
+cowl = loft_x("AW139_Cowling", COWL, np.arange(2.40, -4.41, -0.15), ["AW139_Paint"],
               tip_front=(2.45, 0, 2.10), tip_back=(-4.45, 0, 2.10))
-for s, sgn in (("L", 1), ("R", -1)):  # the grille aft of the mast fairing (oil cooler outlet, as drawn)
-    window_patch(f"AW139_Grille{s}", lambda x, y, z: rrect(x, z, -1.80, -1.46, 2.38, 2.95, 0.04), -1.82, -1.44, sgn,
+# the engine air intakes: a screen on each side of the cowling behind the mast. The side view
+# hatches X -1.46 to -1.84, Z 2.38 to 2.95; both photos show the screen reaching forward to about
+# X -1.05 (measured between the mast and the exhausts), with rounded top corners (one of them
+# has an inlet filter box over it, not modelled)
+for s, sgn in (("L", 1), ("R", -1)):
+    window_patch(f"AW139_Intake{s}", lambda x, y, z: rrect(x, z, -1.84, -1.05, 2.38, 2.95, 0.10), -1.86, -1.03, sgn,
                  dx=0.02, table=np.array(COWL, float), mat="AW139_Grille")
-
 
 MAST_FAIRING = [(1.20, 0, 2.60, 2.86, 0.30, 2.70, 2.5, 2.0),
                 (0.60, 0, 2.60, 3.20, 0.48, 2.75, 2.8, 2.0),
@@ -373,22 +373,6 @@ MAST_FAIRING = [(1.20, 0, 2.60, 2.86, 0.30, 2.70, 2.5, 2.0),
                 (-1.80, 0, 2.60, 2.95, 0.30, 2.75, 2.4, 2.0)]
 loft_x("AW139_MastFairing", MAST_FAIRING, np.arange(1.20, -1.81, -0.12), ["AW139_Paint"],
        tip_front=(1.25, 0, 2.72), tip_back=(-1.85, 0, 2.72), n=48)
-
-
-def intake(x, y, z):
-    """The engine intakes at the front of the fairing over the engines, either side of the
-    central divider: inside the front view's U-shaped opening (|Y| to 0.53, from Z 2.97 down
-    to 2.64 on the centre line), out of the divider (0.14 m each side at Z 2.63, to a point at
-    Z 2.92), ahead of the edge the side view draws from (X 1.01, Z 2.75) to (X 0.64, Z 3.22)."""
-    lip = 1.006 - 0.783 * (z - 2.75)
-    divider = 0.16 * np.clip((2.92 - z) / 0.29, 0, None)
-    return (((y / 0.53) ** 2 + ((z - 2.97) / 0.33) ** 2 < 1) & (z <= 2.97) & (np.abs(y) > divider)
-            & (x >= lip))
-
-
-for s, sgn in (("L", 1), ("R", -1)):
-    window_patch(f"AW139_Intake{s}", intake, 0.70, 1.26, sgn, dx=0.02, k=14, table=np.array(MAST_FAIRING, float), mat="AW139_Grille")
-
 
 # sponsons (house the retracted main gear): rows X, y_in, y_out, zb, zt
 for s, sgn in (("L", 1), ("R", -1)):

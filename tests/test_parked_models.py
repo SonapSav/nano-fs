@@ -152,4 +152,4 @@ new GLTFLoader().parse(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)
     r = subprocess.run([NODE, "--input-type=module", "-e", script], cwd=tmp_path, capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, r.stderr
     out = json.loads(r.stdout)
-    assert out == {"meshes": 68, "spin": 13, "offset": ["AW139_Glass", "AW139_Grille", "AW139_Seam"]}
+    assert out == {"meshes": 66, "spin": 13, "offset": ["AW139_Glass", "AW139_Grille", "AW139_Seam"]}
