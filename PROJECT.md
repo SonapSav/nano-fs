@@ -1934,6 +1934,14 @@ landmarks; later night lighting, shadows, haze.
     both photos, taken for the upper wire-strike cutter (**from memory, unverified**). Model
     66 meshes, 53.8k triangles (budget 60k), 1.06 MB. Checked in Blender renders against the
     drawings and photos and in viewer screenshots. (5746db1)
+  - [x] AW139 engine intakes (2026-10-15; the owner noticed them missing): two
+    forward-facing openings at the front of the fairing over the engines, either side of a
+    pointed central divider, as the front view draws them (a U from |Y| 0.53 at Z 2.97 down
+    to Z 2.64, divider 0.14 m each side at its base), ahead of the edge the side view draws
+    from (X 1.01, Z 2.75) to (X 0.64, Z 3.22); dark faces on the fairing (AW139_Grille). The
+    forward fairing between the windscreen and the intakes lowered to the side view's line
+    (Z 2.75 at X 1.0, was 2.88). Model 68 meshes, 56.2k triangles (budget 60k), 1.1 MB.
+    Checked in Blender renders against the front and side views.
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
