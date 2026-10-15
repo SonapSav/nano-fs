@@ -249,12 +249,23 @@ DOOR_WINDOW = [(2.45, 1.96), (2.00, 1.96), (1.96, 1.18), (2.58, 1.18)]
 # centre line; photos: tinted, on the roof's shoulder above the cockpit doors): (x0, x1, y0, y1,
 # corner radius) of |Y|, kept above the door frame (Z 2.06)
 ROOF_WINDOW = (1.93, 2.62, 0.25, 0.98, 0.08)
+# the bubble windows below the pilots' feet: the side view's extent (X 2.96 to 3.67, Z 0.51 to
+# 0.96), shaped as both photos show them, a D: the rear edge upright, the bottom along the nose's
+# underside, the top a convex arc from a rounded top rear corner down to a blunt front tip;
+# bulged 35 mm off the skin (photos)
+def _chin(n=24, e=2.3):
+    zb = lambda x: 0.51 + (x - 2.96) * 0.06 / 0.71  # the nose's underside rises forward
+    arc = [(2.96 + 0.71 * math.cos(t) ** (2 / e), zb(2.96 + 0.71 * math.cos(t) ** (2 / e)) + (0.96 - zb(2.96 + 0.71 * math.cos(t) ** (2 / e))) * math.sin(t) ** (2 / e))
+           for t in np.linspace(0.06, math.pi / 2 - 0.02, n)]
+    return [(2.97, 0.51)] + arc + [(2.96, 0.93), (2.96, 0.55)]
+CHIN_WINDOW = _chin()
 FUS_P = np.array(FUS, float)
 
 
-def window_patch(name, inside, x0, x1, sgn, dx=0.025, k=10, lift=0.008, table=None, mat="AW139_Glass"):
+def window_patch(name, inside, x0, x1, sgn, dx=0.025, k=10, lift=0.008, table=None, mat="AW139_Glass", bulge=0.0):
     """A glass panel lying on the fuselage: at each station the arc of the section where
-    inside(x, y, z) holds on the sgn side, with its ends found to a few millimetres."""
+    inside(x, y, z) holds on the sgn side, with its ends found to a few millimetres. bulge:
+    how far its middle stands off the skin (a bubble window; zero at its edges)."""
     rows = []
     for x in np.arange(x1, x0, -dx):
         tb = FUS_P if table is None else table
@@ -276,8 +287,14 @@ def window_patch(name, inside, x0, x1, sgn, dx=0.025, k=10, lift=0.008, table=No
         nrm /= np.linalg.norm(nrm, axis=1, keepdims=True) + 1e-12
         mid = pts[k // 2] - np.array([0, prm[4]])  # outward = away from the section centre
         if np.dot(nrm[k // 2], mid) < 0: nrm = -nrm
-        pts = pts + nrm * lift
-        rows.append([(x, y, z) for y, z in pts])
+        rows.append((x, pts + nrm * lift, nrm))
+    if bulge:
+        idx = [i for i, r in enumerate(rows) if r is not None]
+        m = len(idx); arc = np.sin(np.pi * np.arange(k) / (k - 1))
+        for n_, i in enumerate(idx):
+            x, pts, nrm = rows[i]
+            rows[i] = (x, pts + nrm * (bulge * math.sin(math.pi * n_ / max(1, m - 1)) * arc)[:, None], nrm)
+    rows = [None if r is None else [(r[0], y, z) for y, z in r[1]] for r in rows]
     verts, faces = [], []
     prev = None
     for row in rows:
@@ -296,7 +313,7 @@ for s, sgn in (("L", 1), ("R", -1)):
     window_patch(f"AW139_RoofWindow{s}", lambda x, y, z: rrect(x, np.abs(y), *ROOF_WINDOW) & (z > 2.06), 1.92, 2.63, sgn, k=14)
     for i, w in enumerate(SIDE_WINDOWS):
         window_patch(f"AW139_CabinWindow{s}{i}", lambda x, y, z, w=w: rrect(x, z, *w), w[0] - 0.01, w[1] + 0.01, sgn)
-    window_patch(f"AW139_ChinWindow{s}", lambda x, y, z: ((x - 3.25) / 0.33) ** 2 + ((z - 0.74) / 0.17) ** 2 < 1, 2.90, 3.60, sgn)
+    window_patch(f"AW139_ChinWindow{s}", lambda x, y, z: inside_poly(x, z, CHIN_WINDOW), 2.94, 3.69, sgn, dx=0.015, k=14, bulge=0.035)
 
 
 # door outlines (the side view, (X, Z) on both sides): the cockpit door behind the windscreen

@@ -1944,6 +1944,16 @@ landmarks; later night lighting, shadows, haze.
     exhausts) with rounded top corners, one with an inlet filter box over it (not modelled).
     Now X -1.84 to -1.05, renamed AW139_Intake. Model 66 meshes, 54.6k triangles, 1.08 MB.
     Checked in Blender renders against the photos. (33236d8)
+  - [x] AW139 chin windows (2026-10-15; the owner asked for them as close to the photos as
+    possible): were a small flat ellipse. Now the side view's extent (X 2.96 to 3.67, Z 0.51
+    to 0.96, overlaid on the drawing) in the D shape both photos show (rear edge upright,
+    bottom along the nose's underside, the top a convex arc from a rounded top rear corner to
+    a blunt front tip; the drawing's top edge is straighter, the photos win), wrapping under
+    the nose as the front view draws them, and bulged 35 mm off the skin like the photos'
+    bubbles (window_patch's new `bulge`, zero at the edges; other windows unchanged).
+    Checked against the ambulance photo (front tip halfway from the nose to the cockpit
+    door, rear edge just ahead of the door), in Blender renders and a viewer screenshot.
+    Model 56.1k triangles, 1.10 MB.
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
