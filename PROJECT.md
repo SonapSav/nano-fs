@@ -2041,7 +2041,7 @@ landmarks; later night lighting, shadows, haze.
     approach the model is 12 m from the bridge's middle, in view to the left. Scenery hash
     b69dbfb757185d73 (other machines: rebuild, about 14 min). Limits: the start uses the
     aircraft's ground speed when it starts (slowing down afterwards makes the helicopter
-    early); no physics (it can be flown through); not in the map window.
+    early); no physics (it can be flown through); not in the map window. (fcc6861)
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
