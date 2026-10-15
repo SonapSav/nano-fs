@@ -1943,7 +1943,7 @@ landmarks; later night lighting, shadows, haze.
     the screen reaching forward to about X -1.05 (measured between the mast and the
     exhausts) with rounded top corners, one with an inlet filter box over it (not modelled).
     Now X -1.84 to -1.05, renamed AW139_Intake. Model 66 meshes, 54.6k triangles, 1.08 MB.
-    Checked in Blender renders against the photos.
+    Checked in Blender renders against the photos. (33236d8)
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
