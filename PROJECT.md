@@ -2018,7 +2018,7 @@ landmarks; later night lighting, shadows, haze.
     under the hub, three rods 4 cm thick from the cowling top up to it, 0.33 m from the mast,
     one forward and two aft 120 deg apart as asked, tilted with the mast; stationary (they
     do not spin). The ambulance photo, read through its solved camera, rather suggests two
-    forward and one aft (unconfirmed at that resolution; one line to flip).
+    forward and one aft (unconfirmed at that resolution; one line to flip). (fc62002)
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
