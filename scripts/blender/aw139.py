@@ -249,12 +249,13 @@ FUS = [(4.62, 0, 0.80, 0.92, 0.05, 0.86, 2.2, 2.2),
        (-7.05, 0, 1.71, 2.51, 0.18, 2.10, 3.2, 2.2),
        (-7.80, 0, 1.90, 2.50, 0.14, 2.20, 3.2, 2.2),
        (-8.10, 0, 1.97, 2.30, 0.11, 2.11, 2.6, 2.2),   # the boom ends in the tail bumper's heel (photos):
-       (-8.20, 0, 2.00, 2.19, 0.09, 2.09, 2.4, 2.2),   # below the fin's trailing edge its top turns aft,
-       (-8.30, 0, 2.02, 2.14, 0.07, 2.08, 2.3, 2.2),   # nearly level, to a rounded point sticking out
-       (-8.38, 0, 2.04, 2.12, 0.05, 2.08, 2.2, 2.2)]   # behind the edge above it
-X = np.concatenate([np.arange(4.62, 2.2, -0.05), np.arange(2.2, -2.2, -0.1), np.arange(-2.2, -7.9, -0.15), np.arange(-7.9, -8.38, -0.04), [-8.38]])
+       (-8.20, 0, 1.99, 2.20, 0.11, 2.09, 2.4, 2.2),   # below the fin's trailing edge its top turns aft,
+       (-8.30, 0, 2.00, 2.17, 0.10, 2.085, 2.2, 2.2),  # nearly level, to a thick rounded end sticking
+       (-8.38, 0, 2.015, 2.155, 0.085, 2.085, 2.1, 2.1),  # out behind the edge above it
+       (-8.43, 0, 2.035, 2.135, 0.06, 2.085, 2.0, 2.0)]
+X = np.concatenate([np.arange(4.62, 2.2, -0.05), np.arange(2.2, -2.2, -0.1), np.arange(-2.2, -7.9, -0.15), np.arange(-7.9, -8.43, -0.04), [-8.43]])
 fus = loft_x("AW139_Fuselage", FUS, X, ["AW139_Paint"],
-             tip_front=(4.665, 0, 0.86), tip_back=(-8.43, 0, 2.08))
+             tip_front=(4.665, 0, 0.86), tip_back=(-8.465, 0, 2.085))
 
 # up to the centre post; its top edge level with the roof panel (Z 2.03 in the front view); its
 # bottom edge and the door window measured on a photo of A6-AWB (left side, camera solved from
