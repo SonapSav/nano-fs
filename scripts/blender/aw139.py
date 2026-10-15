@@ -13,8 +13,10 @@ photos were reference only and are not in the repository): nose tip X 4.64; whee
 and -1.40 (4.34 m wheelbase), main track 3.04 m; tail rotor shaft X -8.40 (8.40 m between
 the shafts, second drawing), 2.70 m across, on the right (helis.com: "starboard mounted");
 stabiliser span 4.22 m at Z 1.9; main rotor 13.80 m across, five blades, plane Z 3.57, shaft
-tilted 5 deg forward as drawn; overall length 16.66 m. Cross sections, windows and gear legs
-are traced or estimated from the drawing and photos.
+tilted 5 deg forward as drawn; overall length 16.66 m; tail rotor blades 0.44 m right of the
+centre line, fin and gearbox fairing as drawn (side and top views); door outlines from the side
+view. Cross sections, windows and gear legs are traced or estimated from the drawing and photos;
+the two antennas (roof whip, blade under the boom) are placed from the photos.
 
 Parts that turn carry glTF extras (custom properties, in the .glb's axes): spin_pivot,
 spin_axis, spin_rev_per_s, spin_blades; the viewer spins them (realAirfields.js; the blade
@@ -200,6 +202,8 @@ material("AW139_Blade", (0.18, 0.19, 0.2), 0.5)
 material("AW139_Metal", (0.55, 0.56, 0.58), 0.35, 0.8)
 material("AW139_Rubber", (0.03, 0.03, 0.03), 0.9)
 material("AW139_Exhaust", (0.12, 0.11, 0.1), 0.6, 0.5)
+material("AW139_Seam", (0.42, 0.43, 0.44), 0.5)["polygon_offset"] = True  # door outlines: 8 mm off the skin
+material("AW139_Antenna", (0.25, 0.26, 0.27), 0.5)
 
 col = bpy.data.collections.get(COLL)
 if col is None:
@@ -228,10 +232,10 @@ FUS = [(4.62, 0, 0.80, 0.92, 0.05, 0.86, 2.2, 2.2),
        (-3.40, 0, 1.07, 2.50, 0.62, 1.70, 2.8, 3.0),
        (-3.75, 0, 1.22, 2.56, 0.46, 1.85, 2.6, 2.6),
        (-4.60, 0, 1.35, 2.55, 0.36, 1.95, 2.4, 2.4),
-       (-6.00, 0, 1.56, 2.53, 0.25, 2.05, 2.3, 2.3),
-       (-7.05, 0, 1.71, 2.51, 0.18, 2.10, 2.2, 2.2),
-       (-7.80, 0, 1.90, 2.50, 0.14, 2.20, 2.2, 2.2),
-       (-8.30, 0, 2.08, 2.48, 0.09, 2.28, 2.2, 2.2)]
+       (-6.00, 0, 1.56, 2.53, 0.25, 2.05, 2.6, 2.3),
+       (-7.05, 0, 1.71, 2.51, 0.18, 2.10, 3.2, 2.2),
+       (-7.80, 0, 1.90, 2.50, 0.14, 2.20, 3.2, 2.2),
+       (-8.30, 0, 2.08, 2.48, 0.09, 2.28, 3.2, 2.2)]
 X = np.concatenate([np.arange(4.62, 2.2, -0.05), np.arange(2.2, -2.2, -0.1), np.arange(-2.2, -8.30, -0.15), [-8.30]])
 fus = loft_x("AW139_Fuselage", FUS, X, ["AW139_Paint"],
              tip_front=(4.665, 0, 0.86), tip_back=(-8.36, 0, 2.28))
@@ -295,6 +299,53 @@ for s, sgn in (("L", 1), ("R", -1)):
     window_patch(f"AW139_ChinWindow{s}", lambda x, y, z: ((x - 3.25) / 0.33) ** 2 + ((z - 0.74) / 0.17) ** 2 < 1, 2.90, 3.60, sgn)
 
 
+# door outlines (the side view, (X, Z) on both sides): the cockpit door behind the windscreen
+# post, the sliding cabin door round the two windows (its lower rear corner cut), the baggage
+# door aft of the cabin; drawn as 25 mm grey seams on the skin
+COCKPIT_DOOR = [(2.47, 2.02), (1.88, 2.02), (1.88, 0.70), (2.76, 0.70), (2.76, 0.82), (2.62, 1.15)]
+CABIN_DOOR = [(1.03, 2.08), (-0.67, 2.08), (-0.67, 0.96), (-0.40, 0.70), (1.03, 0.70)]
+BAGGAGE_DOOR = (-3.16, -2.20, 1.19, 1.90, 0.06)  # x0, x1, z0, z1, corner radius
+
+
+def skin_point(x, z, sgn, lift=0.008):
+    """The fuselage skin on the sgn side at station x and height z, lifted along its normal."""
+    prm = [float(pchip(FUS_P[:, 0], FUS_P[:, c], x)) for c in range(1, 8)]
+    r = ring(*prm, n=720)
+    side = r[sgn * r[:, 0] > 0]
+    o = np.argsort(side[:, 1]); zz, yy = side[o, 1], side[o, 0]
+    y = np.interp(z, zz, yy); dy = np.interp(z + 0.01, zz, yy) - np.interp(z - 0.01, zz, yy)
+    n = np.array([0.02, -dy]) * sgn; n /= np.linalg.norm(n)
+    return (x, y + n[0] * lift, z + n[1] * lift)
+
+
+def rrect_path(x0, x1, z0, z1, r, k=6):
+    pts = []
+    for cx, cz, a0 in ((x1 - r, z1 - r, 0), (x0 + r, z1 - r, 90), (x0 + r, z0 + r, 180), (x1 - r, z0 + r, 270)):
+        pts += [(cx + r * math.cos(math.radians(a0 + 90 * i / k)), cz + r * math.sin(math.radians(a0 + 90 * i / k))) for i in range(k + 1)]
+    return pts
+
+
+def seam(name, path, sgn, w=0.025, step=0.02):
+    """A closed outline (X, Z) drawn on the skin as a ribbon w wide."""
+    path = np.asarray(path, float); closed = np.vstack([path, path[:1]])
+    pts = []
+    for a, b in zip(closed, closed[1:]):
+        m = max(1, int(np.linalg.norm(b - a) / step))
+        pts += [a + (b - a) * i / m for i in range(m)]
+    pts = np.array(pts); n = len(pts)
+    t = np.roll(pts, -1, 0) - np.roll(pts, 1, 0); t /= np.linalg.norm(t, axis=1, keepdims=True)
+    perp = np.stack([-t[:, 1], t[:, 0]], 1) * w / 2
+    verts = [skin_point(*q, sgn) for q in pts + perp] + [skin_point(*q, sgn) for q in pts - perp]
+    faces = [(j, (j + 1) % n, n + (j + 1) % n, n + j) for j in range(n)]
+    return make_object(name, verts, faces, ["AW139_Seam"], smooth=False)
+
+
+for s, sgn in (("L", 1), ("R", -1)):
+    seam(f"AW139_CockpitDoor{s}", COCKPIT_DOOR, sgn)
+    seam(f"AW139_CabinDoor{s}", CABIN_DOOR, sgn)
+    seam(f"AW139_BaggageDoor{s}", rrect_path(*BAGGAGE_DOOR), sgn)
+
+
 # engine cowling over the cabin roof, and the fairing round the rotor shaft
 COWL = [(2.40, 0, 2.00, 2.28, 0.30, 2.10, 2.5, 2.0),
         (2.00, 0, 2.00, 2.45, 0.52, 2.15, 2.6, 2.0),
@@ -332,9 +383,26 @@ for s, sgn in (("L", 1), ("R", -1)):
 def fin_section(z, le, te, t, y=0.0):
     return [(p[0], y + p[1], z) for p in airfoil((le, 0), (te, 0), t)]
 
-FIN = [(2.05, -7.30, -8.35, 0.17), (2.50, -7.05, -8.15, 0.16), (3.00, -7.65, -8.59, 0.15),
-       (3.50, -8.01, -8.98, 0.14), (3.74, -8.20, -9.04, 0.13), (3.80, -8.30, -9.00, 0.08)]
-loft_sections("AW139_Fin", [fin_section(*r) for r in FIN], ["AW139_Paint"])
+# the fin (side view): a straight swept leading edge from a fillet on the boom top (X -6.55 at
+# Z 2.49, X -7.03 at Z 2.63) to the top front corner (X -8.23, Z 3.78); the trailing edge from
+# the top rear corner (X -9.03, Z 3.64) down to Z 2.51, then the S of the tail bumper (X -8.11
+# at Z 2.33, out to X -8.32 at Z 2.11) to the bottom at Z 2.02. As thick as the boom where it
+# grows out of it (about 0.25 m; the boom's top is squarer there); below Z 2.5 forward of X -8
+# it is inside the boom.
+FIN_Z = [2.02, 2.11, 2.20, 2.33, 2.45, 2.49, 2.53, 2.58, 2.63, 3.00, 3.40, 3.64, 3.74, 3.80]
+FIN_LE = [-7.30, -7.10, -6.90, -6.70, -6.56, -6.55, -6.82, -6.95, -7.03, -7.41, -7.83, -8.08, -8.20, -8.30]
+FIN_TE = [-8.32, -8.32, -8.16, -8.11, -8.17, -8.19, -8.21, -8.25, -8.29, -8.56, -8.85, -9.03, -9.00, -8.90]
+FIN_T = [0.14, 0.14, 0.15, 0.15, 0.15, 0.15, 0.17, 0.20, 0.22, 0.24, 0.24, 0.24, 0.22, 0.12]
+fz = np.linspace(FIN_Z[0], FIN_Z[-1], 32)
+loft_sections("AW139_Fin", [fin_section(z, le, te, t) for z, le, te, t in
+                            zip(fz, pchip(FIN_Z, FIN_LE, fz), pchip(FIN_Z, FIN_TE, fz), pchip(FIN_Z, FIN_T, fz))], ["AW139_Paint"])
+
+# the tail rotor gearbox fairing on the fin top: a teardrop 0.7 m across (top view: X -8.15 to
+# the round end at X -9.06), the tail rotor on its right
+loft_x("AW139_TailFairing", [(-8.12, 0, 3.58, 3.76, 0.12, 3.68, 2.2, 2.2), (-8.25, 0, 3.50, 3.80, 0.26, 3.66, 2.4, 2.4),
+                             (-8.45, 0, 3.44, 3.81, 0.34, 3.64, 2.6, 2.6), (-8.70, 0, 3.44, 3.79, 0.34, 3.63, 2.6, 2.6),
+                             (-8.90, 0, 3.48, 3.74, 0.26, 3.63, 2.4, 2.4), (-9.02, 0, 3.55, 3.69, 0.14, 3.63, 2.2, 2.2)],
+       np.linspace(-8.12, -9.02, 16), ["AW139_Paint"], tip_front=(-8.06, 0, 3.69), tip_back=(-9.08, 0, 3.64), n=40)
 
 STAB_Z, STAB_LE, STAB_TE, STAB_HALF = 1.90, -7.05, -7.67, 2.05
 secs = []
@@ -350,8 +418,8 @@ for s, sgn in (("L", 1), ("R", -1)):  # end plates, turned up and out
     loft_sections(f"AW139_EndPlate_{s}", ep, ["AW139_Paint"])
 
 # tail rotor on the right (starboard) side of the fin, gearbox fairing at the fin top
-TR = np.array([-8.40, -0.30, 3.70])
-fair = cylinder("AW139_TailGearbox", TR + (0, 0.20, 0), TR + (0, -0.02, 0), 0.17, ["AW139_Paint"], n=24)
+TR = np.array([-8.40, -0.36, 3.70])  # blades 0.44 m right of the centre line (top view)
+fair = cylinder("AW139_TailGearbox", TR + (0, 0.30, 0), TR + (0, -0.02, 0), 0.14, ["AW139_Paint"], n=24)
 cylinder("AW139_TailHub", TR + (0, 0.0, 0), TR + (0, -0.12, 0), 0.08, ["AW139_Metal"], n=16)
 for i in range(4):
     a = math.radians(90 * i + 20)
@@ -366,6 +434,13 @@ for s, sgn in (("L", 1), ("R", -1)):
     p0 = np.array([-2.85, sgn * 0.50, 2.58]); d = np.array([-math.cos(math.radians(35)), sgn * math.sin(math.radians(35)), 0.12])
     cylinder(f"AW139_Exhaust_{s}", p0, p0 + d * 0.42, 0.17, ["AW139_Paint"], n=24, cap=False)
     cylinder(f"AW139_ExhaustPipe_{s}", p0 + d * 0.05, p0 + d * 0.40, 0.13, ["AW139_Exhaust"], n=24)
+
+# antennas seen in the photos: a whip on the left roof edge behind the cockpit (beside the
+# engine cowling), raked aft, and a blade under the front of the tail boom
+cylinder("AW139_AntennaWhip", (1.65, 0.85, 2.13), (1.65 - 0.6 * math.sin(math.radians(30)), 0.85, 2.13 + 0.6 * math.cos(math.radians(30))),
+         0.008, ["AW139_Antenna"], n=8)
+loft_sections("AW139_AntennaBlade", [[(p[0], p[1], z) for p in airfoil((le, 0), (le - c, 0), 0.12, n=16)]
+                                     for z, le, c in ((1.28, -3.68, 0.26), (0.98, -3.80, 0.16))], ["AW139_Antenna"])
 
 # ------------------------------------------------------------------ gear
 

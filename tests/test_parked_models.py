@@ -120,8 +120,8 @@ def test_the_aw139_model_marks_its_turning_parts_and_decals():
     m = spin["AW139_MainBlade0"]
     assert m["spin_pivot"] == pytest.approx([0, 3.1, 0]) and math.degrees(math.atan2(m["spin_axis"][0], m["spin_axis"][1])) == pytest.approx(5.0)  # tilted forward
     t = spin["AW139_TailBlade0"]
-    assert t["spin_pivot"] == pytest.approx([-8.4, 3.7, 0.3]) and t["spin_axis"] == pytest.approx([0, 0, -1])  # right side, axis across
-    assert {m["name"] for m in j["materials"] if (m.get("extras") or {}).get("polygon_offset")} == {"AW139_Glass", "AW139_Grille"}
+    assert t["spin_pivot"] == pytest.approx([-8.4, 3.7, 0.36]) and t["spin_axis"] == pytest.approx([0, 0, -1])  # right side, axis across
+    assert {m["name"] for m in j["materials"] if (m.get("extras") or {}).get("polygon_offset")} == {"AW139_Glass", "AW139_Grille", "AW139_Seam"}
 
 
 def test_the_aw139_model_fits_its_budget():
@@ -152,4 +152,4 @@ new GLTFLoader().parse(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)
     r = subprocess.run([NODE, "--input-type=module", "-e", script], cwd=tmp_path, capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, r.stderr
     out = json.loads(r.stdout)
-    assert out == {"meshes": 57, "spin": 13, "offset": ["AW139_Glass", "AW139_Grille"]}
+    assert out == {"meshes": 66, "spin": 13, "offset": ["AW139_Glass", "AW139_Grille", "AW139_Seam"]}

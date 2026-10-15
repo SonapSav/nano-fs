@@ -1920,8 +1920,22 @@ landmarks; later night lighting, shadows, haze.
     2.62, 0.25 to 0.98 m off the centre line, rounded corners), kept above the door frame
     (Z 2.06) and checked against the ambulance photo; two more glass meshes (57). Checked
     in Blender renders and a viewer screenshot. (05be631)
-  - [ ] AW139 details still missing: door outlines, antennas, steps, the sharp cabin-to-boom
-    break; the paint reads slightly grey in the viewer's light. The tail rotor's turning
+  - [x] AW139 tail fin, door outlines and antennas (2026-10-15; the owner: the fin did not
+    match the photos and drawings). Fin redrawn from the three-view, overlaid on the side and
+    top views at the drawing's scale: a straight swept leading edge from a fillet on the boom
+    (it bulged up to 0.25 m aft), the trailing edge's S at the tail bumper, about 0.25 m
+    thick and rising smoothly out of the boom (the boom's top squared off under it), and the
+    tail rotor gearbox fairing on top, a teardrop 0.7 m across (top view; was missing); tail
+    rotor blades 0.44 m right of the centre line (top view; were 0.38). Door outlines as
+    25 mm grey seams on the skin (new AW139_Seam material, polygon offset): cockpit doors,
+    sliding cabin doors round the two windows, baggage doors (side view). Antennas from the
+    photos: a whip on the left roof edge behind the cockpit, raked aft, and a blade under the
+    front of the boom. Not modelled: the swept blade on the cabin roof ahead of the engines in
+    both photos, taken for the upper wire-strike cutter (**from memory, unverified**). Model
+    66 meshes, 53.8k triangles (budget 60k), 1.06 MB. Checked in Blender renders against the
+    drawings and photos and in viewer screenshots.
+  - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
+    slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
   - [x] AW139 rotor speed and direction checked (2026-10-15): main rotor 296 rpm at 100 % NR
     (AW139 B2 training notes, 2010: "the 296 rpm of the MR speed (at 100% Nr)"; EASA
