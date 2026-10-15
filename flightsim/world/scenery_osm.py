@@ -192,6 +192,7 @@ ROAD_WIDTH_M = {
     "unclassified": 7.0, "residential": 7.0,
 }  # fmt: skip
 TAXIWAY_WIDTH_M = 23.0  # ICAO code C taxiway (project choice where OSM has no width)
+HELI_RUNWAY_WIDTH_M = 30.0  # a helicopter runway's paving where OSM has no width (project choice)
 LEVEL_M = 3.3  # storey height for building:levels (project choice)
 
 
@@ -259,6 +260,19 @@ def _polylines_by_tile(pts: list[tuple[float, float]], tile_m: float) -> dict[tu
                 else:
                     lines.append(a + b)
     return out
+
+
+def _strip(pts: list[tuple[float, float]], half_w: float) -> list[tuple[float, float]]:
+    """A polyline's outline half_w either side (x, z points; square ends, mitred bends)."""
+    left, right = [], []
+    for i, p in enumerate(pts):
+        a, b = pts[max(0, i - 1)], pts[min(len(pts) - 1, i + 1)]
+        dx, dz = b[0] - a[0], b[1] - a[1]
+        L = math.hypot(dx, dz) or 1.0
+        nx, nz = -dz / L * half_w, dx / L * half_w
+        left.append((p[0] + nx, p[1] + nz))
+        right.append((p[0] - nx, p[1] - nz))
+    return left + right[::-1]
 
 
 def _ring_area(ring: list[tuple[float, float]]) -> float:
@@ -392,7 +406,11 @@ def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: fl
         hw, rw, aw = tags.get("highway"), tags.get("railway"), tags.get("aeroway")
         cls = (hw or "").removesuffix("_link") if hw else None
         bar = tags.get("barrier")
-        kind = ("roads" if cls in ROAD_WIDTH_M else "rail" if rw == "rail" else "taxiway" if aw == "taxiway"
+        # Helicopter runways (aeroway=runway, ref starting with "H": left out of the runways)
+        # are paved strips aircraft taxi along (OMAD's H13/H31 continues taxiway T to Apron
+        # A): a taxiway line (centreline, edge lights) on paving their full width.
+        heli = aw == "runway" and (tags.get("ref") or "").strip().upper().startswith("H")
+        kind = ("roads" if cls in ROAD_WIDTH_M else "rail" if rw == "rail" else "taxiway" if aw == "taxiway" or heli
                 else bar if bar in ("wall", "fence") else None)  # fmt: skip
         if kind is None:
             continue
@@ -410,6 +428,8 @@ def extract_features(pbf_path, geodesy: geo.Geodesy, bounds_deg, half_size_m: fl
             continue
         height_m = (_metres(tags.get("height")) or (wall_heights or {}).get(o.id)) if kind == "wall" else None
         add_lines(kind, pts, cls, height_m)
+        if heli and len(pts) >= 2:
+            add_area("apron", _strip(pts, (_metres(tags.get("width")) or HELI_RUNWAY_WIDTH_M) / 2))
     if capture:
         tiles["captured"] = captured
     tiles["bridges"] = sorted(bridges, key=lambda b: b["id"])

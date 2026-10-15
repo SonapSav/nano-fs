@@ -325,12 +325,12 @@ airports:
           "31": {approach: {type: simple, length_m: 660}, threshold_flash: true, papi: {angle_deg: 3.5, meht_ft: 46.50, sides: both, ils: true}}
     # Parked models (viewer only; no physics: aircraft pass through them): the viewer's
     # flightsim/viewer/models/<model>.glb at a position and true heading, `turning`: rotors
-    # turning. An AW139 (scripts/blender/aw139.py) holding short of runway 13/31 on the
-    # taxiway joining its south-east end, at the hold the owner picked (OSM hold at map north
-    # -1047.7, east 1201.0, taxiway 37.5 deg): rotor shaft 6.7 m behind the bar, nose 2 m
-    # short of it, facing the runway; on the left of a landing on 31.
+    # turning. An AW139 (scripts/blender/aw139.py) on helipad A2 of Apron A (Falcon
+    # Aviation's helicopter apron; OSM way 1055702764, its centre), nose south-east (135 deg
+    # true), rotors turning (2026-10-15, the owner; it held short of runway 31 on taxiway 6
+    # before, in the way of a taxi to the runway's start).
     parked_models:
-      - {model: aw139, lat_deg: 24.4189577, lon_deg: 54.4698361, heading_deg: 37.5, turning: true}
+      - {model: aw139, lat_deg: 24.4362634, lon_deg: 54.4430093, heading_deg: 135, turning: true}
   OMAA:
     runways:
       # Lighting: GCAA AIP UAE, OMAA AD 2-21C (AIRAC 08/2026; retrieved 2026-10-14): PAPI 3 deg

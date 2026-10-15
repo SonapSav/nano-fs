@@ -69,6 +69,31 @@ def test_features_from_osm(tmp_path):
     assert walls == {(50, -50): 4.0, (1040, 1030): None, (1040, 1000): 2.5}
 
 
+def test_helicopter_runways_are_paved_taxiway_strips(tmp_path):
+    """OMAD's H13/H31 (aeroway=runway, ref "H13/ H31", 40 m) continues taxiway T to Apron A:
+    a taxiway line on paving its full width; numbered runways stay out of the features."""
+    pytest.importorskip("osmium")
+    from flightsim.world.scenery_osm import extract_features
+
+    g = geo.Geodesy("wgs84", 24.0, 54.0)
+    xml = ['<?xml version="1.0" encoding="UTF-8"?>', '<osm version="0.6">']
+    for i, (n, e) in {1: (100, 100), 2: (100, 600), 3: (300, 100), 4: (300, 600)}.items():
+        lat, lon = (math.degrees(v) for v in g.to_geodetic(n, e))
+        xml.append(f'<node id="{i}" version="1" lat="{lat:.9f}" lon="{lon:.9f}"/>')
+    xml.append('<way id="20" version="1"><nd ref="1"/><nd ref="2"/><tag k="aeroway" v="runway"/><tag k="ref" v="H13/ H31"/><tag k="width" v="40"/></way>')
+    xml.append('<way id="21" version="1"><nd ref="3"/><nd ref="4"/><tag k="aeroway" v="runway"/><tag k="ref" v="13/31"/></way>')
+    xml.append("</osm>")
+    (tmp_path / "t.osm").write_text("\n".join(xml))
+    f = extract_features(tmp_path / "t.osm", g, (23.9, 53.9, 24.1, 54.1), 8000, 4000)
+    f.pop("bridges")
+    lines = [l for t in f.values() for l in t["taxiway"]]
+    assert lines == [pytest.approx([100, -100, 600, -100], abs=0.01)]  # only the helicopter runway, x east, z south
+    (ring,) = [r for t in f.values() for r in t["apron"]]
+    xs, zs = ring[0::2], ring[1::2]
+    assert (min(xs), max(xs)) == pytest.approx((100, 600), abs=0.01)
+    assert (min(zs), max(zs)) == pytest.approx((-120, -80), abs=0.01)  # 40 m wide
+
+
 @pytest.mark.skipif(NODE is None, reason="node not installed")
 def test_feature_meshes():
     script = f"""
