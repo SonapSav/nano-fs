@@ -241,6 +241,10 @@ WINDSCREEN = [(3.60, 1.58), (3.42, 1.44), (3.02, 1.12), (2.60, 1.15), (2.44, 2.0
 SIDE_WINDOWS = [  # (x0, x1, z0, z1, corner radius) on both sides; the cockpit door's is a polygon
     (1.19, 1.68, 1.22, 1.92, 0.10), (0.23, 0.88, 1.22, 1.92, 0.12), (-0.56, 0.09, 1.22, 1.92, 0.12)]
 DOOR_WINDOW = [(2.45, 1.96), (2.00, 1.96), (1.96, 1.18), (2.58, 1.18)]
+# the roof windows over the pilots, seen from above (top view: X 1.93-2.62, 0.25-0.98 m off the
+# centre line; photos: tinted, on the roof's shoulder above the cockpit doors): (x0, x1, y0, y1,
+# corner radius) of |Y|, kept above the door frame (Z 2.06)
+ROOF_WINDOW = (1.93, 2.62, 0.25, 0.98, 0.08)
 FUS_P = np.array(FUS, float)
 
 
@@ -285,6 +289,7 @@ def window_patch(name, inside, x0, x1, sgn, dx=0.025, k=10, lift=0.008, table=No
 for s, sgn in (("L", 1), ("R", -1)):
     window_patch(f"AW139_Windscreen{s}", lambda x, y, z: inside_poly(x, z, WINDSCREEN) & (np.abs(y) > 0.04), 2.40, 3.45, sgn, dx=0.02, k=14)
     window_patch(f"AW139_DoorWindow{s}", lambda x, y, z: inside_poly(x, z, DOOR_WINDOW), 1.94, 2.60, sgn)
+    window_patch(f"AW139_RoofWindow{s}", lambda x, y, z: rrect(x, np.abs(y), *ROOF_WINDOW) & (z > 2.06), 1.92, 2.63, sgn, k=14)
     for i, w in enumerate(SIDE_WINDOWS):
         window_patch(f"AW139_CabinWindow{s}{i}", lambda x, y, z, w=w: rrect(x, z, *w), w[0] - 0.01, w[1] + 0.01, sgn)
     window_patch(f"AW139_ChinWindow{s}", lambda x, y, z: ((x - 3.25) / 0.33) ** 2 + ((z - 0.74) / 0.17) ** 2 < 1, 2.90, 3.60, sgn)
