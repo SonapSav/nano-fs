@@ -171,6 +171,16 @@ def inside_poly(px, pz, poly):
     return inside
 
 
+def rounded_poly(poly, r, k=6):
+    """A closed polygon with its corners rounded (quadratic curves r along each edge)."""
+    poly = np.asarray(poly, float); out = []
+    for i in range(len(poly)):
+        a, p, b = poly[i - 1], poly[i], poly[(i + 1) % len(poly)]
+        s0 = p + (a - p) / np.linalg.norm(a - p) * r; s1 = p + (b - p) / np.linalg.norm(b - p) * r
+        out += [tuple((1 - t) ** 2 * s0 + 2 * (1 - t) * t * p + t ** 2 * s1) for t in np.linspace(0, 1, k)]
+    return out
+
+
 def rrect(px, pz, x0, x1, z0, z1, r):
     cx, cz = np.clip(px, min(x0, x1) + r, max(x0, x1) - r), np.clip(pz, z0 + r, z1 - r)
     return (np.hypot(px - cx, pz - cz) <= r) & (px >= min(x0, x1)) & (px <= max(x0, x1)) & (pz >= z0) & (pz <= z1)
@@ -238,16 +248,22 @@ FUS = [(4.62, 0, 0.80, 0.92, 0.05, 0.86, 2.2, 2.2),
        (-6.00, 0, 1.56, 2.53, 0.25, 2.05, 2.6, 2.3),
        (-7.05, 0, 1.71, 2.51, 0.18, 2.10, 3.2, 2.2),
        (-7.80, 0, 1.90, 2.50, 0.14, 2.20, 3.2, 2.2),
-       (-8.30, 0, 2.08, 2.48, 0.09, 2.28, 3.2, 2.2)]
-X = np.concatenate([np.arange(4.62, 2.2, -0.05), np.arange(2.2, -2.2, -0.1), np.arange(-2.2, -8.30, -0.15), [-8.30]])
+       (-8.10, 0, 1.97, 2.30, 0.10, 2.10, 2.6, 2.2),   # the boom ends inside the fin's S (top at the
+       (-8.25, 0, 2.01, 2.15, 0.06, 2.07, 2.2, 2.2)]   # S's waist), narrowing to the heel's point
+X = np.concatenate([np.arange(4.62, 2.2, -0.05), np.arange(2.2, -2.2, -0.1), np.arange(-2.2, -8.25, -0.15), [-8.25]])
 fus = loft_x("AW139_Fuselage", FUS, X, ["AW139_Paint"],
-             tip_front=(4.665, 0, 0.86), tip_back=(-8.36, 0, 2.28))
+             tip_front=(4.665, 0, 0.86), tip_back=(-8.33, 0, 2.05))
 
-# up to the centre post; its top edge level with the roof panel (Z 2.03 in the front view)
-WINDSCREEN = [(3.60, 1.58), (3.42, 1.44), (3.02, 1.12), (2.60, 1.15), (2.44, 2.03), (3.60, 2.03)]
+# up to the centre post; its top edge level with the roof panel (Z 2.03 in the front view); its
+# bottom edge and the door window measured on a photo of A6-AWB (left side, camera solved from
+# known points, the outlines cast onto the fuselage): the bottom edge nearly straight from the
+# rear corner up to the nose (Z 1.30 at X 3.04)
+WINDSCREEN = [(3.60, 1.58), (3.25, 1.43), (3.04, 1.30), (2.80, 1.18), (2.60, 1.15), (2.44, 2.03), (3.60, 2.03)]
 SIDE_WINDOWS = [  # (x0, x1, z0, z1, corner radius) on both sides; the cockpit door's is a polygon
     (1.19, 1.68, 1.22, 1.92, 0.10), (0.23, 0.88, 1.22, 1.92, 0.12), (-0.56, 0.09, 1.22, 1.92, 0.12)]
-DOOR_WINDOW = [(2.45, 1.96), (2.00, 1.96), (1.96, 1.18), (2.58, 1.18)]
+# the cockpit door window (A6-AWB photo): its front edge parallel to the windscreen's rear edge,
+# 8 cm behind it, upright rear edge, rounded corners
+DOOR_WINDOW = rounded_poly([(2.37, 1.98), (1.83, 1.98), (1.83, 1.13), (2.53, 1.13)], 0.09)
 # the roof windows over the pilots, seen from above (top view: X 1.93-2.62, 0.25-0.98 m off the
 # centre line; photos: tinted, on the roof's shoulder above the cockpit doors): (x0, x1, y0, y1,
 # corner radius) of |Y|, kept above the door frame (Z 2.06)
@@ -256,7 +272,7 @@ ROOF_WINDOW = (1.93, 2.62, 0.25, 0.98, 0.08)
 # 0.96), shaped as both photos show them, a D: the rear edge upright, the bottom along the nose's
 # underside, the top a convex arc from a rounded top rear corner down to a blunt front tip;
 # bulged 35 mm off the skin (photos)
-def _chin(n=24, e=2.3):
+def _chin(n=24, e=1.35):
     zb = lambda x: 0.51 + (x - 2.96) * 0.06 / 0.71  # the nose's underside rises forward
     arc = [(2.96 + 0.71 * math.cos(t) ** (2 / e), zb(2.96 + 0.71 * math.cos(t) ** (2 / e)) + (0.96 - zb(2.96 + 0.71 * math.cos(t) ** (2 / e))) * math.sin(t) ** (2 / e))
            for t in np.linspace(0.06, math.pi / 2 - 0.02, n)]
@@ -312,7 +328,7 @@ def window_patch(name, inside, x0, x1, sgn, dx=0.025, k=10, lift=0.008, table=No
 
 for s, sgn in (("L", 1), ("R", -1)):
     window_patch(f"AW139_Windscreen{s}", lambda x, y, z: inside_poly(x, z, WINDSCREEN) & (np.abs(y) > 0.04), 2.40, 3.45, sgn, dx=0.02, k=14)
-    window_patch(f"AW139_DoorWindow{s}", lambda x, y, z: inside_poly(x, z, DOOR_WINDOW), 1.94, 2.60, sgn)
+    window_patch(f"AW139_DoorWindow{s}", lambda x, y, z: inside_poly(x, z, DOOR_WINDOW), 1.81, 2.55, sgn)
     window_patch(f"AW139_RoofWindow{s}", lambda x, y, z: rrect(x, np.abs(y), *ROOF_WINDOW) & (z > 2.06), 1.92, 2.63, sgn, k=14)
     for i, w in enumerate(SIDE_WINDOWS):
         window_patch(f"AW139_CabinWindow{s}{i}", lambda x, y, z, w=w: rrect(x, z, *w), w[0] - 0.01, w[1] + 0.01, sgn)
@@ -322,7 +338,7 @@ for s, sgn in (("L", 1), ("R", -1)):
 # door outlines (the side view, (X, Z) on both sides): the cockpit door behind the windscreen
 # post, the sliding cabin door round the two windows (its lower rear corner cut), the baggage
 # door aft of the cabin; drawn as 25 mm grey seams on the skin
-COCKPIT_DOOR = [(2.47, 2.02), (1.88, 2.02), (1.88, 0.70), (2.76, 0.70), (2.76, 0.82), (2.62, 1.15)]
+COCKPIT_DOOR = [(2.47, 2.02), (1.755, 2.02), (1.755, 0.70), (2.76, 0.70), (2.76, 0.82), (2.62, 1.15)]
 CABIN_DOOR = [(1.03, 2.08), (-0.67, 2.08), (-0.67, 0.96), (-0.40, 0.70), (1.03, 0.70)]
 BAGGAGE_DOOR = (-3.16, -2.20, 1.19, 1.90, 0.06)  # x0, x1, z0, z1, corner radius
 

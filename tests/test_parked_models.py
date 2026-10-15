@@ -127,7 +127,7 @@ def test_the_aw139_model_marks_its_turning_parts_and_decals():
 def test_the_aw139_model_fits_its_budget():
     j = _gltf()
     tris = sum(j["accessors"][p["indices"]]["count"] // 3 for m in j["meshes"] for p in m["primitives"])
-    assert tris < 60_000 and GLB.stat().st_size < 1_500_000
+    assert tris < 80_000 and GLB.stat().st_size < 2_000_000
     assert not j.get("images") and not j.get("textures")  # plain materials: nothing else to fetch
 
 

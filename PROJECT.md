@@ -1968,6 +1968,22 @@ landmarks; later night lighting, shadows, haze.
     (the sponsons'; the fuselage's and cowling's patches unchanged). Model 68 meshes, 57.6k
     triangles (budget 60k), 1.13 MB. Checked in Blender renders, the side view overlay and
     a viewer screenshot. (b503d8c)
+  - [x] AW139 tail heel, windscreen, cockpit door window, chin window shape, budget
+    (2026-10-15, the owner). The tail boom stuck out behind the fin as a round knob (the
+    owner's screenshot); it now ends inside the fin's S, its top at the S's waist, narrowing
+    to the heel's point at X -8.33, Z 2.05. Windscreen and cockpit door measured on a photo
+    of A6-AWB (the owner's, kept in data/models/ref/, not committed): the camera solved from
+    eight known points (wheels, nose, cabin windows, tail rotor hub, exhaust; scipy least
+    squares, square pixels, within 2 to 7 px), the photo's outlines cast onto the fuselage
+    in Blender, the model's projected back over the photo to check. Door window now X 1.83
+    to 2.53, Z 1.13 to 1.98, its front edge parallel to the windscreen's rear edge 8 cm
+    behind it, rounded corners (was X 1.96 to 2.58, Z 1.18 to 1.96, sharp; new helper
+    rounded_poly); the door outline's rear edge moved to X 1.755 to stay behind it. The
+    windscreen's bottom edge nearly straight from its rear corner to the nose (Z 1.30 at
+    X 3.04, was 1.12). The chin window's top edge flattened to the photo's near-straight
+    diagonal (the drawing agrees; the convex D was overdone). Roof windows match the photo
+    as they were. Budget raised to 80k triangles and 2 MB (test); model 68 meshes, 57.6k
+    triangles, 1.13 MB.
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
