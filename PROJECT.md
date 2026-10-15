@@ -2122,7 +2122,7 @@ landmarks; later night lighting, shadows, haze.
     the span, at most 0.6 of the height: project choices). Ways 170928400 and 170928403:
     one-storey offices with large windows ("office": a terminal's glazed ground floor), 4.5 m
     (project choice; the atlas gave 9.4 and 8.3 m). Scenery hash 64b30887c21096c8 (other
-    machines: rebuild). Tests: the overrides, the open shed's mesh.
+    machines: rebuild). Tests: the overrides, the open shed's mesh. (c64ab44)
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
