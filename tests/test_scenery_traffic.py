@@ -53,6 +53,13 @@ def test_route_meets_at_the_middle_of_the_meeting_way():
     assert r["points"][int(r["meet_s"] / st.STEP_M)] == pytest.approx([0.0, 1250.0])
 
 
+def test_offset_moves_the_route_and_its_meeting_point_sideways():
+    r = st.route(_ways(), {"osm_way": 3, "before_m": 1000, "after_m": 1000, "smooth_m": 100, "offset_m": -250}, meet_way=3)
+    # flying east, left is north: every point 250 m north of the road, the meeting point too
+    assert all(n == pytest.approx(250.0) for n, _ in r["points"])
+    assert r["meet"] == [250.0, 1250.0] and r["meet_s"] == 1250.0
+
+
 def test_the_region_flies_an_aw139_along_the_e20_through_the_mussafah_bridge():
     spec = load_spec(ROOT / "configs" / "scenery" / "abu_dhabi.yaml")
     (t,) = spec.traffic

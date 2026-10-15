@@ -520,7 +520,7 @@ function handle(msg) {
         minimapState.track.add(latest.t_s, mn, me);
       }
       frames.push(latest); // drawn smoothly by frame()
-      tellPanel({ type: "frame", row: latest });
+      tellPanel({ type: "frame", row: latest, traffic: scene.traffic.positions() });
       if (!paused) sound.update(latest, { view: scene.view, distanceM: scene.orbit.distance });
       dirty = true;
       break;
@@ -1079,7 +1079,7 @@ function drawMinimap(now) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   drawMap(ctx, w, h, {
     hello: session, row: latest, geodesy: scene.geodesy, track: minimapState.track, rangeNm: RANGES_NM[minimapState.rangeIndex],
-    northUp: minimapState.northUp, background: minimapState.background, nav: panel.nav, compact: true, camera: camShape,
+    northUp: minimapState.northUp, background: minimapState.background, nav: panel.nav, compact: true, camera: camShape, traffic: scene.traffic.positions(),
   });
 }
 

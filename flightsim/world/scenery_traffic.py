@@ -7,8 +7,10 @@ the carriageway of `route.osm_way`, chained through the ways joined end to end w
 same name or ref (in the way's direction: a one-way carriageway gives the direction of
 flight), `before_m` back and `after_m` on. The chain is smoothed (a moving average
 `smooth_m` long: a helicopter following a road does not take its kinks) and resampled
-every STEP_M. `meet_osm_way`: the way whose middle the model passes when the flown aircraft
-passes closest to it (the viewer times its start for that).
+every STEP_M, then moved sideways by `offset_m` (positive: right of the direction of
+flight), so it flies parallel to the road. `meet_osm_way`: the way whose middle (moved the
+same way) the model passes when the flown aircraft passes closest to it (the viewer times
+its start for that).
 """
 
 import json
@@ -117,11 +119,25 @@ def smooth(pts, window_m: float, step: float = STEP_M) -> list[tuple[float, floa
     return out
 
 
+def offset(pts, d: float) -> list[tuple[float, float]]:
+    """The polyline moved d metres to the right of its direction (left: negative)."""
+    out = []
+    for i, p in enumerate(pts):
+        a, b = pts[max(0, i - 1)], pts[min(len(pts) - 1, i + 1)]
+        dn, de = b[0] - a[0], b[1] - a[1]
+        L = math.hypot(dn, de) or 1.0
+        out.append((p[0] - de / L * d, p[1] + dn / L * d))  # right of (dn, de) on the map: (-de, dn)
+    return out
+
+
 def route(ways: dict[int, dict], r: dict, meet_way: int) -> dict:
     """One traffic route: points every STEP_M (north, east, rounded to cm) and the distance
-    along them of the meeting point (the middle of `meet_way`, projected onto the route)."""
+    along them of the meeting point (the middle of `meet_way`, projected onto the road, then
+    moved with it)."""
     pts, _, _ = chain(ways, int(r["osm_way"]), float(r["before_m"]), float(r["after_m"]))
     pts = smooth(resample(pts), float(r.get("smooth_m", 300.0)))
+    road = pts
+    pts = offset(pts, float(r.get("offset_m", 0.0)))
     m = ways[meet_way]["pts"]
     half = _length(m) / 2
     for a, b in zip(m, m[1:]):  # the middle of the meeting way along its length
@@ -132,9 +148,9 @@ def route(ways: dict[int, dict], r: dict, meet_way: int) -> dict:
         half -= d
     else:
         mid = m[-1]
-    i = min(range(len(pts)), key=lambda i: math.dist(pts[i], mid))
+    i = min(range(len(road)), key=lambda i: math.dist(road[i], mid))
     return {"points": [[round(n, 2), round(e, 2)] for n, e in pts], "step_m": STEP_M, "meet_s": i * STEP_M,
-            "meet": [round(mid[0], 2), round(mid[1], 2)]}  # fmt: skip
+            "meet": [round(pts[i][0], 2), round(pts[i][1], 2)]}  # fmt: skip
 
 
 def build_traffic(spec, pbf: Path, out: Path, models_dir: Path, log=print) -> list[dict]:

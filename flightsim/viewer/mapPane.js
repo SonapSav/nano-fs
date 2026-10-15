@@ -24,6 +24,7 @@ export class MapPane {
     this.navTracker = null;
     this.nav = null; // a route's navigation (nav.js), fed every frame
     this.camera = null; // what the belly camera sees (app.js camShape), drawn on the map
+    this.traffic = []; // the region's moving traffic now (traffic.js positions)
     this.track = new Track();
     this.dirty = true;
     try {
@@ -61,6 +62,7 @@ export class MapPane {
       this.dirty = true;
     } else if (m.type === "frame") {
       this.row = m.row;
+      this.traffic = m.traffic ?? [];
       this._addToTrack(this.row);
       this.dirty = true;
     }
@@ -97,8 +99,8 @@ export class MapPane {
     const ctx = c.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (w && h) {
-      const { hello, row, geodesy, track, nav, camera, background } = this;
-      drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm: RANGES_NM[this.settings.rangeIndex], northUp: this.settings.northUp, background, nav, camera, credit: true });
+      const { hello, row, geodesy, track, nav, camera, background, traffic } = this;
+      drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm: RANGES_NM[this.settings.rangeIndex], northUp: this.settings.northUp, background, nav, camera, traffic, credit: true });
     }
   }
 }

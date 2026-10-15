@@ -32,12 +32,20 @@ export class Traffic {
       root.matrixAutoUpdate = false;
       root.visible = false;
       this.group.add(root);
-      const mover = { route: t, schedule: new Schedule(t), root, groundY: 0 };
+      const mover = { route: t, schedule: new Schedule(t), root, groundY: 0, at: null };
       loadModel({ model: t.model, turning: true }, root, {
         skyLight: this.skyLight, flatBody: true, shadowY: () => mover.groundY + 0.06, alive: () => this.movers.includes(mover),
       });  // fmt: skip
       return mover;
     });
+  }
+
+  // The flying ones for the maps: [{name, model, north, east, heading_deg (map), alt_m, speed_kt}].
+  positions() {
+    return this.movers.filter((m) => m.at).map((m) => ({
+      name: m.route.name, model: m.route.model, north: m.at.north, east: m.at.east,
+      heading_deg: (m.at.heading * 180) / Math.PI, alt_m: m.route.alt_m, speed_kt: (m.route.speed_mps * 3600) / 1852,
+    }));  // fmt: skip
   }
 
   // Each shown frame: the flown aircraft's place and ground velocity on the map.
@@ -49,6 +57,7 @@ export class Traffic {
     const f = { t_s: row.t_s, north, east, v_north: row.v_north_mps * cg + row.v_east_mps * sg, v_east: -row.v_north_mps * sg + row.v_east_mps * cg };
     for (const m of this.movers) {
       const p = m.schedule.update(f);
+      m.at = p;
       m.root.visible = p !== null;
       if (!p) continue;
       const x = p.east, z = -p.north, y = m.route.alt_m;

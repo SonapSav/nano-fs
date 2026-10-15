@@ -2041,7 +2041,16 @@ landmarks; later night lighting, shadows, haze.
     approach the model is 12 m from the bridge's middle, in view to the left. Scenery hash
     b69dbfb757185d73 (other machines: rebuild, about 14 min). Limits: the start uses the
     aircraft's ground speed when it starts (slowing down afterwards makes the helicopter
-    early); no physics (it can be flown through); not in the map window. (fcc6861)
+    early); no physics (it can be flown through). (fcc6861)
+  - [x] E20 helicopter closer, and on the maps (2026-10-15, the owner: about 200 m to the
+    left). The route moved 250 m left of the road (`offset_m: -250`, scenery_traffic.offset:
+    the smoothed road shifted sideways, the meeting point with it; the bridge's middle is
+    434 m from 31's extended centreline, the road about 21 deg off it): in the headless
+    approach it passes 204 m to the left, about 8 m lower. On the map window, the combo
+    panel's map and the corner map (map.js drawMap `traffic`, from traffic.js positions()
+    sent with every frame on the instruments channel): a green helicopter symbol along its
+    heading, labelled with its model and its height relative to the flown aircraft in
+    hundreds of feet. Traffic step only rebuilt (146 s); scenery hash f77f2fcdd90dfaf1.
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.

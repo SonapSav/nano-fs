@@ -295,10 +295,13 @@ bridges:
 # on its south-east-bound carriageway (OSM way 24151136, the Mussafah Bridge's deck, 2.8 km out
 # on runway 31's final and 420 m left of its centreline), at 80 kt, against an aircraft landing
 # on 31: started so that it passes the bridge's middle when the flown aircraft passes closest
-# to it. Altitude 500 ft, nose 4 deg down and the 300 m smoothing: project choices.
+# to it. Altitude 500 ft, nose 4 deg down and the 300 m smoothing: project choices. Moved 250 m
+# left of the road (towards the final; the owner: about 200 m to the left of the landing
+# aircraft): the bridge's middle is 434 m from 31's extended centreline and the road runs about
+# 21 deg off it, so 250 m off the road is 233 m nearer, about 200 m at the closest approach.
 traffic:
   - {name: E20 helicopter, model: aw139, speed_kt: 80, altitude_ft: 500, pitch_deg: -4, trigger_m: 9000,
-     route: {osm_way: 24151136, before_m: 7000, after_m: 6000, smooth_m: 300}, meet_osm_way: 24151136}
+     route: {osm_way: 24151136, before_m: 7000, after_m: 6000, smooth_m: 300, offset_m: -250}, meet_osm_way: 24151136}
 
 # Published airfield data where OSM lacks or disagrees (OSM gives positions and numbers).
 # Runways without a width here or in OSM get default_runway_width_m.

@@ -18,7 +18,7 @@ const DEG = 180 / Math.PI;
 
 const C = {
   ground: "#1d2a22", ring: "rgba(255, 255, 255, 0.35)", ringText: "rgba(255, 255, 255, 0.85)", runway: "#d9dcd6", centreline: "#c7c9c2",
-  pattern: "#d23cc8", track: "#5fd3f3", predict: "#e070d8", aircraft: "#f2a33a", text: "#f4f4f0", dim: "#c9ced1",
+  pattern: "#d23cc8", track: "#5fd3f3", predict: "#e070d8", aircraft: "#f2a33a", traffic: "#b8f34a", text: "#f4f4f0", dim: "#c9ced1",
 };
 
 // The flown track: map points [north, east] at most every TRACK_STEP_S; cleared when time
@@ -105,7 +105,7 @@ export function ringStepNm(rangeNm) {
 // `compact`: the corner map in the 3D view (smaller text, no key help, a short info line).
 // `camera`: what the belly camera sees ({origin, ground, corners}: map [north, east]
 // metres; app.js), drawn as a translucent patch with a line to the point under its crosshair.
-export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northUp, background = null, nav = null, compact = false, camera = null, credit = false }) {
+export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northUp, background = null, nav = null, compact = false, camera = null, traffic = [], credit = false }) {
   ctx.fillStyle = C.ground;
   ctx.fillRect(0, 0, w, h);
   const font = (size, weight = 500) => `${weight} ${size}px "Barlow Condensed", "Roboto Condensed", "Arial Narrow", sans-serif`;
@@ -233,6 +233,32 @@ export function drawMap(ctx, w, h, { hello, row, geodesy, track, rangeNm, northU
       ctx.moveTo(x - 7, y); ctx.lineTo(x + 7, y); ctx.moveTo(x, y - 7); ctx.lineTo(x, y + 7);
       ctx.stroke();
     }
+  }
+
+  // Moving traffic (traffic.js): a helicopter symbol along its heading, its model and its
+  // altitude relative to the flown aircraft in hundreds of feet (as on a traffic display).
+  for (const t of traffic) {
+    const [x, y] = v.toScreen(t.north, t.east);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate((t.heading_deg - upDeg) / DEG);
+    ctx.fillStyle = C.traffic;
+    ctx.strokeStyle = "#1d1d1d";
+    ctx.lineWidth = 1;
+    ctx.beginPath(); // cabin, boom and tail rotor, nose up
+    ctx.ellipse(0, -2, 4.5, 7, 0, 0, 2 * Math.PI);
+    ctx.rect(-1, 4, 2, 10);
+    ctx.rect(-4, 13, 8, 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = C.traffic;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); // the main rotor's disc
+    ctx.arc(0, -2, 11, 0, 2 * Math.PI);
+    ctx.stroke();
+    ctx.restore();
+    const rel = Math.round((t.alt_m - row.alt_msl_m) / 30.48);
+    text(`${t.model.toUpperCase()} ${rel >= 0 ? "+" : "−"}${String(Math.abs(rel)).padStart(2, "0")}`, x + 15, y - 12, 14, C.traffic, "left", 600);
   }
 
   // Flown track, predicted path, aircraft.
