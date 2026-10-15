@@ -256,7 +256,7 @@ class AltitudeHeadingHoldEnv(gym.Env):
         if v["visibility"] == "auto":
             v["visibility"] = "normal"
         if v["clouds"] == "auto":
-            low = getattr(self, "approach_wind", None) or getattr(self, "takeoff_wind", None)
+            low = getattr(self, "approach_wind", None) or getattr(self, "takeoff_wind", None) or getattr(self, "free_wind", None)
             if low is not None:
                 kt = low["u20_mps"] / 0.514444
                 v["clouds"] = "few" if kt < 6 else "scattered" if kt < 13 else "broken"
@@ -390,6 +390,15 @@ class AltitudeHeadingHoldEnv(gym.Env):
         if not self.record:
             raise RuntimeError("create the environment with record=True")
         return self._states, self._controls
+
+    def forget_recorded(self, n: int) -> int:
+        """Drop the first states recorded and the controls between them, keeping at least the
+        latest state (an unlogged flight that streams them as it goes: stream/sources.py).
+        Returns how many states were dropped; episode_result() then lacks them."""
+        n = max(0, min(n, len(self._states) - 1))
+        del self._states[:n]
+        del self._controls[:n]
+        return n
 
     def episode_result(self) -> RunResult:
         """The episode so far at the simulation rate, for `flightsim.datalog.write_log`.

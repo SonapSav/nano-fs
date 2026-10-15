@@ -24,7 +24,10 @@ Server -> client messages (JSON):
                  the ISA profile shifted to that temperature; null: the standard day),
    "route" (navigation task: {"name", "start": {north_m, east_m}, "waypoints": [{name, north_m,
             east_m, fly_over}], "turn_bank_deg", "geodesy"}, envs.navigation; the viewer
-            sequences it with nav.js; else null)}
+            sequences it with nav.js; else null),
+   "free" (free flight: {"start_north_m", "start_east_m", "start_heading_deg", "wind": the
+           wind as reported (u20_mps, from_deg, gust_factor_mps) or null}; no targets, never
+           saved; else null)}
   {"type": "frame", "row": {<log column>: value, ...}}
   {"type": "preview", "id", "hello": {<hello message>}, "row": {<log column>: value, ...}}
       Answer to a client "preview": the flight's hello and its starting state (live and

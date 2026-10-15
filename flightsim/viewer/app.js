@@ -47,7 +47,10 @@ const MANUAL_CIRCUIT = "manual_circuit";
 const MANUAL_CIRCUIT_XW = "manual_circuit_crosswind";
 const MANUAL_ROUTE = "manual_route";
 const MANUAL_ROUTE_WIND = "manual_route_wind";
+const MANUAL_FREE = "free";
+const MANUAL_FREE_WIND = "free_wind";
 const MANUAL_CONDITIONS = {
+  [MANUAL_FREE]: "free", [MANUAL_FREE_WIND]: "free_wind",
   [MANUAL]: "calm", [MANUAL_WIND]: "windy", [MANUAL_APPROACH]: "approach", [MANUAL_CROSSWIND]: "approach_crosswind",
   [MANUAL_TAKEOFF]: "takeoff", [MANUAL_TAKEOFF_XW]: "takeoff_crosswind",
   [MANUAL_CIRCUIT]: "circuit", [MANUAL_CIRCUIT_XW]: "circuit_crosswind",
@@ -56,8 +59,10 @@ const MANUAL_CONDITIONS = {
 const isManual = (v) => regionOf(v)[1] in MANUAL_CONDITIONS;
 // The Flights drawer's scenarios: [value, title, detail].
 const SCENARIOS_FLY = [
-  [MANUAL, "Free flight", "Calm air: fly to the altitude and heading bugs"],
-  [MANUAL_WIND, "Free flight in wind", "Wind and turbulence (vary by seed)"],
+  [MANUAL_FREE, "Free flight", "From the apron, calm: taxi, take off, fly where you like (up to 60 min, not recorded)"],
+  [MANUAL_FREE_WIND, "Free flight in wind", "From the apron, wind and gusts (vary by seed)"],
+  [MANUAL, "Altitude and heading", "Calm air: fly to the altitude and heading bugs"],
+  [MANUAL_WIND, "Altitude and heading in wind", "Wind and turbulence (vary by seed)"],
   [MANUAL_APPROACH, "Approach and landing", "Runway 09, calm: glide path, flare, stop on the runway"],
   [MANUAL_CROSSWIND, "Approach and landing in crosswind", "Runway 09, wind and gusts (vary by seed)"],
   [MANUAL_TAKEOFF, "Takeoff", "Runway 09, calm: climb to 1000 ft"],
@@ -79,8 +84,10 @@ const SCENARIOS_WATCH = [
 // scripts/build_scenery.py). Runway 31 at Al Bateen (OMAD).
 const AD = "abu_dhabi";
 const SCENARIOS_FLY_REAL = [
-  [`${AD}/${MANUAL}`, "Free flight over Abu Dhabi", "Calm air, from 2000 ft over Al Bateen"],
-  [`${AD}/${MANUAL_WIND}`, "Free flight over Abu Dhabi in wind", "Wind and turbulence (vary by seed)"],
+  [`${AD}/${MANUAL_FREE}`, "Free flight from Al Bateen", "Apron A, calm: taxi, take off, fly where you like (up to 60 min, not recorded)"],
+  [`${AD}/${MANUAL_FREE_WIND}`, "Free flight from Al Bateen in wind", "Apron A, wind and gusts (vary by seed)"],
+  [`${AD}/${MANUAL}`, "Altitude and heading over Abu Dhabi", "Calm air, from 2000 ft over Al Bateen: fly to the bugs"],
+  [`${AD}/${MANUAL_WIND}`, "Altitude and heading over Abu Dhabi in wind", "Wind and turbulence (vary by seed)"],
   [`${AD}/${MANUAL_APPROACH}`, "Approach to Al Bateen", "Runway 31, calm: glide path, flare, stop on the runway"],
   [`${AD}/${MANUAL_CROSSWIND}`, "Approach to Al Bateen in crosswind", "Runway 31, wind and gusts (vary by seed)"],
   [`${AD}/${MANUAL_TAKEOFF}`, "Takeoff from Al Bateen", "Runway 31, calm: climb to 1000 ft"],
@@ -118,6 +125,8 @@ const LANDING_FAILURES = {
   lost: "too far off the extended centreline",
   // Navigation (envs/navigation.py)
   off_course: "too far off the route (the task's cross-track limit)",
+  // Every task over a real-world region
+  water: "touched the water",
 };
 const INPUT_SEND_HZ = 30;
 const VIEW_HINT = "L for flights, I for the corner map, K for the belly camera; drag to look around, scroll to zoom, R or double-click to re-centre, space to pause, C for cockpit view (H: HUD), M for sound, N / Y to hide the instructions / this box";
@@ -460,7 +469,10 @@ function applyHello(msg) {
       ? `Follow the glide path to runway ${runwayName(msg.approach.heading_deg)} (ahead), flare and land main wheels first.` + (msg.approach.wind ? " Crosswind: crab on the approach, then line up with rudder and hold a wing low into the wind." : "")
       : msg.takeoff
         ? "Full throttle (W), keep the centreline with Z/X, lift the nose wheel at 55 kt and climb at 75 kt to 1000 ft." + (msg.takeoff.wind ? " Crosswind: aileron into the wind on the roll; after lift-off let the nose turn into the wind." : "")
-        : "Fly to the magenta altitude and heading bugs."
+        : msg.free
+          ? "Free flight: parked, engine idling, parking brake set: press B once to release it, then taxi with W/S and Z/X (B to brake), take off when you like and fly where you like; up to 60 minutes, ends only on a crash or in the water. Not recorded." +
+            (msg.free.wind ? ` Wind ${String(Math.round(msg.free.wind.from_deg) % 360).padStart(3, "0")}° ${Math.round(msg.free.wind.u20_mps * 1.943844)} kt.` : "")
+          : "Fly to the magenta altitude and heading bugs."
     : camTrack?.used ? "The belly camera was recorded with this flight: press K (or Camera window) to watch where it pointed." : "");
 }
 
@@ -542,7 +554,7 @@ function handle(msg) {
         const r = msg.route;
         say(`Route complete: ${r.legs} legs, ${(r.length_m / 1852).toFixed(1)} nm in ${Math.floor(r.time_s / 60)} min ${Math.round(r.time_s % 60)} s; ` +
           `cross-track ${Math.round(r.xtk_rms_m)} m RMS, at most ${Math.round(r.xtk_max_m)} m; altitude within ${Math.round(r.alt_rms_m * 3.28084)} ft RMS. Press Play to go again.`);
-      } else if (msg.reason === "finished") say("Flight finished. Press Play to go again.");
+      } else if (msg.reason === "finished") say(session?.free ? "60 minutes up: the free flight ended. Press Play to go again." : "Flight finished. Press Play to go again.");
       else if (msg.reason.startsWith("terminated:")) {
         const why = msg.reason.slice(11);
         say(LANDING_FAILURES[why] ? `The flight ended: ${LANDING_FAILURES[why]}.` : `The flight ended early: ${why.replace("_", " ")} limit exceeded.`);
@@ -1335,7 +1347,7 @@ function drawHudLayer() {
   drawHud(ctx, w, h, { camera: scene.camera, aircraftMatrix: scene.aircraft.matrix, row: shown, convergence: scene.convergence, ...hudTask(shown) });
 }
 
-// What the HUD shows for the task: free flight its altitude and heading targets; runway
+// What the HUD shows for the task: altitude and heading its targets (free flight: none); runway
 // tasks the runway, and on approach (an approach, or a circuit heading for the runway
 // after climbing out) the aim point, glide path reference and approach speed; takeoffs
 // (and circuits before climbing out) the rotate and climb speeds.

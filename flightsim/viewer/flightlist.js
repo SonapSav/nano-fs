@@ -4,7 +4,9 @@
 
 export const GROUP_CAP = 50; // options shown per group before "… N more"
 // Task names of past flights (the server reads them from each log's config).
-export const TASK_TITLES = { free: "Free flight", approach: "Approach and landing", takeoff: "Takeoff", circuit: "Circuit", route: "Route" };
+// "free": logs of the altitude and heading task (named "free flight" until 2026-10-15; free
+// flights proper are not logged).
+export const TASK_TITLES = { free: "Altitude and heading", approach: "Approach and landing", takeoff: "Takeoff", circuit: "Circuit", route: "Route" };
 
 const pad2 = (n) => String(n).padStart(2, "0");
 export const fmtDuration = (s) => `${Math.floor(s / 60)}:${pad2(Math.floor(s % 60))}`;

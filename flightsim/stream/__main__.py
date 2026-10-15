@@ -20,6 +20,7 @@ ABU_DHABI_MANUAL = {
     "calm": "manual", "windy": "manual_wind", "approach": "manual_approach", "approach_crosswind": "manual_approach_crosswind",
     "takeoff": "manual_takeoff", "takeoff_crosswind": "manual_takeoff_crosswind", "circuit": "circuit",
     "circuit_crosswind": "circuit_crosswind", "route": "manual_route", "route_wind": "manual_route_wind",
+    "free": "free", "free_wind": "free_wind",
 }  # fmt: skip
 ABU_DHABI_LIVE = {"pid": "", "approach": "_approach_crosswind", "takeoff": "_takeoff_crosswind", "circuit": "_circuit_crosswind", "route": "_navigation_wind"}
 
@@ -58,6 +59,8 @@ def main() -> None:
     parser.add_argument("--manual-crosswind-config", default="configs/envs/manual_approach_crosswind.yaml", help="manual approach, wind")
     parser.add_argument("--manual-takeoff-config", default="configs/envs/manual_takeoff.yaml", help="manual takeoff")
     parser.add_argument("--manual-takeoff-crosswind-config", default="configs/envs/manual_takeoff_crosswind.yaml", help="manual takeoff, wind")
+    parser.add_argument("--manual-free-config", default="configs/envs/free.yaml", help="free flight, calm air")
+    parser.add_argument("--manual-free-wind-config", default="configs/envs/free_wind.yaml", help="free flight, wind")
     parser.add_argument("--frame-rate", type=float, default=30.0)
     args = parser.parse_args()
 
@@ -77,6 +80,8 @@ def main() -> None:
             "circuit_crosswind": load_env_config(args.manual_circuit_crosswind_config),
             "route": load_env_config(args.manual_route_config),
             "route_wind": load_env_config(args.manual_route_wind_config),
+            "free": load_env_config(args.manual_free_config),
+            "free_wind": load_env_config(args.manual_free_wind_config),
         },
         lqr_raw=load_raw(args.lqr),
         approach_env_cfg=load_env_config(args.approach_config),

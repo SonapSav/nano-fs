@@ -2051,6 +2051,35 @@ landmarks; later night lighting, shadows, haze.
     sent with every frame on the instruments channel): a green helicopter symbol along its
     heading, labelled with its model and its height relative to the flown aircraft in
     hundreds of feet. Traffic step only rebuilt (146 s); scenery hash f77f2fcdd90dfaf1. (4a23e55)
+  - [x] Free flight proper, and the old one renamed (2026-10-15, the owner). The "Free flight"
+    scenario was the altitude and heading task (2 min, bugs, terminations): renamed
+    "Altitude and heading" in the flight list (configs and log task key "free" unchanged, so
+    old logs and links keep working). New envs/free.py (FreeFlightEnv): from rest on a stand,
+    engine idling, no targets, reward 0; ends only on a crash (tail, wingtip or nose strike,
+    or a touchdown over 600 ft/min after flight) or in water, or at 60 minutes; landing is
+    not an end. Parking brake set at the start (an idling C172 creeps to 11 kt in a minute)
+    and released the first time B is pressed; 0.3, not full: fully braked gear in wind tips
+    the parked aircraft onto its tail in JSBSim. Wind variants: the low-altitude wind
+    (0-20 kt, turbulence) limited against the stand's heading to no tailwind and 15 kt
+    across (4-7 kt of tailwind tipped it over in 7 of 40 seeds; none of 40 after); above
+    1000 ft wind and turbulence held at their 1000 ft values. Configs free.yaml /
+    free_wind.yaml (procedural apron's empty stand, facing the runway) and
+    abu_dhabi_free(_wind).yaml (Apron A at the owner's cross hairs, N 24 26.140 E 054
+    26.613, between helipads A3-A7, nose 105 deg towards the exit). **Decision (the owner):
+    free flights are not logged** (a departure from "every run is logged"): not saved as
+    demonstrations, not replayable; a live free flight forgets the states it has streamed
+    (env.forget_recorded; about 10 s kept), so an hour stays small in memory. Hello: no
+    targets, a `free` block (start, reported wind); the viewer's hint, 60:00 clock and end
+    message follow it. To reach runway 31's start: the H13/H31 strip, now paved (OSM maps the
+    last 550 m of the parallel taxiway T, to Apron A, as a 40 m helicopter runway; the
+    features build now draws helicopter runways as a taxiway line on paving their full
+    width), taxiway T about 2.5 km, taxiway 6. The physics ground along that route: 3.0 to
+    3.4 m, slopes under 0.4 %, bumps under 2 cm (no flattening needed). The parked AW139
+    moved from taxiway 6 (in the way) to helipad A2, nose south-east. Scenery hash
+    9b764d7c59bc7d93 (other machines: rebuild). Tests: tests/test_free_flight.py (start,
+    parking brake, time cap, crash rules, forgetting and never saving, the Abu Dhabi start),
+    a helicopter-runway paving test. Checked in the viewer: the list, hint, clock, start at
+    the cross hairs, nothing saved on Stop.
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.

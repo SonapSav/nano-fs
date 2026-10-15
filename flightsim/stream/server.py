@@ -314,7 +314,7 @@ class Session:
             "aircraft": source.aircraft, "sim_rate_hz": source.sim_rate_hz, "frame_rate_hz": self.cfg.frame_rate_hz,
             "duration_s": source.duration_s, "targets": source.targets, "meta": source.meta,
             "pilot": source.pilot_name, "approach": source.approach, "takeoff": source.takeoff, "visual": source.visual,
-            "world": source.world, "route": source.route,
+            "world": source.world, "route": source.route, "free": source.free,
             "atmosphere": source.atmosphere,
             "pattern": self.cfg.pattern_info() if (source.approach or {}).get("task") == "circuit" else None,
         }  # fmt: skip

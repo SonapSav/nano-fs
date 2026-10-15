@@ -1,0 +1,10 @@
+# Free flight in wind: free.yaml plus the runway tasks' low-altitude wind per seed (as in
+# takeoff_crosswind.yaml: 0-20 kt at 20 ft, turbulence), from ahead of the stand or across it.
+base: free.yaml
+
+free:
+  wind:
+    u20_kt: [0, 20]
+    max_crosswind_kt: 15        # against the stand's heading: C172P POH maximum demonstrated crosswind
+    max_tailwind_kt: 0          # parked in a tailwind, JSBSim tips the aircraft onto its tail (envs/free.py)
+    turbulence: true

@@ -143,6 +143,7 @@ class EnvConfig:
     takeoff: "TakeoffConfig | None" = None  # set: the takeoff and climb-out task
     circuit: "CircuitConfig | None" = None  # set (with `approach`): takeoff, traffic pattern, landing
     route: "RouteConfig | None" = None  # set: the navigation task (fly a route of waypoints)
+    free: "FreeConfig | None" = None  # set: free flight (no task; envs/free.py)
     # Viewer conditions (visual only, never the physics): time_of_day, visibility, clouds;
     # each "auto" unless set (see VISUAL_OPTIONS). Part of the config, so replays match.
     visual: tuple[tuple[str, str], ...] = ()
@@ -256,6 +257,7 @@ def env_config_from_raw(raw: dict) -> EnvConfig:
         takeoff=_parse_takeoff(raw.get("takeoff")),
         circuit=_parse_circuit(raw.get("circuit")),
         route=_parse_route(raw.get("route"), geodesy),
+        free=_parse_free(raw.get("free"), geodesy),
         visual=_parse_visual(raw.get("visual")),
         config_hash=config_hash(raw),
         config_json=canonical_json(raw),
@@ -282,6 +284,19 @@ class TakeoffConfig:
     max_ground_s: float  # still on the ground this long after the start: no_liftoff
     reward: dict  # weights and scales, see configs/envs/takeoff.yaml
     wind: dict | None = None  # low-altitude wind, as in the approach task
+
+
+@dataclass(frozen=True)
+class FreeConfig:
+    """Free flight (envs/free.py): no task, from rest on a stand; it ends only on a crash,
+    in water, or after the config's episode_s. Start on the map (metres north/east; given
+    as latitude/longitude in a region's config, converted)."""
+
+    start_north_m: float
+    start_east_m: float
+    start_heading_rad: float  # true
+    max_sink_mps: float  # a touchdown harder than this is a crash
+    wind: dict | None = None  # low-altitude wind (envs/runway.py draw_low_altitude_wind), any direction
 
 
 @dataclass(frozen=True)
@@ -380,6 +395,23 @@ def _parse_route(r: dict | None, geodesy) -> "RouteConfig | None":
         max_xtk_m=float(r.get("max_xtk_nm", 2.0)) * 1852.0,
         reward=dict(r.get("reward", {})),
     )
+
+
+def _parse_free(f: dict | None, geodesy) -> FreeConfig | None:
+    if not f:
+        return None
+    st = f["start"]
+    if "lat_deg" in st:
+        north, east = geodesy.to_map(math.radians(st["lat_deg"]), math.radians(st["lon_deg"]))
+    else:
+        north, east = float(st["north_m"]), float(st["east_m"])
+    w = f.get("wind")
+    if w:  # limits against the stand's heading; none unless given
+        w = {"max_crosswind_kt": 1e9, "max_tailwind_kt": 1e9, **w}
+    return FreeConfig(
+        start_north_m=north, start_east_m=east, start_heading_rad=math.radians(st["heading_deg"]),
+        max_sink_mps=float(f["max_sink_fpm"]) * FPM_TO_MPS, wind=w or None,
+    )  # fmt: skip
 
 
 def _parse_takeoff(t: dict | None) -> TakeoffConfig | None:

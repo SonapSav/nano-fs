@@ -44,6 +44,7 @@ class Source:
     world: dict | None = None  # the geodesy (world/geo.py) for the viewer's map; None: the original sphere
     atmosphere: dict | None = None  # a non-standard day (sea-level temperature and pressure); None: standard
     route: dict | None = None  # navigation task: the route (envs.navigation.NavigationEnv.route_info)
+    free: dict | None = None  # free flight: its start and wind (no targets, not logged)
 
     def frames(self) -> Iterator[tuple[float, dict]]:
         raise NotImplementedError
@@ -154,7 +155,7 @@ class LiveSource(Source):
         self._obs, self._info = self._env.reset(seed=seed)
         self._policy.reset(self._info)
         t = self._env.targets
-        targets = {"alt_msl_m": t.alt_msl_m, "heading_rad": t.heading_rad, "tas_mps": t.tas_mps}
+        targets = None if env_cfg.free else {"alt_msl_m": t.alt_msl_m, "heading_rad": t.heading_rad, "tas_mps": t.tas_mps}
         run_id = make_run_id(env_cfg.config_hash, seed)
         super().__init__(source, run_id, env_cfg.aircraft, env_cfg.sim_rate_hz, env_cfg.episode_s, targets)
         self.pilot_name = "human" if source == "manual" else self._policy.name
@@ -164,7 +165,13 @@ class LiveSource(Source):
         self.atmosphere = _atmosphere(env_cfg)
         self.world = _world(self._env)
         self.route = self._env.route_info() if hasattr(self._env, "route_info") else None
+        if env_cfg.free is not None:
+            self.free = {"start_north_m": env_cfg.free.start_north_m, "start_east_m": env_cfg.free.start_east_m,
+                         "start_heading_deg": math.degrees(env_cfg.free.start_heading_rad), "wind": self._env.wind_info()}  # fmt: skip
         self._config_hash = env_cfg.config_hash
+        # Free flights are not logged (the owner, 2026-10-15): what was sent is forgotten, so
+        # a flight of up to an hour keeps a few seconds in memory, not 430,000 states.
+        self.forget_sent = env_cfg.free is not None
 
     def first_frame(self) -> dict:
         """The reset state; its commands are null (the policy has not chosen any yet)."""
@@ -172,11 +179,11 @@ class LiveSource(Source):
         return frame_row(0, self.run_id, self._seed, self._config_hash, states[0], None)
 
     def frames(self) -> Iterator[tuple[float, dict]]:
-        env, emitted = self._env, 0
+        env, emitted, base = self._env, 0, 0  # base: states forgotten (forget_sent) before states[0]
         while True:
             states, controls = env.recorded
             done = False
-            if emitted >= len(states) - 1:  # need the next state before a command is known
+            if emitted - base >= len(states) - 1:  # need the next state before a command is known
                 action = self._policy(self._obs, self._info)
                 self._obs, _, terminated, truncated, self._info = env.step(action)
                 if terminated:
@@ -195,10 +202,12 @@ class LiveSource(Source):
                         self.end_reason = "climbed"
                 done = terminated or truncated
                 states, controls = env.recorded
-            while emitted < len(states) - 1:
-                s = states[emitted]
-                yield s.t_s, frame_row(emitted, self.run_id, self._seed, self._config_hash, s, controls[emitted])
+            while emitted - base < len(states) - 1:
+                s = states[emitted - base]
+                yield s.t_s, frame_row(emitted, self.run_id, self._seed, self._config_hash, s, controls[emitted - base])
                 emitted += 1
+            if self.forget_sent and emitted - base > FORGET_AFTER:
+                base += env.forget_recorded(emitted - base)  # keeps the latest state, not yet sent
             if done:
                 s = states[-1]
                 yield s.t_s, frame_row(emitted, self.run_id, self._seed, self._config_hash, s, None)
@@ -206,6 +215,7 @@ class LiveSource(Source):
 
 
 CAMERA_COLUMNS = ["t_s", "on", "pan_rad", "tilt_rad", "hfov_rad"]
+FORGET_AFTER = 1200  # sent states kept before a free flight forgets them (10 s at 120 Hz)
 
 
 def _finite(v, lo: float, hi: float) -> float:
@@ -283,9 +293,10 @@ class ManualSource(LiveSource):
         return f"{make_run_id(self._env.cfg.config_hash, self._seed)}-m{h.hexdigest()[:8]}"
 
     def save(self, data_dir: Path) -> Path | None:
-        """Write the flight so far to <data_dir>/demos/<run_id>.parquet (if long enough)."""
+        """Write the flight so far to <data_dir>/demos/<run_id>.parquet (if long enough; free
+        flights never: they are not logged)."""
         states, _ = self._env.recorded
-        if states[-1].t_s < self.min_save_s:
+        if self.forget_sent or states[-1].t_s < self.min_save_s:
             return None
         run_id = self.demo_run_id()
         path = data_dir / "demos" / f"{run_id}.parquet"

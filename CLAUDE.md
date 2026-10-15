@@ -88,7 +88,7 @@ flightsim/          # installable package (uv_build backend)
   core/             # JSBSim wrapper, State/Controls types (only place JSBSim is imported)
   aircraft/         # project aircraft (loaded before JSBSim's): c172p_tuned = c172p with a tuned propeller and brakes
   datalog/          # schema + Parquet writer ("logging" would shadow the stdlib module)
-  envs/             # Gymnasium envs (altitude/heading hold; approach and landing; takeoff; circuit; runway.py shared), config, policy adapters, metrics
+  envs/             # Gymnasium envs (altitude/heading hold; approach and landing; takeoff; circuit; free flight, not logged; runway.py shared), config, policy adapters, metrics
   control/          # heading hold (step 1), PID autopilot (step 3), human pilot (step 5), gain-scheduled LQR, approach, takeoff and circuit autopilots
   stream/           # protocol, frame sources (replay, live PID), HTTP + WebSocket server
   viewer/           # static Three.js app (no build step); three.js 0.186.1 + Sky addon + GLTFLoader + font vendored in viewer/vendor

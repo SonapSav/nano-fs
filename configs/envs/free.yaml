@@ -1,0 +1,14 @@
+# Free flight (envs/free.py): no task, no targets, no time pressure. From rest on the
+# procedural airfield's empty apron stand (the viewer's scenery.js: stands 35 m either side
+# of the apron's middle, 185 m north of the runway centreline; the one 35 m east has no
+# parked aircraft), facing the runway, engine idling, brakes set. It ends on a crash, in
+# water, or after 60 minutes (the owner's cap, 2026-10-15). Not logged: free flights are not
+# saved as demonstrations (the owner, 2026-10-15).
+base: manual.yaml
+terrain: procedural
+episode_s: 3600
+actions: [elevator, aileron, rudder, throttle, flaps, pitch_trim, brake]
+
+free:
+  start: {north_m: 185, east_m: 35, heading_deg: 180}
+  max_sink_fpm: 600           # as the approach task's hard landing (project choice)

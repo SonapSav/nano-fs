@@ -157,9 +157,11 @@ The Flights drawer then offers the Abu Dhabi scenarios (they need the built scen
 
 ## Flying
 
-Open **Flights** (or press `L`), pick a scenario (free flight, approach, takeoff,
-circuit or a GPS route, calm or windy, with a seed) and press **Fly**. Your flights are saved as
-demonstrations in `data/demos/` and listed under **Past flights**.
+Open **Flights** (or press `L`), pick a scenario (free flight, altitude and heading,
+approach, takeoff, circuit or a GPS route, calm or windy, with a seed) and press **Fly**.
+Your flights are saved as demonstrations in `data/demos/` and listed under **Past flights**,
+except free flights: they start parked (press `B` once to release the parking brake), have
+no task, last up to 60 minutes, end only on a crash or in the water, and are not recorded.
 
 | Keys | |
 |---|---|
