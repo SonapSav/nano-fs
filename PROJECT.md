@@ -2099,7 +2099,7 @@ landmarks; later night lighting, shadows, haze.
     building=hangar), shelter (building=roof: with aeroway=hangar anywhere, otherwise only
     inside an aerodrome boundary, since the tag also marks petrol station canopies and car
     park shades), terminal, tower. Building records gain an optional fifth field ({kind,
-    door}; the colour at index 4 null when unmeasured), kept by the height and colour steps.
+    door}; the colour at index 3 null when unmeasured), kept by the height and colour steps.
     Viewer (featureGeometry.js, terrain.js): the kind rides in the facade attribute (1000 x
     kind + height). Hangars: light grey cladding with vertical ribs, no windows, a door panel
     (85 % of the wall, 80 % of the eaves' height, leaves every 5 m) on the wall whose outside
