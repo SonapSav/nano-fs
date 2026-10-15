@@ -1953,7 +1953,7 @@ landmarks; later night lighting, shadows, haze.
     bubbles (window_patch's new `bulge`, zero at the edges; other windows unchanged).
     Checked against the ambulance photo (front tip halfway from the nose to the cockpit
     door, rear edge just ahead of the door), in Blender renders and a viewer screenshot.
-    Model 56.1k triangles, 1.10 MB.
+    Model 56.1k triangles, 1.10 MB. (587c7f9)
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
