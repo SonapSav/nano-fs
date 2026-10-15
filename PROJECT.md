@@ -2118,10 +2118,11 @@ landmarks; later night lighting, shadows, haze.
     (scenery_osm._override_info; heights so set are kept by the later height steps). Way
     200467368: a wash bay and sheltered parking, "open_shed": side walls to the eaves, a
     barrel roof across up to its 13.3 m (GlobalBuildingAtlas, as the hangar beside it, way
-    200467382), open at both ends (toward the owner's camera, 341 deg, and away; rise 0.2 of
+    200467382), open at both ends (facing Apron A, 039 deg, and opposite; first set wrongly
+    toward the owner's camera, 341 deg, corrected by the owner; rise 0.2 of
     the span, at most 0.6 of the height: project choices). Ways 170928400 and 170928403:
     one-storey offices with large windows ("office": a terminal's glazed ground floor), 4.5 m
-    (project choice; the atlas gave 9.4 and 8.3 m). Scenery hash 64b30887c21096c8 (other
+    (project choice; the atlas gave 9.4 and 8.3 m). Scenery hash c4468bddf7afbe24 (other
     machines: rebuild). Tests: the overrides, the open shed's mesh. (c64ab44)
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
