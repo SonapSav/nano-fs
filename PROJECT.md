@@ -1983,7 +1983,7 @@ landmarks; later night lighting, shadows, haze.
     X 3.04, was 1.12). The chin window's top edge flattened to the photo's near-straight
     diagonal (the drawing agrees; the convex D was overdone). Roof windows match the photo
     as they were. Budget raised to 80k triangles and 2 MB (test); model 68 meshes, 57.6k
-    triangles, 1.13 MB.
+    triangles, 1.13 MB. (c67617c)
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
