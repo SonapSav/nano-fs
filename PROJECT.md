@@ -2050,7 +2050,7 @@ landmarks; later night lighting, shadows, haze.
     panel's map and the corner map (map.js drawMap `traffic`, from traffic.js positions()
     sent with every frame on the instruments channel): a green helicopter symbol along its
     heading, labelled with its model and its height relative to the flown aircraft in
-    hundreds of feet. Traffic step only rebuilt (146 s); scenery hash f77f2fcdd90dfaf1.
+    hundreds of feet. Traffic step only rebuilt (146 s); scenery hash f77f2fcdd90dfaf1. (4a23e55)
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
