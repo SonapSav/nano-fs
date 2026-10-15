@@ -2090,7 +2090,7 @@ landmarks; later night lighting, shadows, haze.
     172's rigging (that a rigged 172 flies roughly hands-off in cruise is **from memory,
     unverified**). Hands-off after 20 s: 90 kt within 2 deg of bank, 110 kt about 12 deg
     right, idle glide a few deg. The model's own torque roll is unchanged (option B, rigging
-    the aircraft model for every task, would change its hash, trims and validation).
+    the aircraft model for every task, would change its hash, trims and validation). (eabd5ba)
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
