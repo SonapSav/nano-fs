@@ -2111,7 +2111,7 @@ landmarks; later night lighting, shadows, haze.
     project choices, by eye. Region-wide: 468 hangars, 88 shelters, 10 terminals, 3 towers
     (OMAD 94 tagged hangars). Scenery hash 79e38696a649bef6 (other machines: rebuild).
     Checked in viewer screenshots at Apron A (doors facing the apron) and the south apron
-    (shelters on posts). Tests: classing and door choice, the hangar and shelter meshes.
+    (shelters on posts). Tests: classing and door choice, the hangar and shelter meshes. (034e703)
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
