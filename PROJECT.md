@@ -1988,7 +1988,7 @@ landmarks; later night lighting, shadows, haze.
     heel was missing). The boom's end now forms the heel: below the fin's trailing edge its
     top turns aft nearly level to a rounded point at X -8.43, Z 2.08, 0.32 m behind the
     trailing edge's waist (X -8.11 at Z 2.33); the boom sampled every 4 cm there. Checked in
-    Blender renders from the owner's angle and the side.
+    Blender renders from the owner's angle and the side. (aef01a4)
   - [ ] AW139 details still missing: steps, the sharp cabin-to-boom break; the paint reads
     slightly grey in the viewer's light. The tail rotor's turning
     direction (the model: top blade forward) is still unchecked; no source found.
